@@ -264,7 +264,7 @@ export default function OnboardingPage() {
                     value={brandProfile.description || ''}
                     onChange={(e) => updateBrandField('description', e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                   />
                 </div>
 
@@ -274,7 +274,7 @@ export default function OnboardingPage() {
                   <input
                     value={brandProfile.tagline || ''}
                     onChange={(e) => updateBrandField('tagline', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                   />
                 </div>
 
@@ -285,7 +285,7 @@ export default function OnboardingPage() {
                     <input
                       value={brandProfile.tone || ''}
                       onChange={(e) => updateBrandField('tone', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                     />
                   </div>
                   <div>
@@ -293,7 +293,7 @@ export default function OnboardingPage() {
                     <input
                       value={brandProfile.target_audience || ''}
                       onChange={(e) => updateBrandField('target_audience', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                     />
                   </div>
                 </div>
@@ -308,7 +308,7 @@ export default function OnboardingPage() {
                         <input
                           value={c}
                           onChange={(e) => updateListItem('colors', i, e.target.value)}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-xs"
+                          className="w-24 px-2 py-1 border border-gray-300 rounded text-xs text-gray-900"
                         />
                         <button onClick={() => removeListItem('colors', i)} className="text-red-400 hover:text-red-600 text-xs">×</button>
                       </div>
@@ -326,7 +326,7 @@ export default function OnboardingPage() {
                         <input
                           value={f}
                           onChange={(e) => updateListItem('fonts', i, e.target.value)}
-                          className="w-32 px-2 py-1 border border-gray-300 rounded text-xs"
+                          className="w-32 px-2 py-1 border border-gray-300 rounded text-xs text-gray-900"
                         />
                         <button onClick={() => removeListItem('fonts', i)} className="text-red-400 hover:text-red-600 text-xs">×</button>
                       </div>
@@ -343,7 +343,7 @@ export default function OnboardingPage() {
                       <input
                         value={item}
                         onChange={(e) => updateListItem('do_list', i, e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
                       />
                       <button onClick={() => removeListItem('do_list', i)} className="text-red-400 hover:text-red-600 px-1">×</button>
                     </div>
@@ -359,7 +359,7 @@ export default function OnboardingPage() {
                       <input
                         value={item}
                         onChange={(e) => updateListItem('dont_list', i, e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
                       />
                       <button onClick={() => removeListItem('dont_list', i)} className="text-red-400 hover:text-red-600 px-1">×</button>
                     </div>

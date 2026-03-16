@@ -5,24 +5,26 @@ import * as cheerio from 'cheerio'
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY
 
-const BRAND_EXTRACTION_PROMPT = `You are a brand analyst. Analyze the following website content and extract a structured brand profile.
+const BRAND_EXTRACTION_PROMPT = `Du er en merkevareanalytiker. Analyser følgende nettsideinnhold og trekk ut en strukturert merkevareprofil.
 
-Return a JSON object with these fields:
-- colors: array of hex color codes found or implied (e.g. ["#1a1a2e", "#e94560"])
-- fonts: array of font names used (e.g. ["Inter", "Georgia"])
-- logo_url: URL of the logo if found, or null
-- tone: one-word tone (e.g. "professional", "playful", "authoritative")
-- voice_description: 1-2 sentence description of the brand voice
-- tone_keywords: array of 3-5 keywords describing the tone
-- tagline: the brand tagline if found, or a suggested one
-- description: 2-3 sentence brand description
-- target_audience: who the brand seems to target
-- do_list: array of 3-5 things the brand SHOULD do in communications
-- dont_list: array of 3-5 things the brand should AVOID in communications
-- key_messages: array of 3-5 key messages the brand conveys
-- industry: the industry/sector
+VIKTIG: Skriv ALT på norsk (bokmål). Alle beskrivelser, dos/donts, nøkkelmeldinger — alt skal være på norsk.
 
-Respond ONLY with valid JSON, no markdown, no explanation.`
+Returner et JSON-objekt med disse feltene:
+- colors: array med hex-fargekoder funnet på siden (e.g. ["#1a1a2e", "#e94560"]). Let etter farger i CSS, inline styles, og design. Hvis du ikke finner eksakte farger, foreslå farger som passer merkevaren.
+- fonts: array med fontnavn brukt (e.g. ["Inter", "Georgia"])
+- logo_url: URL til logoen hvis funnet, eller null
+- tone: ett norsk ord for tonen (f.eks. "profesjonell", "leken", "autoritativ", "vennlig")
+- voice_description: 1-2 setninger på norsk som beskriver merkevarens stemme
+- tone_keywords: array med 3-5 norske nøkkelord som beskriver tonen
+- tagline: merkevarens slagord hvis funnet, eller et foreslått ett (på norsk)
+- description: 2-3 setninger på norsk som beskriver merkevaren
+- target_audience: hvem merkevaren retter seg mot (på norsk)
+- do_list: array med 3-5 ting merkevaren BØR gjøre i kommunikasjon (på norsk)
+- dont_list: array med 3-5 ting merkevaren bør UNNGÅ i kommunikasjon (på norsk)
+- key_messages: array med 3-5 nøkkelmeldinger merkevaren formidler (på norsk)
+- industry: bransjen/sektoren (på norsk)
+
+Svar KUN med gyldig JSON, ingen markdown, ingen forklaring.`
 
 async function scrapeWithFirecrawl(url: string): Promise<string | null> {
   if (!FIRECRAWL_API_KEY) return null
