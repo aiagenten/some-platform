@@ -46,9 +46,12 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; BrandScraper/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'nb-NO,nb;q=0.9,no;q=0.8,en;q=0.7',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
+      redirect: 'follow',
     })
 
     if (!response.ok) return null
@@ -155,10 +158,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (!scrapedContent) {
-      return NextResponse.json(
-        { error: 'Failed to scrape website. Please check the URL and try again.' },
-        { status: 422 }
-      )
+      // Last resort: just send the URL to AI and let it work with its knowledge
+      scrapedContent = `Website URL: ${url}\nNote: Could not scrape the website content directly. Please analyze based on the URL and any knowledge you have about this website/brand.`
+      scrapeMethod = 'url-only'
     }
 
     // Extract brand profile via AI
