@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Oversikt', icon: '📊' },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: '📈' },
   { href: '/dashboard/calendar', label: 'Kalender', icon: '📅' },
   { href: '/dashboard/posts', label: 'Innlegg', icon: '📝' },
   { href: '/dashboard/generate', label: 'Generer', icon: '✨' },
