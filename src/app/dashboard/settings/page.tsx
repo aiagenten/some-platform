@@ -4,6 +4,16 @@ import { Suspense, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+type BrandLearning = {
+  id: string
+  learning_type: string
+  rule: string
+  source: string
+  confidence: number
+  active: boolean
+  created_at: string
+}
+
 type SocialAccount = {
   id: string
   platform: string
@@ -36,6 +46,9 @@ function SettingsContent() {
   const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
+  const [learnings, setLearnings] = useState<BrandLearning[]>([])
+  const [learningsLoading, setLearningsLoading] = useState(true)
+  const [togglingLearning, setTogglingLearning] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -73,6 +86,14 @@ function SettingsContent() {
       )
       setAccounts(visibleAccounts)
       setLoading(false)
+
+      // Fetch learnings
+      const learningsRes = await fetch(`/api/posts/learn?org_id=${profile.org_id}`)
+      if (learningsRes.ok) {
+        const learningsJson = await learningsRes.json()
+        setLearnings(learningsJson.learnings || [])
+      }
+      setLearningsLoading(false)
     }
     load()
   }, [])
@@ -80,6 +101,21 @@ function SettingsContent() {
   const handleConnectFacebook = () => {
     if (!orgId) return
     window.location.href = `/api/auth/facebook?org_id=${orgId}`
+  }
+
+  const handleToggleLearning = async (learningId: string, currentActive: boolean) => {
+    setTogglingLearning(learningId)
+    const res = await fetch('/api/posts/learn', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learning_id: learningId, active: !currentActive }),
+    })
+    if (res.ok) {
+      setLearnings(prev =>
+        prev.map(l => l.id === learningId ? { ...l, active: !currentActive } : l)
+      )
+    }
+    setTogglingLearning(null)
   }
 
   const handleDisconnect = async (accountId: string) => {
@@ -203,6 +239,93 @@ function SettingsContent() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Brand Learnings */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">🧠 Hva vi har lært</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              AI-genererte regler basert på avvisninger, redigeringer og engasjement
+            </p>
+          </div>
+          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+            {learnings.filter(l => l.active).length} aktive
+          </span>
+        </div>
+
+        {learningsLoading ? (
+          <p className="text-gray-400 text-sm py-4">Laster learnings...</p>
+        ) : learnings.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-3xl mb-2">📚</div>
+            <p className="text-gray-500 text-sm">Ingen learnings enda</p>
+            <p className="text-gray-400 text-xs mt-1">
+              Learnings genereres automatisk når innlegg avvises, redigeres eller presterer bra
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {learnings.map((learning) => {
+              const sourceIcons: Record<string, string> = {
+                rejection: '❌',
+                edit: '✏️',
+                analytics: '📈',
+                manual: '👤',
+              }
+              const typeColors: Record<string, string> = {
+                style: 'bg-purple-100 text-purple-700',
+                tone: 'bg-blue-100 text-blue-700',
+                topic: 'bg-green-100 text-green-700',
+                format: 'bg-orange-100 text-orange-700',
+                timing: 'bg-yellow-100 text-yellow-700',
+              }
+
+              return (
+                <div
+                  key={learning.id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition ${
+                    learning.active
+                      ? 'border-gray-200 bg-white'
+                      : 'border-gray-100 bg-gray-50 opacity-60'
+                  }`}
+                >
+                  <span className="text-lg">{sourceIcons[learning.source] || '📝'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${learning.active ? 'text-gray-900' : 'text-gray-500 line-through'}`}>
+                      {learning.rule}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${typeColors[learning.learning_type] || 'bg-gray-100 text-gray-600'}`}>
+                        {learning.learning_type}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {Math.round(learning.confidence * 100)}% sikkerhet
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        · {new Date(learning.created_at).toLocaleDateString('nb-NO')}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleToggleLearning(learning.id, learning.active)}
+                    disabled={togglingLearning === learning.id}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      learning.active ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
+                        learning.active ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
