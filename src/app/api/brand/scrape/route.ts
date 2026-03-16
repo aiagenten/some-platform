@@ -105,7 +105,7 @@ async function extractBrandProfile(content: string): Promise<Record<string, unkn
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-sonnet-4-20250514',
+      model: 'google/gemini-2.0-flash-001',
       messages: [
         { role: 'system', content: BRAND_EXTRACTION_PROMPT },
         { role: 'user', content: `Website content:\n\n${content}` },
