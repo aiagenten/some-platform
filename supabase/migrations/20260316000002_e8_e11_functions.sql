@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ============================================================
 -- E10: Upsert social account with encrypted token
 -- ============================================================
@@ -26,7 +28,7 @@ BEGIN
     p_platform::social_platform,
     p_account_id,
     p_account_name,
-    pgp_sym_encrypt(p_access_token, p_token_secret),
+    extensions.pgp_sym_encrypt(p_access_token, p_token_secret),
     p_token_expires_at,
     p_scopes,
     p_metadata::jsonb,
@@ -55,7 +57,7 @@ CREATE OR REPLACE FUNCTION decrypt_social_token(
   p_token_secret TEXT
 )
 RETURNS TEXT AS $$
-  SELECT pgp_sym_decrypt(access_token_enc, p_token_secret)
+  SELECT extensions.pgp_sym_decrypt(access_token_enc, p_token_secret)
   FROM social_accounts
   WHERE id = p_account_id;
 $$ LANGUAGE sql SECURITY DEFINER;
