@@ -126,7 +126,16 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
           messages: [
             {
               role: 'system',
-              content: 'Du er en ekspert SoMe-strateg. Svar ALLTID på norsk. Formater svaret tydelig med seksjoner.'
+              content: `Du er en ekspert SoMe-strateg som skriver innhold for norske bedrifter.
+
+VIKTIGE REGLER:
+- Skriv ALLTID på norsk (bokmål)
+- Returner KUN selve post-teksten — ingen overskrifter, ingen "Hook:", ingen "Brødtekst:", ingen "CTA:", ingen nummerering
+- Ingen markdown-formatering (ingen **, ingen ##, ingen ---)
+- Teksten skal være klar til å lime rett inn i en SoMe-post
+- Avslutt med relevante hashtags på egen linje (maks 5 hashtags)
+- Bruk emojier naturlig og sparsomt
+- Skriv som et menneske, ikke som en AI`
             },
             {
               role: 'user',
@@ -320,18 +329,26 @@ const imagePromptData = (imagePrompts as Record<string, any>)
 
 // Helper: extract caption from generated text
 function extractCaption(text: string): string {
-  // Try to find the main text between Hook and CTA/Hashtags
-  const lines = text.split('\n').filter(l => l.trim())
+  // Clean up any remaining AI scaffolding
+  let cleaned = text
+    // Remove section headers like "**1. Hook:**", "**2. Brødtekst:**", etc.
+    .replace(/\*\*\d+\.\s*[^*]+:\*\*/g, '')
+    // Remove markdown bold/italic
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    // Remove "Her er et utkast..." preamble
+    .replace(/^Her er (et |en |)?(utkast|forslag)[^\n]*\n*/i, '')
+    // Remove markdown headers
+    .replace(/^#+\s+.*$/gm, '')
+    // Remove horizontal rules
+    .replace(/^---+$/gm, '')
+    // Remove lines that are just labels
+    .replace(/^(Hook|Brødtekst|CTA|Innhold|Tekst|Caption|Hashtags?):\s*$/gim, '')
+    // Collapse multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 
-  // Remove markdown headers and extract actual content
-  const contentLines = lines.filter(l =>
-    !l.startsWith('#') &&
-    !l.toLowerCase().includes('hashtag') &&
-    !l.startsWith('---')
-  )
-
-  // Take first meaningful paragraphs
-  return contentLines.slice(0, 10).join('\n').substring(0, 2000)
+  return cleaned.substring(0, 2000)
 }
 
 // Helper: extract hashtags from generated text
