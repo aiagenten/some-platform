@@ -1,0 +1,175 @@
+{
+  "$schema": "brand-voice-guide-v1",
+  "description": "Standard Brand Voice Guide — brukes ved onboarding av nye kunder til SoMe-plattformen.",
+  "usage": "Fyll ut dette skjemaet sammen med kunden. Dataen brukes som variabler i alle prompts.",
+
+  "brand_name": "",
+  "industry": "",
+  "website": "",
+
+  "tone_of_voice": {
+    "primary": "",
+    "description": "Beskriv tonen med 2-3 setninger",
+    "options_guide": [
+      "formelt",
+      "uformelt",
+      "vennlig-profesjonelt",
+      "inspirerende",
+      "humoristisk",
+      "autoritativt",
+      "empatisk",
+      "energisk",
+      "rolig-tillitvekkende"
+    ],
+    "formality_scale": "1-5 (1=veldig uformelt, 5=veldig formelt)",
+    "humor_scale": "1-5 (1=aldri humor, 5=ofte humor)",
+    "emoji_usage": "none | sparsom | moderat | mye"
+  },
+
+  "target_audience": {
+    "primary": {
+      "description": "",
+      "age_range": "",
+      "gender": "",
+      "location": "",
+      "interests": [],
+      "pain_points": [],
+      "goals": []
+    },
+    "secondary": {
+      "description": "",
+      "age_range": "",
+      "interests": []
+    }
+  },
+
+  "dos": [
+    "Bruk kundens fornavn når mulig",
+    "Del verdifull kunnskap gratis",
+    "Vis mennesker bak merkevaren",
+    "Svar på kommentarer innen 2 timer",
+    "Bruk norsk med lokalt preg der det passer"
+  ],
+
+  "donts": [
+    "Aldri snakk negativt om konkurrenter",
+    "Ikke bruk klisjeer som 'markedsledende' uten bevis",
+    "Unngå passiv-aggressiv tone",
+    "Ikke del kundeinfo uten samtykke",
+    "Ikke post bare for å poste — alt skal ha verdi"
+  ],
+
+  "example_posts": [
+    {
+      "platform": "Instagram",
+      "text": "Vi trodde AI bare var for de store. Så prøvde vi det selv. 3 timer spart — hver eneste dag. Her er hva vi lærte 👇",
+      "why_it_works": "Personlig, konkret gevinst, inviterer til å lese videre"
+    },
+    {
+      "platform": "LinkedIn",
+      "text": "De fleste bedrifter bruker AI feil.\n\nDe automatiserer det som er lett — ikke det som gir verdi.\n\nHer er 3 spørsmål du bør stille før du starter:\n\n1. Hva koster dette manuelt i dag?\n2. Hva skjer hvis det feiler?\n3. Hvem eier prosessen etterpå?\n\nEnkel sjekkliste. Stor forskjell.",
+      "why_it_works": "Kort, kontroversielt åpning, konkrete tips, autoritet"
+    },
+    {
+      "platform": "Facebook",
+      "text": "Bak kulissene i dag ☕ Teamet jobber med noe vi har planlagt lenge. Kan ikke si så mye enda, men følg med denne uken! 👀",
+      "why_it_works": "Bygger spenning, viser teamet, uformelt og menneskelig"
+    }
+  ],
+
+  "keywords": [
+    "smart",
+    "effektivt",
+    "løsning",
+    "automatisering",
+    "vekst",
+    "enklere",
+    "resultat"
+  ],
+
+  "avoid_words": [
+    "synergi",
+    "paradigmeskifte",
+    "markedsledende",
+    "state-of-the-art",
+    "leverage",
+    "disruptiv",
+    "game-changer"
+  ],
+
+  "brand_colors": {
+    "primary": "#000000",
+    "secondary": "#000000",
+    "accent": "#000000",
+    "description": "Beskriv fargepaletten med ord (f.eks. 'varm terrakotta og dyp grønn')"
+  },
+
+  "visual_style": {
+    "photo_style": "fotorealistisk | illustrasjon | minimalistisk | fargerikt",
+    "preferred_settings": [],
+    "avoid_in_images": ["tekst på skjermer", "stockfoto-klisjeer"],
+    "models_ethnicity": "skandinavisk mangfold"
+  },
+
+  "hashtag_strategy": {
+    "branded": [],
+    "industry": [],
+    "community": [],
+    "max_per_post": {
+      "instagram": 15,
+      "linkedin": 5,
+      "facebook": 3
+    }
+  },
+
+  "posting_frequency": {
+    "instagram_feed": "3-4 per uke",
+    "instagram_stories": "daglig",
+    "instagram_reels": "1-2 per uke",
+    "linkedin": "2-3 per uke",
+    "facebook": "2-3 per uke"
+  },
+
+  "content_pillars": [
+    {
+      "name": "",
+      "description": "",
+      "percentage": "30%"
+    },
+    {
+      "name": "",
+      "description": "",
+      "percentage": "30%"
+    },
+    {
+      "name": "",
+      "description": "",
+      "percentage": "20%"
+    },
+    {
+      "name": "",
+      "description": "",
+      "percentage": "20%"
+    }
+  ],
+
+  "cta_library": [
+    "Trykk på lenken i bio 👆",
+    "Lagre dette til senere 🔖",
+    "Send til noen som trenger dette 💬",
+    "Hva tenker du? Skriv i kommentarene 👇",
+    "Les mer på nettsiden vår (link i bio)"
+  ],
+
+  "competitor_references": [
+    {
+      "name": "",
+      "what_they_do_well": "",
+      "how_we_differentiate": ""
+    }
+  ],
+
+  "onboarding_date": "",
+  "last_updated": "",
+  "version": "1.0"
+}

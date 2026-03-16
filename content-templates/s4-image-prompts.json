@@ -1,0 +1,151 @@
+{
+  "$schema": "fotorealistisk-bilde-prompts-v1",
+  "description": "Standard prompts for fotorealistisk bildegenerering med skandinavisk stil. Brukes av SoMe-plattformen for å generere on-brand bilder til innlegg.",
+
+  "variables": {
+    "brand_colors": "Kundens fargepalett (f.eks. 'warm terracotta and deep forest green')",
+    "industry": "Kundens bransje (f.eks. 'technology', 'restaurant', 'consulting')"
+  },
+
+  "global_rules": {
+    "always": [
+      "Photorealistic, high-resolution photograph",
+      "Scandinavian aesthetic: clean, minimal, natural materials",
+      "Natural soft daylight, no harsh artificial lighting",
+      "Norwegian/Scandinavian-looking people with diverse appearances",
+      "Authentic situations, not posed stock-photo looks",
+      "Muted, earthy color palette unless brand colors specified",
+      "Clean backgrounds with intentional negative space",
+      "Shot on Canon EOS R5 or Sony A7IV aesthetic"
+    ],
+    "never": [
+      "NO text, words, letters, logos, or watermarks in the image",
+      "NO text on screens, whiteboards, or documents (screens should be blank or show abstract UI)",
+      "NO American flags, US-specific references, or non-Scandinavian settings",
+      "NO obvious AI artifacts (extra fingers, distorted faces, melting objects)",
+      "NO stock photo clichés (handshakes, pointing at charts, thumbs up)",
+      "NO neon colors, glow effects, or hyper-saturated tones",
+      "NO clipart-style elements or illustrations mixed with photos",
+      "NO overly perfect, magazine-cover polish — keep it authentic"
+    ]
+  },
+
+  "scene_variants": {
+    "office": {
+      "name": "Kontor / Arbeidsplass",
+      "base_prompt": "Photorealistic photograph of a modern Scandinavian office space. Natural daylight streaming through large windows. Light wood furniture (oak or birch), green plants, clean minimalist desk setup. A {industry} professional working naturally, candid moment, not posing. Norwegian-looking person, casual-professional clothing. Subtle {brand_colors} accent in the environment (a mug, notebook, or wall detail). Shot at f/2.8 with shallow depth of field. Warm, inviting atmosphere. No text visible anywhere in the image.",
+      "variants": [
+        {
+          "name": "Solo arbeid",
+          "addition": "Single person focused at their desk, laptop open (screen not visible), coffee cup nearby. Concentrated expression, natural posture."
+        },
+        {
+          "name": "Kreativt kaos",
+          "addition": "Slight creative clutter — sticky notes (blank/colored, no text), sketches, plant on desk. Person leaning back thinking, pen in hand."
+        },
+        {
+          "name": "Standing desk",
+          "addition": "Person at a standing desk with ergonomic setup. Large monitor showing abstract colorful UI (no readable text). Oslo cityscape visible through window."
+        }
+      ]
+    },
+
+    "meeting": {
+      "name": "Møte / Samarbeid",
+      "base_prompt": "Photorealistic photograph of a collaborative meeting in a bright Scandinavian conference room. 2-4 Norwegian-looking professionals in relaxed discussion. Natural daylight, light wood table, modern chairs. Genuine expressions — someone smiling, someone listening intently. Casual-professional attire. Glass of water and coffee on table. {brand_colors} subtly present in furniture or accessories. Clean white walls with minimal decoration. No text on any screens, whiteboards, or documents. Authentic and warm atmosphere.",
+      "variants": [
+        {
+          "name": "Liten gruppe",
+          "addition": "2-3 people around a small round table. Intimate, collaborative vibe. One person gesturing while explaining something."
+        },
+        {
+          "name": "Workshop",
+          "addition": "4-5 people around a larger table with blank sticky notes on wall behind them. Active participation, someone standing by a clean whiteboard."
+        },
+        {
+          "name": "En-til-en",
+          "addition": "Two people in a cozy meeting corner with armchairs. Relaxed body language, genuine conversation. Plants and books in background."
+        }
+      ]
+    },
+
+    "outdoor": {
+      "name": "Utendørs / Natur",
+      "base_prompt": "Photorealistic photograph taken outdoors in a Norwegian setting. Beautiful Scandinavian nature or urban environment. Natural daylight (golden hour or soft overcast). Person or people in authentic situation related to {industry}. Norwegian landscape elements: fjord, birch trees, coastal town, or clean Nordic urban architecture. {brand_colors} present in clothing or accessories. Fresh, crisp atmosphere. No text anywhere in the image.",
+      "variants": [
+        {
+          "name": "Urban",
+          "addition": "Modern Norwegian city street (Oslo Barcode, Bergen Bryggen-inspired, or Trondheim style). Person walking with purpose, coffee in hand. Clean architecture, bicycle in background."
+        },
+        {
+          "name": "Natur",
+          "addition": "Norwegian coastal or mountain setting. Person taking a break outdoors, perhaps with laptop on a wooden bench. Pine trees, ocean, or mountains in background. Peaceful but productive."
+        },
+        {
+          "name": "Cafe / Terasse",
+          "addition": "Outdoor café seating in a Norwegian town. Person enjoying a work break, laptop partially closed. Cobblestone or wooden deck. Other patrons blurred in background."
+        }
+      ]
+    },
+
+    "product": {
+      "name": "Produkt / Tjeneste",
+      "base_prompt": "Photorealistic product-style photograph with Scandinavian minimalist styling. Clean surface (light oak, marble, or linen). Natural soft window light from the side. Product or service representation for {industry} arranged thoughtfully with minimal props (green plant, coffee cup, natural materials). {brand_colors} present in the composition. Shallow depth of field (f/2.0). No text, labels, or logos visible. Premium but approachable feel.",
+      "variants": [
+        {
+          "name": "Flat lay",
+          "addition": "Top-down flat lay composition. Items arranged in organized grid on light surface. Negative space intentional. Minimalist Scandinavian styling."
+        },
+        {
+          "name": "In-use",
+          "addition": "Hands holding or interacting with the product/tool. Close-up, showing authentic use. Warm skin tones, natural nails, casual jewelry."
+        },
+        {
+          "name": "Lifestyle context",
+          "addition": "Product placed in a real Scandinavian home or office environment. Natural styling, not overly curated. Someone in the background slightly out of focus."
+        }
+      ]
+    },
+
+    "team": {
+      "name": "Team / Kultur",
+      "base_prompt": "Photorealistic photograph showing team culture at a {industry} company. Scandinavian-looking diverse group of 3-6 people in a bright, modern space. Genuine candid moment — laughing, collaborating, or celebrating. Natural light, casual-professional clothing. {brand_colors} subtly woven into the environment. Authentic workplace culture, not staged. No text visible on screens, shirts, or backgrounds.",
+      "variants": [
+        {
+          "name": "Feiring",
+          "addition": "Team celebrating a milestone. Genuine smiles, someone clapping. Simple celebration — cake or champagne. Warm atmosphere in modern office."
+        },
+        {
+          "name": "Lunsj / Pause",
+          "addition": "Team having lunch together in a bright kitchen/break room. Scandinavian interior design. Natural conversation, someone laughing. Healthy food on table."
+        },
+        {
+          "name": "Aktivitet",
+          "addition": "Team doing an activity together — walking outdoors, having standing meeting, or creative workshop. Dynamic composition, movement captured naturally."
+        }
+      ]
+    }
+  },
+
+  "style_modifiers": {
+    "warm": "Add warm tones: golden hour light, warm wood tones, amber and honey accents. Cozy Scandinavian hygge feeling.",
+    "cool_professional": "Cool, clean tones: blue-grey palette, crisp white, stainless steel accents. Modern and professional.",
+    "vibrant": "More saturated colors while keeping Scandinavian base. Pops of color from plants, art, or clothing. Energetic but not overwhelming.",
+    "moody": "Slightly darker, more atmospheric. Soft shadows, warm pools of light. Contemplative and premium feeling.",
+    "bright_airy": "Maximum brightness and airiness. White walls, light flooding in, minimal shadows. Fresh and optimistic."
+  },
+
+  "aspect_ratios": {
+    "instagram_feed": "1:1 (1080x1080px)",
+    "instagram_story_reel": "9:16 (1080x1920px)",
+    "linkedin": "1.91:1 (1200x628px) or 1:1",
+    "facebook": "1.91:1 (1200x628px)",
+    "og_image": "1.91:1 (1200x630px)"
+  },
+
+  "prompt_assembly": {
+    "description": "Slik bygger du en komplett prompt:",
+    "template": "[scene_variant.base_prompt] [selected variant addition] [style_modifier if any] Aspect ratio: [aspect_ratio]. --ar [ratio] --v 6 --style raw",
+    "example": "Photorealistic photograph of a modern Scandinavian office space. Natural daylight streaming through large windows. Light wood furniture (oak or birch), green plants, clean minimalist desk setup. A technology professional working naturally, candid moment, not posing. Norwegian-looking person, casual-professional clothing. Subtle deep blue and white accent in the environment (a mug, notebook, or wall detail). Shot at f/2.8 with shallow depth of field. Warm, inviting atmosphere. No text visible anywhere in the image. Single person focused at their desk, laptop open (screen not visible), coffee cup nearby. Concentrated expression, natural posture. Add warm tones: golden hour light, warm wood tones, amber and honey accents. Cozy Scandinavian hygge feeling. Aspect ratio: 1:1 (1080x1080px). --ar 1:1 --v 6 --style raw"
+  }
+}

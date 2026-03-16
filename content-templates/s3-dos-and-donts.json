@@ -1,0 +1,198 @@
+{
+  "$schema": "dos-and-donts-v1",
+  "description": "Generelle og bransjespesifikke Dos and Don'ts for SoMe-innhold. Brukes som baseline ved onboarding, kan overstyres av kundens Brand Voice Guide.",
+
+  "universal": {
+    "description": "Gjelder ALLE brands, uavhengig av bransje.",
+    "dos": [
+      "Skriv alltid på norsk med naturlig språk (unngå direkte oversettelser fra engelsk)",
+      "Bruk aktiv stemme ('Vi hjelper deg' > 'Du vil bli hjulpet')",
+      "Del ekte verdi i hvert innlegg — spør deg: 'Ville jeg stoppet for dette?'",
+      "Tilpass innhold til plattformen (LinkedIn ≠ Instagram ≠ Facebook)",
+      "Bruk bilder med ekte mennesker fremfor stockfoto-klisjeer",
+      "Svar på kommentarer raskt og personlig",
+      "Test ulike hooks og lær av hva som fungerer",
+      "Ha en tydelig CTA — fortell folk hva de skal gjøre",
+      "Vis mennesker og kultur bak merkevaren",
+      "Planlegg innhold minst 1 uke frem i tid",
+      "Bruk innsikter og data til å forbedre fremtidige poster",
+      "Hold konsistent visuell identitet på tvers av plattformer",
+      "Bruk alt-tekst på alle bilder (tilgjengelighet)",
+      "Engasjer med andres innhold — ikke bare post ditt eget"
+    ],
+    "donts": [
+      "Aldri kjøp følgere, likes eller kommentarer",
+      "Ikke post identisk innhold på alle plattformer uten tilpasning",
+      "Ikke bruk engagement bait ('Lik hvis du er enig!')",
+      "Unngå å poste uten plan eller strategi",
+      "Ikke ignorer negative kommentarer — håndter dem profesjonelt",
+      "Aldri bruk andres bilder uten tillatelse/lisens",
+      "Ikke overdriv med hashtags (spesielt på LinkedIn og Facebook)",
+      "Unngå vegg-av-tekst uten linjeskift",
+      "Ikke vær redd for å ha en mening — flat innhold drukner",
+      "Aldri post i sinne eller frustrasjon",
+      "Ikke slett negative kommentarer med mindre de bryter retningslinjer",
+      "Unngå klisjeer: 'synergi', 'paradigmeskifte', 'game-changer', 'disruptiv'",
+      "Ikke post bare salgsinnhold — 80/20-regelen (80% verdi, 20% salg)",
+      "Aldri lyv om resultater eller bruk falske testimonials"
+    ]
+  },
+
+  "industry_specific": {
+    "b2b_saas": {
+      "name": "B2B / SaaS",
+      "description": "For teknologiselskaper, programvare, og B2B-tjenester.",
+      "dos": [
+        "Del case studies med konkrete tall og resultater",
+        "Vis produktet i bruk — skjermbilder, korte demoer",
+        "Skriv 'thought leadership' innlegg som viser ekspertise",
+        "Del bransjetrender og analyser med egen vinkling",
+        "Vis teamet — utviklere, support, ledelse (menneskeliggjør SaaS)",
+        "Bruk LinkedIn som primærkanal",
+        "Del tips som gjør livet enklere for målgruppen (uten å kreve kjøp)",
+        "Publiser månedlige oppdateringer om nye features",
+        "Samarbeid med bransjeprofiler og partnere for kryss-promotering"
+      ],
+      "donts": [
+        "Ikke bruk for mye teknisk sjargong uten forklaring",
+        "Unngå å snakke ned konkurrenter direkte",
+        "Ikke bare post produktnyheter — folk følger ikke bedrifter for release notes",
+        "Unngå generiske 'Vi er så glade for å annonsere...' poster",
+        "Ikke driv 'feature dumping' — fokuser på nytten, ikke spesifikasjonene",
+        "Ikke anta at alle forstår forkortelsene dine (SaaS, API, ROI — forklar!)",
+        "Unngå å love 'revolusjonerende' løsninger uten bevis"
+      ],
+      "content_mix": {
+        "thought_leadership": "30%",
+        "product_updates": "15%",
+        "case_studies": "20%",
+        "team_culture": "15%",
+        "industry_news": "10%",
+        "promotional": "10%"
+      }
+    },
+
+    "ecommerce": {
+      "name": "E-commerce",
+      "description": "For nettbutikker og produktbaserte bedrifter.",
+      "dos": [
+        "Vis produkter i bruk — lifestyle-bilder slår produktbilder på hvit bakgrunn",
+        "Bruk UGC (user-generated content) aktivt",
+        "Del kundeanmeldelser og testimonials",
+        "Lag sesongbasert innhold knyttet til norske høytider og sesonger",
+        "Bruk Instagram Shopping og tag produkter",
+        "Lag unboxing-innhold og behind-the-scenes av pakking/sending",
+        "Test Reels og kortvideo — de får mest rekkevidde",
+        "Skap urgency med tidsbegrensede tilbud (men ikke overdriv)",
+        "Vis størrelsesguider, farger i dagslys, og ærlige produktbilder"
+      ],
+      "donts": [
+        "Ikke post bare produktbilder uten kontekst eller historie",
+        "Unngå konstante 'SALG!! 🔥🔥🔥' poster",
+        "Ikke ignorer spørsmål om levering, retur og størrelser",
+        "Unngå å bruke bilder som ikke matcher virkeligheten",
+        "Ikke oversell — ærlig markedsføring bygger tillit",
+        "Unngå for mange popup-lignende poster (tvinger folk bort)",
+        "Ikke glem å svare på DMs — mange kjøpsbeslutninger skjer der"
+      ],
+      "content_mix": {
+        "product_lifestyle": "30%",
+        "ugc_reviews": "20%",
+        "behind_scenes": "15%",
+        "tips_inspiration": "15%",
+        "promotional": "15%",
+        "community": "5%"
+      }
+    },
+
+    "local_business": {
+      "name": "Lokal bedrift / tjenester",
+      "description": "For lokale bedrifter: restauranter, frisører, håndverkere, rådgivere, helsepersonell etc.",
+      "dos": [
+        "Vis ansiktet bak bedriften — folk kjøper av mennesker",
+        "Del lokale referanser og gjenkjennbare steder",
+        "Bruk Google Business-profilen aktivt sammen med SoMe",
+        "Del 'før og etter' bilder (frisør, håndverker, oppussing etc.)",
+        "Vis hverdagen — kaffen om morgenen, teamet i aksjon, fornøyde kunder",
+        "Bruk lokal-hashtags (#oslo #bergen #trondheim #dinby)",
+        "Del åpningstider, ferieplaner og praktisk info jevnlig",
+        "Samarbeid med andre lokale bedrifter for kryss-promotering",
+        "Be fornøyde kunder om Google-anmeldelser (del dem på SoMe)"
+      ],
+      "donts": [
+        "Ikke prøv å fremstå som større enn du er",
+        "Unngå generisk stockfoto — bruk ekte bilder fra din bedrift",
+        "Ikke glem å oppdatere info (åpningstider, meny, priser)",
+        "Unngå for mye 'polert' innhold — autentisitet vinner lokalt",
+        "Ikke ignorer lokale hendelser og merkedager",
+        "Unngå å poste bare i 'salgsperioder' og være stille resten",
+        "Ikke undervurder Facebook — det er fortsatt størst for lokal forretning i Norge"
+      ],
+      "content_mix": {
+        "behind_scenes": "30%",
+        "customer_stories": "20%",
+        "tips_expertise": "20%",
+        "local_community": "15%",
+        "promotional": "10%",
+        "team_culture": "5%"
+      }
+    },
+
+    "creative_entertainment": {
+      "name": "Kreativ / underholdning",
+      "description": "For kreative byråer, kunstnere, musikere, innholdsskapere, event-selskaper etc.",
+      "dos": [
+        "Vis prosessen — sketches, utkast, behind-the-scenes er gull",
+        "Bruk sterke visuelle uttrykk som stopper scrolling",
+        "Eksperimenter med nye formater og trender",
+        "Del inspirasjon og referanser (gi kreditt!)",
+        "Samarbeid med andre kreative for krysspollinering",
+        "Bruk Reels/TikTok-formater aktivt — kreativ bransje MÅ være på video",
+        "La personligheten skinne gjennom — kreative brands har lov å være modige",
+        "Del work-in-progress — folk elsker å se ting bli til",
+        "Lag gjenkjennelige serier (f.eks. 'Fredagstegning', 'Ukens prosjekt')"
+      ],
+      "donts": [
+        "Ikke vær kjedelig — kreativ bransje har null unnskyldning for flat innhold",
+        "Unngå å bare vise ferdige resultater — prosessen er like interessant",
+        "Ikke kopier andres stil uten egen vri",
+        "Unngå for mye tekst i bilder (Instagram kutter ned rekkevidde)",
+        "Ikke vær redd for å polarisere — alt som er for alle, er for ingen",
+        "Unngå å poste bare eget arbeid — engasjer med communityet",
+        "Ikke glem credits til samarbeidspartnere, modeller, kunder"
+      ],
+      "content_mix": {
+        "portfolio_showcase": "25%",
+        "process_bts": "25%",
+        "inspiration_trends": "15%",
+        "personal_creative": "15%",
+        "community_collab": "10%",
+        "promotional": "10%"
+      }
+    }
+  },
+
+  "platform_specific_rules": {
+    "instagram": {
+      "max_hashtags": 30,
+      "recommended_hashtags": "8-15",
+      "caption_max_chars": 2200,
+      "best_times_norway": ["07:00-09:00", "11:30-13:00", "18:00-21:00"],
+      "notes": "Reels får mest rekkevidde. Carousel-poster har høyest engagement. Feed-poster med ansikter får 38% mer likes."
+    },
+    "linkedin": {
+      "max_hashtags": 30,
+      "recommended_hashtags": "3-5",
+      "post_max_chars": 3000,
+      "best_times_norway": ["07:30-08:30", "11:00-12:00", "17:00-18:00"],
+      "notes": "Tirsdag-torsdag er best. Dokumenter/carousel får mest engagement. Unngå lenker i selve posten — legg dem i første kommentar."
+    },
+    "facebook": {
+      "max_hashtags": 30,
+      "recommended_hashtags": "1-3",
+      "post_max_chars": 63206,
+      "best_times_norway": ["09:00-10:00", "12:00-14:00", "19:00-21:00"],
+      "notes": "Video og bilder outperformer ren tekst. Spørsmål i poster dobler kommentarer. Mest brukt av 30-60 år i Norge."
+    }
+  }
+}
