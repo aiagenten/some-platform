@@ -47,13 +47,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
 
-    // 3. Create user profile
+    // 3. Check if this is the first user (make them aiagenten_admin)
+    const { count: userCount } = await supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+    
+    const isFirstUser = (userCount ?? 0) === 0
+    const role = isFirstUser ? 'aiagenten_admin' : 'admin'
+
+    // 4. Create user profile
     const { error: userError } = await supabase
       .from('users')
       .insert({
         id: authData.user.id,
         org_id: org.id,
-        role: 'admin',
+        role,
         name,
         email,
       })
