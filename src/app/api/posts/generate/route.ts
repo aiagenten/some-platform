@@ -62,10 +62,10 @@ export async function POST(request: NextRequest) {
     // Fetch brand learnings
     const { data: learnings } = await supabase
       .from('brand_learnings')
-      .select('learning_text, learning_type')
+      .select('rule, learning_type')
       .eq('org_id', org_id)
-      .eq('is_active', true)
-      .order('confidence_score', { ascending: false })
+      .eq('active', true)
+      .order('confidence', { ascending: false })
       .limit(10)
 
     // Build template variables
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       ? brandProfile.dont_list.map((d: string) => `- ${d}`).join('\n')
       : '- Ikke bruk klisjer\n- Ikke vær selgende'
     const learningsList = learnings?.length
-      ? learnings.map((l) => `- [${l.learning_type}] ${l.learning_text}`).join('\n')
+      ? learnings.map((l) => `- [${l.learning_type}] ${l.rule}`).join('\n')
       : 'Ingen tidligere innsikter enda.'
 
     const topicText = topic || 'et relevant tema for målgruppen'
