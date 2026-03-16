@@ -74,8 +74,8 @@ RETURNS UUID AS $$
 DECLARE
   v_id UUID;
 BEGIN
-  INSERT INTO audit_logs (org_id, action, entity_type, entity_id, details)
-  VALUES (p_org_id, p_action, 'social_post', p_post_id, p_details)
+  INSERT INTO audit_logs (org_id, action, table_name, record_id, new_data)
+  VALUES (p_org_id, p_action, 'social_posts', p_post_id, p_details)
   RETURNING id INTO v_id;
 
   RETURN v_id;
