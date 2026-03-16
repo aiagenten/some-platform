@@ -7,6 +7,22 @@ export async function middleware(request: NextRequest) {
   // Check if user is authenticated for protected routes
   const { pathname } = request.nextUrl
 
+  // Embed routes are public — skip auth
+  if (pathname.startsWith('/embed') || pathname.startsWith('/api/embed')) {
+    // Add dynamic CSP frame-ancestors based on embed token
+    const headers = new Headers(response.headers)
+    headers.set(
+      'Content-Security-Policy',
+      "frame-ancestors *"
+    )
+    headers.set('X-Frame-Options', 'ALLOWALL')
+    return new NextResponse(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+
   const protectedRoutes = ['/dashboard', '/onboarding']
   const authRoutes = ['/login', '/signup']
 
