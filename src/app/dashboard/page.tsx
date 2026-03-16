@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { FileText, FilePenLine, Clock, CheckCircle2, Send } from 'lucide-react'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({ total: 0, draft: 0, pending: 0, approved: 0, published: 0 })
@@ -44,25 +45,36 @@ export default function DashboardPage() {
   }, [])
 
   const cards = [
-    { label: 'Totalt', value: stats.total, color: 'bg-gray-100 text-gray-800' },
-    { label: 'Utkast', value: stats.draft, color: 'bg-gray-100 text-gray-600' },
-    { label: 'Venter', value: stats.pending, color: 'bg-yellow-50 text-yellow-700' },
-    { label: 'Godkjent', value: stats.approved, color: 'bg-green-50 text-green-700' },
-    { label: 'Publisert', value: stats.published, color: 'bg-blue-50 text-blue-700' },
+    { label: 'Totalt', value: stats.total, icon: FileText, gradient: 'from-slate-600 to-slate-700', iconBg: 'bg-slate-500/20' },
+    { label: 'Utkast', value: stats.draft, icon: FilePenLine, gradient: 'from-slate-500 to-slate-600', iconBg: 'bg-slate-400/20' },
+    { label: 'Venter', value: stats.pending, icon: Clock, gradient: 'from-amber-500 to-orange-600', iconBg: 'bg-amber-400/20' },
+    { label: 'Godkjent', value: stats.approved, icon: CheckCircle2, gradient: 'from-emerald-500 to-emerald-600', iconBg: 'bg-emerald-400/20' },
+    { label: 'Publisert', value: stats.published, icon: Send, gradient: 'from-indigo-500 to-purple-600', iconBg: 'bg-indigo-400/20' },
   ]
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h1>
-      <p className="text-gray-500 mb-8">{orgName}</p>
+    <div className="animate-fade-in-up">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <p className="text-slate-500 mt-1">{orgName}</p>
+      </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        {cards.map((c) => (
-          <div key={c.label} className={`rounded-xl p-5 ${c.color}`}>
-            <div className="text-2xl font-bold">{c.value}</div>
-            <div className="text-sm mt-1 opacity-75">{c.label}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {cards.map((c) => {
+          const Icon = c.icon
+          return (
+            <div
+              key={c.label}
+              className={`bg-gradient-to-br ${c.gradient} rounded-2xl p-5 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5`}
+            >
+              <div className={`w-10 h-10 ${c.iconBg} rounded-xl flex items-center justify-center mb-3`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <div className="text-3xl font-bold">{c.value}</div>
+              <div className="text-sm mt-1 opacity-80">{c.label}</div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

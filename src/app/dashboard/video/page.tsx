@@ -19,8 +19,16 @@ import { TextOverVideo } from '@/components/video-templates/TextOverVideo'
 import { BeforeAfter } from '@/components/video-templates/BeforeAfter'
 import { QuoteCard } from '@/components/video-templates/QuoteCard'
 import { ProductShowcase } from '@/components/video-templates/ProductShowcase'
+import { Video, Save, Upload, ArrowLeft, Clapperboard, FileText, ArrowLeftRight, Quote, ShoppingBag, CheckCircle2, AlertCircle } from 'lucide-react'
 
-// Default configs for each template
+const TEMPLATE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'promo-slideshow': Clapperboard,
+  'text-over-video': FileText,
+  'before-after': ArrowLeftRight,
+  'quote-card': Quote,
+  'product-showcase': ShoppingBag,
+}
+
 function getDefaultConfig(templateId: string, brand: BrandColors): Record<string, unknown> {
   switch (templateId) {
     case 'promo-slideshow':
@@ -72,7 +80,6 @@ function getDefaultConfig(templateId: string, brand: BrandColors): Record<string
   }
 }
 
-// Render the correct template component
 function TemplateRenderer({ templateId, config }: { templateId: string; config: Record<string, unknown> }) {
   switch (templateId) {
     case 'promo-slideshow':
@@ -96,14 +103,16 @@ export default function VideoPage() {
   const [config, setConfig] = useState<Record<string, unknown>>({})
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'success' | 'error' | ''>('')
 
-  const brand = DEFAULT_BRAND // TODO: Load from brand_profile
+  const brand = DEFAULT_BRAND
 
   const handleSelectTemplate = useCallback(
     (template: TemplateInfo) => {
       setSelectedTemplate(template)
       setConfig(getDefaultConfig(template.id, brand))
       setSaveMessage('')
+      setSaveStatus('')
     },
     [brand]
   )
@@ -116,16 +125,17 @@ export default function VideoPage() {
     if (!selectedTemplate) return
     setSaving(true)
     setSaveMessage('')
+    setSaveStatus('')
 
     try {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData?.user) {
-        setSaveMessage('❌ Du må være logget inn')
+        setSaveMessage('Du må være logget inn')
+        setSaveStatus('error')
         setSaving(false)
         return
       }
 
-      // Get org_id from users table
       const { data: userRow } = await supabase
         .from('users')
         .select('org_id')
@@ -133,7 +143,8 @@ export default function VideoPage() {
         .single()
 
       if (!userRow) {
-        setSaveMessage('❌ Kunne ikke finne organisasjon')
+        setSaveMessage('Kunne ikke finne organisasjon')
+        setSaveStatus('error')
         setSaving(false)
         return
       }
@@ -157,69 +168,77 @@ export default function VideoPage() {
       })
 
       if (error) {
-        setSaveMessage(`❌ ${error.message}`)
+        setSaveMessage(error.message)
+        setSaveStatus('error')
       } else {
-        setSaveMessage('✅ Video-config lagret som reel-utkast!')
+        setSaveMessage('Video-config lagret som reel-utkast!')
+        setSaveStatus('success')
       }
     } catch {
-      setSaveMessage('❌ Noe gikk galt')
+      setSaveMessage('Noe gikk galt')
+      setSaveStatus('error')
     } finally {
       setSaving(false)
     }
   }, [selectedTemplate, config, supabase])
 
-  // JSON config editor
   const configJson = useMemo(() => JSON.stringify(config, null, 2), [config])
 
   return (
-    <div>
+    <div className="animate-fade-in-up">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">🎬 Video-editor</h1>
-          <p className="text-gray-500 mt-1">Velg en mal, tilpass innhold, og forhåndsvis</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center">
+            <Video className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Video-editor</h1>
+            <p className="text-slate-500 text-sm mt-0.5">Velg en mal, tilpass innhold, og forhåndsvis</p>
+          </div>
         </div>
       </div>
 
       {!selectedTemplate ? (
-        // Template selection
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => handleSelectTemplate(t)}
-              className="p-6 bg-white border border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-md transition text-left"
-            >
-              <div className="text-3xl mb-3">{t.icon}</div>
-              <h3 className="text-lg font-semibold text-gray-900">{t.name}</h3>
-              <p className="text-sm text-gray-500 mt-1">{t.description}</p>
-              <div className="mt-3 flex gap-2 text-xs text-gray-400">
-                <span>{t.width}×{t.height}</span>
-                <span>·</span>
-                <span>{t.fps} fps</span>
-                <span>·</span>
-                <span>{(t.durationInFrames / t.fps).toFixed(0)}s</span>
-              </div>
-            </button>
-          ))}
+          {TEMPLATES.map((t) => {
+            const Icon = TEMPLATE_ICONS[t.id] || Video
+            return (
+              <button
+                key={t.id}
+                onClick={() => handleSelectTemplate(t)}
+                className="p-6 bg-white border border-slate-200/60 rounded-2xl hover:border-indigo-200 hover:shadow-lg transition-all duration-300 text-left group"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl flex items-center justify-center mb-4 group-hover:from-indigo-100 group-hover:to-purple-100 transition-colors">
+                  <Icon className="w-6 h-6 text-indigo-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-700 transition-colors">{t.name}</h3>
+                <p className="text-sm text-slate-500 mt-1">{t.description}</p>
+                <div className="mt-4 flex gap-2 text-xs text-slate-400">
+                  <span className="bg-slate-50 px-2 py-1 rounded-lg">{t.width}×{t.height}</span>
+                  <span className="bg-slate-50 px-2 py-1 rounded-lg">{t.fps} fps</span>
+                  <span className="bg-slate-50 px-2 py-1 rounded-lg">{(t.durationInFrames / t.fps).toFixed(0)}s</span>
+                </div>
+              </button>
+            )
+          })}
         </div>
       ) : (
-        // Editor view
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Preview */}
           <div>
             <div className="flex items-center gap-3 mb-4">
               <button
                 onClick={() => setSelectedTemplate(null)}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
               >
-                ← Tilbake til maler
+                <ArrowLeft className="w-4 h-4" /> Tilbake til maler
               </button>
-              <h2 className="text-lg font-semibold">
-                {selectedTemplate.icon} {selectedTemplate.name}
+              <h2 className="text-lg font-semibold text-slate-900">
+                {selectedTemplate.name}
               </h2>
             </div>
 
-            <div className="bg-black rounded-xl overflow-hidden" style={{ aspectRatio: '9/16', maxHeight: 640 }}>
+            <div className="bg-black rounded-2xl overflow-hidden shadow-xl" style={{ aspectRatio: '9/16', maxHeight: 640 }}>
               <Player
                 component={() => <TemplateRenderer templateId={selectedTemplate.id} config={config} />}
                 durationInFrames={selectedTemplate.durationInFrames}
@@ -236,18 +255,16 @@ export default function VideoPage() {
 
           {/* Right: Config editor */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Konfigurer innhold</h3>
+            <h3 className="text-lg font-semibold mb-4 text-slate-900">Konfigurer innhold</h3>
 
-            {/* Quick config fields based on template type */}
             <TemplateConfigForm
               templateId={selectedTemplate.id}
               config={config}
               onChange={handleConfigChange}
             />
 
-            {/* Raw JSON editor */}
             <details className="mt-4">
-              <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
+              <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-700 transition-colors">
                 Avansert: Rediger JSON direkte
               </summary>
               <textarea
@@ -257,32 +274,38 @@ export default function VideoPage() {
                     const parsed = JSON.parse(e.target.value)
                     setConfig(parsed)
                   } catch {
-                    // Invalid JSON — ignore
+                    // Invalid JSON
                   }
                 }}
-                className="w-full mt-2 p-3 text-xs font-mono bg-gray-50 border rounded-lg"
+                className="w-full mt-2 p-4 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 rows={15}
               />
             </details>
 
-            {/* Save */}
             <div className="mt-6 flex items-center gap-3">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md flex items-center gap-2"
               >
-                {saving ? 'Lagrer...' : '💾 Lagre som reel-utkast'}
+                <Save className="w-4 h-4" />
+                {saving ? 'Lagrer...' : 'Lagre som reel-utkast'}
               </button>
               <button
                 onClick={() => alert('TODO: Remotion Lambda eksport')}
-                className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                className="px-6 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all duration-200 flex items-center gap-2"
               >
-                📤 Eksporter video (coming soon)
+                <Upload className="w-4 h-4" />
+                Eksporter video
               </button>
             </div>
             {saveMessage && (
-              <p className="mt-2 text-sm">{saveMessage}</p>
+              <div className={`mt-3 flex items-center gap-2 text-sm p-3 rounded-xl ${
+                saveStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+              }`}>
+                {saveStatus === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                {saveMessage}
+              </div>
             )}
           </div>
         </div>
@@ -291,7 +314,6 @@ export default function VideoPage() {
   )
 }
 
-// Template-specific config forms
 function TemplateConfigForm({
   templateId,
   config,
@@ -313,7 +335,7 @@ function TemplateConfigForm({
     case 'text-over-video':
       return <TextOverVideoForm config={config as unknown as TextOverVideoConfig} onChange={onChange} />
     default:
-      return <p className="text-sm text-gray-500">Rediger JSON nedenfor</p>
+      return <p className="text-sm text-slate-500">Rediger JSON nedenfor</p>
   }
 }
 
@@ -329,32 +351,14 @@ function PromoSlideshowForm({ config, onChange }: { config: PromoSlideshowConfig
   return (
     <div className="space-y-4">
       {slides.map((slide, i) => (
-        <div key={i} className="p-3 bg-gray-50 rounded-lg space-y-2">
-          <p className="text-xs font-semibold text-gray-500">Slide {i + 1}</p>
-          <input
-            type="text"
-            placeholder="Bilde-URL"
-            value={slide.imageUrl}
-            onChange={(e) => updateSlide(i, 'imageUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border rounded"
-          />
-          <input
-            type="text"
-            placeholder="Tittel"
-            value={slide.title}
-            onChange={(e) => updateSlide(i, 'title', e.target.value)}
-            className="w-full px-3 py-2 text-sm border rounded"
-          />
-          <input
-            type="text"
-            placeholder="Undertekst"
-            value={slide.subtitle || ''}
-            onChange={(e) => updateSlide(i, 'subtitle', e.target.value)}
-            className="w-full px-3 py-2 text-sm border rounded"
-          />
+        <div key={i} className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
+          <p className="text-xs font-semibold text-slate-500">Slide {i + 1}</p>
+          <input type="text" placeholder="Bilde-URL" value={slide.imageUrl} onChange={(e) => updateSlide(i, 'imageUrl', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+          <input type="text" placeholder="Tittel" value={slide.title} onChange={(e) => updateSlide(i, 'title', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+          <input type="text" placeholder="Undertekst" value={slide.subtitle || ''} onChange={(e) => updateSlide(i, 'subtitle', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
         </div>
       ))}
-      <button onClick={addSlide} className="text-sm text-blue-600 hover:text-blue-800">+ Legg til slide</button>
+      <button onClick={addSlide} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors">+ Legg til slide</button>
     </div>
   )
 }
@@ -362,32 +366,10 @@ function PromoSlideshowForm({ config, onChange }: { config: PromoSlideshowConfig
 function QuoteCardForm({ config, onChange }: { config: QuoteCardConfig; onChange: (k: string, v: unknown) => void }) {
   return (
     <div className="space-y-3">
-      <textarea
-        placeholder="Sitat"
-        value={config.quote || ''}
-        onChange={(e) => onChange('quote', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-        rows={3}
-      />
-      <input
-        type="text"
-        placeholder="Forfatter"
-        value={config.author || ''}
-        onChange={(e) => onChange('author', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
-      <input
-        type="text"
-        placeholder="Forfatter-tittel (valgfritt)"
-        value={config.authorTitle || ''}
-        onChange={(e) => onChange('authorTitle', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
-      <select
-        value={config.backgroundStyle || 'gradient'}
-        onChange={(e) => onChange('backgroundStyle', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      >
+      <textarea placeholder="Sitat" value={config.quote || ''} onChange={(e) => onChange('quote', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" rows={3} />
+      <input type="text" placeholder="Forfatter" value={config.author || ''} onChange={(e) => onChange('author', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+      <input type="text" placeholder="Forfatter-tittel (valgfritt)" value={config.authorTitle || ''} onChange={(e) => onChange('authorTitle', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+      <select value={config.backgroundStyle || 'gradient'} onChange={(e) => onChange('backgroundStyle', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl">
         <option value="gradient">Gradient</option>
         <option value="particles">Partikler</option>
         <option value="waves">Bølger</option>
@@ -399,42 +381,12 @@ function QuoteCardForm({ config, onChange }: { config: QuoteCardConfig; onChange
 function BeforeAfterForm({ config, onChange }: { config: BeforeAfterConfig; onChange: (k: string, v: unknown) => void }) {
   return (
     <div className="space-y-3">
-      <input
-        type="text"
-        placeholder="Tittel"
-        value={config.title || ''}
-        onChange={(e) => onChange('title', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
-      <input
-        type="text"
-        placeholder="Før-bilde URL"
-        value={config.beforeImageUrl || ''}
-        onChange={(e) => onChange('beforeImageUrl', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
-      <input
-        type="text"
-        placeholder="Etter-bilde URL"
-        value={config.afterImageUrl || ''}
-        onChange={(e) => onChange('afterImageUrl', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
+      <input type="text" placeholder="Tittel" value={config.title || ''} onChange={(e) => onChange('title', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+      <input type="text" placeholder="Før-bilde URL" value={config.beforeImageUrl || ''} onChange={(e) => onChange('beforeImageUrl', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+      <input type="text" placeholder="Etter-bilde URL" value={config.afterImageUrl || ''} onChange={(e) => onChange('afterImageUrl', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
       <div className="grid grid-cols-2 gap-2">
-        <input
-          type="text"
-          placeholder="Før-label"
-          value={config.beforeLabel || 'Før'}
-          onChange={(e) => onChange('beforeLabel', e.target.value)}
-          className="w-full px-3 py-2 text-sm border rounded"
-        />
-        <input
-          type="text"
-          placeholder="Etter-label"
-          value={config.afterLabel || 'Etter'}
-          onChange={(e) => onChange('afterLabel', e.target.value)}
-          className="w-full px-3 py-2 text-sm border rounded"
-        />
+        <input type="text" placeholder="Før-label" value={config.beforeLabel || 'Før'} onChange={(e) => onChange('beforeLabel', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+        <input type="text" placeholder="Etter-label" value={config.afterLabel || 'Etter'} onChange={(e) => onChange('afterLabel', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
       </div>
     </div>
   )
@@ -452,24 +404,18 @@ function ProductShowcaseForm({ config, onChange }: { config: ProductShowcaseConf
   return (
     <div className="space-y-4">
       {products.map((product, i) => (
-        <div key={i} className="p-3 bg-gray-50 rounded-lg space-y-2">
-          <p className="text-xs font-semibold text-gray-500">Produkt {i + 1}</p>
-          <input type="text" placeholder="Bilde-URL" value={product.imageUrl} onChange={(e) => updateProduct(i, 'imageUrl', e.target.value)} className="w-full px-3 py-2 text-sm border rounded" />
-          <input type="text" placeholder="Produktnavn" value={product.name} onChange={(e) => updateProduct(i, 'name', e.target.value)} className="w-full px-3 py-2 text-sm border rounded" />
+        <div key={i} className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
+          <p className="text-xs font-semibold text-slate-500">Produkt {i + 1}</p>
+          <input type="text" placeholder="Bilde-URL" value={product.imageUrl} onChange={(e) => updateProduct(i, 'imageUrl', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+          <input type="text" placeholder="Produktnavn" value={product.name} onChange={(e) => updateProduct(i, 'name', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
           <div className="grid grid-cols-2 gap-2">
-            <input type="text" placeholder="Pris" value={product.price} onChange={(e) => updateProduct(i, 'price', e.target.value)} className="w-full px-3 py-2 text-sm border rounded" />
-            <input type="text" placeholder="Beskrivelse" value={product.description || ''} onChange={(e) => updateProduct(i, 'description', e.target.value)} className="w-full px-3 py-2 text-sm border rounded" />
+            <input type="text" placeholder="Pris" value={product.price} onChange={(e) => updateProduct(i, 'price', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+            <input type="text" placeholder="Beskrivelse" value={product.description || ''} onChange={(e) => updateProduct(i, 'description', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
           </div>
         </div>
       ))}
-      <button onClick={addProduct} className="text-sm text-blue-600 hover:text-blue-800">+ Legg til produkt</button>
-      <input
-        type="text"
-        placeholder="CTA-tekst"
-        value={config.ctaText || ''}
-        onChange={(e) => onChange('ctaText', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded mt-2"
-      />
+      <button onClick={addProduct} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors">+ Legg til produkt</button>
+      <input type="text" placeholder="CTA-tekst" value={config.ctaText || ''} onChange={(e) => onChange('ctaText', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl mt-2" />
     </div>
   )
 }
@@ -485,21 +431,15 @@ function TextOverVideoForm({ config, onChange }: { config: TextOverVideoConfig; 
 
   return (
     <div className="space-y-4">
-      <input
-        type="text"
-        placeholder="Video-URL (valgfritt)"
-        value={config.videoUrl || ''}
-        onChange={(e) => onChange('videoUrl', e.target.value)}
-        className="w-full px-3 py-2 text-sm border rounded"
-      />
+      <input type="text" placeholder="Video-URL (valgfritt)" value={config.videoUrl || ''} onChange={(e) => onChange('videoUrl', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
       {lines.map((line, i) => (
-        <div key={i} className="p-3 bg-gray-50 rounded-lg space-y-2">
-          <p className="text-xs font-semibold text-gray-500">Tekstlinje {i + 1}</p>
-          <input type="text" placeholder="Tekst" value={line.text} onChange={(e) => updateLine(i, 'text', e.target.value)} className="w-full px-3 py-2 text-sm border rounded" />
+        <div key={i} className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
+          <p className="text-xs font-semibold text-slate-500">Tekstlinje {i + 1}</p>
+          <input type="text" placeholder="Tekst" value={line.text} onChange={(e) => updateLine(i, 'text', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
           <div className="grid grid-cols-3 gap-2">
-            <input type="number" placeholder="Start (frame)" value={line.startFrame} onChange={(e) => updateLine(i, 'startFrame', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border rounded" />
-            <input type="number" placeholder="Slutt (frame)" value={line.endFrame} onChange={(e) => updateLine(i, 'endFrame', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border rounded" />
-            <select value={line.position || 'center'} onChange={(e) => updateLine(i, 'position', e.target.value)} className="w-full px-3 py-2 text-sm border rounded">
+            <input type="number" placeholder="Start" value={line.startFrame} onChange={(e) => updateLine(i, 'startFrame', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+            <input type="number" placeholder="Slutt" value={line.endFrame} onChange={(e) => updateLine(i, 'endFrame', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />
+            <select value={line.position || 'center'} onChange={(e) => updateLine(i, 'position', e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl">
               <option value="top">Topp</option>
               <option value="center">Midt</option>
               <option value="bottom">Bunn</option>
@@ -507,7 +447,7 @@ function TextOverVideoForm({ config, onChange }: { config: TextOverVideoConfig; 
           </div>
         </div>
       ))}
-      <button onClick={addLine} className="text-sm text-blue-600 hover:text-blue-800">+ Legg til tekstlinje</button>
+      <button onClick={addLine} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors">+ Legg til tekstlinje</button>
     </div>
   )
 }

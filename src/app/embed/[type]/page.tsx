@@ -17,11 +17,11 @@ type Post = {
   content_image_url: string | null
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📸',
-  facebook: '📘',
-  linkedin: '💼',
-  tiktok: '🎵',
+const PLATFORM_LABELS: Record<string, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  linkedin: 'LinkedIn',
+  tiktok: 'TikTok',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,7 +55,6 @@ function CalendarWidget({ posts, theme }: { posts: Post[]; theme: string }) {
   const bg = isDark ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
   const cardBg = isDark ? 'bg-gray-800' : 'bg-gray-50'
 
-  // Group by date
   const grouped = posts.reduce<Record<string, Post[]>>((acc, post) => {
     const date = post.scheduled_for
       ? new Date(post.scheduled_for).toLocaleDateString('no-NO', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -67,7 +66,7 @@ function CalendarWidget({ posts, theme }: { posts: Post[]; theme: string }) {
 
   return (
     <div className={`${bg} p-4 rounded-lg`}>
-      <h2 className="text-lg font-bold mb-4">📅 Innholdskalender</h2>
+      <h2 className="text-lg font-bold mb-4">Innholdskalender</h2>
       {Object.entries(grouped).map(([date, datePosts]) => (
         <div key={date} className="mb-4">
           <h3 className="text-sm font-semibold mb-2 capitalize">{date}</h3>
@@ -75,7 +74,7 @@ function CalendarWidget({ posts, theme }: { posts: Post[]; theme: string }) {
             {datePosts.map((post) => (
               <div key={post.id} className={`${cardBg} p-3 rounded-lg`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span>{PLATFORM_ICONS[post.platform] || '📱'}</span>
+                  <span className="text-xs font-medium">{PLATFORM_LABELS[post.platform] || post.platform}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[post.status] || ''}`}>
                     {post.status.replace('_', ' ')}
                   </span>
@@ -100,18 +99,17 @@ function ApprovalWidget({ posts, token, theme }: { posts: Post[]; token: string;
   const cardBg = isDark ? 'bg-gray-800' : 'bg-gray-50'
 
   const handleAction = async (postId: string, action: 'approve' | 'reject') => {
-    // TODO: Implement approval action via API
     console.log(`${action} post ${postId} with token ${token}`)
   }
 
   return (
     <div className={`${bg} p-4 rounded-lg`}>
-      <h2 className="text-lg font-bold mb-4">✅ Godkjenning</h2>
+      <h2 className="text-lg font-bold mb-4">Godkjenning</h2>
       <div className="space-y-3">
         {posts.map((post) => (
           <div key={post.id} className={`${cardBg} p-4 rounded-lg`}>
             <div className="flex items-center gap-2 mb-2">
-              <span>{PLATFORM_ICONS[post.platform] || '📱'}</span>
+              <span className="text-xs font-medium">{PLATFORM_LABELS[post.platform] || post.platform}</span>
               <span className="text-xs opacity-60">{post.format}</span>
               {post.scheduled_for && (
                 <span className="text-xs opacity-60">
@@ -120,31 +118,21 @@ function ApprovalWidget({ posts, token, theme }: { posts: Post[]; token: string;
               )}
             </div>
             {post.content_image_url && (
-              <img
-                src={post.content_image_url}
-                alt=""
-                className="w-full h-40 object-cover rounded mb-2"
-              />
+              <img src={post.content_image_url} alt="" className="w-full h-40 object-cover rounded mb-2" />
             )}
             <p className="text-sm mb-3">{post.caption || post.content_text || '(Ingen tekst)'}</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => handleAction(post.id, 'approve')}
-                className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition"
-              >
-                ✓ Godkjenn
+              <button onClick={() => handleAction(post.id, 'approve')} className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition">
+                Godkjenn
               </button>
-              <button
-                onClick={() => handleAction(post.id, 'reject')}
-                className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition"
-              >
-                ✗ Avvis
+              <button onClick={() => handleAction(post.id, 'reject')} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition">
+                Avvis
               </button>
             </div>
           </div>
         ))}
         {posts.length === 0 && (
-          <p className="text-sm opacity-60">Ingen innlegg venter på godkjenning 🎉</p>
+          <p className="text-sm opacity-60">Ingen innlegg venter på godkjenning</p>
         )}
       </div>
     </div>
@@ -158,12 +146,12 @@ function FeedWidget({ posts, theme }: { posts: Post[]; theme: string }) {
 
   return (
     <div className={`${bg} p-4 rounded-lg`}>
-      <h2 className="text-lg font-bold mb-4">📰 Publisert innhold</h2>
+      <h2 className="text-lg font-bold mb-4">Publisert innhold</h2>
       <div className="space-y-3">
         {posts.map((post) => (
           <div key={post.id} className={`${cardBg} p-3 rounded-lg`}>
             <div className="flex items-center gap-2 mb-1">
-              <span>{PLATFORM_ICONS[post.platform] || '📱'}</span>
+              <span className="text-xs font-medium">{PLATFORM_LABELS[post.platform] || post.platform}</span>
               <span className="text-xs opacity-60">{post.format}</span>
               {post.published_at && (
                 <span className="text-xs opacity-60">
@@ -172,11 +160,7 @@ function FeedWidget({ posts, theme }: { posts: Post[]; theme: string }) {
               )}
             </div>
             {post.content_image_url && (
-              <img
-                src={post.content_image_url}
-                alt=""
-                className="w-full h-40 object-cover rounded mb-2"
-              />
+              <img src={post.content_image_url} alt="" className="w-full h-40 object-cover rounded mb-2" />
             )}
             <p className="text-sm">{post.caption || post.content_text || '(Ingen tekst)'}</p>
           </div>
@@ -208,12 +192,9 @@ export default function EmbedPage() {
       setLoading(false)
       return
     }
-
     try {
       const baseUrl = window.location.origin
-      const res = await fetch(
-        `${baseUrl}/api/embed/data?token=${encodeURIComponent(token)}&type=${encodeURIComponent(type)}`
-      )
+      const res = await fetch(`${baseUrl}/api/embed/data?token=${encodeURIComponent(token)}&type=${encodeURIComponent(type)}`)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         setError(body.error || 'Kunne ikke hente data')
@@ -229,9 +210,7 @@ export default function EmbedPage() {
     }
   }, [token, type])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData])
 
   if (loading) {
     return (
@@ -242,21 +221,13 @@ export default function EmbedPage() {
   }
 
   if (error) {
-    return (
-      <div className="p-4 text-center text-red-600 text-sm">
-        ⚠️ {error}
-      </div>
-    )
+    return <div className="p-4 text-center text-red-600 text-sm">{error}</div>
   }
 
   switch (type) {
-    case 'calendar':
-      return <CalendarWidget posts={posts} theme={theme} />
-    case 'approval':
-      return <ApprovalWidget posts={posts} token={token} theme={theme} />
-    case 'feed':
-      return <FeedWidget posts={posts} theme={theme} />
-    default:
-      return <div className="p-4 text-center text-red-600">Ukjent widget-type: {type}</div>
+    case 'calendar': return <CalendarWidget posts={posts} theme={theme} />
+    case 'approval': return <ApprovalWidget posts={posts} token={token} theme={theme} />
+    case 'feed': return <FeedWidget posts={posts} theme={theme} />
+    default: return <div className="p-4 text-center text-red-600">Ukjent widget-type: {type}</div>
   }
 }

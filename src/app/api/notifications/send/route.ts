@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         if (!prefs || prefs.email_on_approval !== false) {
           await sendResendEmail(
             admin.email,
-            `🔔 Nytt innhold venter godkjenning — ${orgName}`,
+            `Nytt innhold venter godkjenning — ${orgName}`,
             buildApprovalHtml(admin.name || 'Admin', orgName, post_id, post_preview || '')
           )
           notified++
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         if (!prefs || prefs.email_on_publish !== false) {
           await sendResendEmail(
             creator.email,
-            `✅ Innlegget ditt er publisert — ${orgName}`,
+            `Innlegget ditt er publisert — ${orgName}`,
             buildPublishedHtml(creator.name || 'Bruker', orgName, post_id, post_preview || '')
           )
           return NextResponse.json({ success: true, notified: 1 })
@@ -120,7 +120,7 @@ function buildApprovalHtml(name: string, orgName: string, postId: string, previe
   return `
 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
   <div style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);padding:24px;border-radius:12px 12px 0 0;text-align:center">
-    <h1 style="color:white;margin:0;font-size:20px">🔔 Nytt innhold venter</h1>
+    <h1 style="color:white;margin:0;font-size:20px">Nytt innhold venter</h1>
   </div>
   <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
     <p>Hei ${name},</p>
@@ -140,11 +140,11 @@ function buildPublishedHtml(name: string, orgName: string, postId: string, previ
   return `
 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
   <div style="background:linear-gradient(135deg,#10b981,#059669);padding:24px;border-radius:12px 12px 0 0;text-align:center">
-    <h1 style="color:white;margin:0;font-size:20px">✅ Innlegget er publisert!</h1>
+    <h1 style="color:white;margin:0;font-size:20px">Innlegget er publisert!</h1>
   </div>
   <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
     <p>Hei ${name},</p>
-    <p style="color:#4b5563">Innlegget ditt i <strong>${orgName}</strong> er nå publisert! 🎉</p>
+    <p style="color:#4b5563">Innlegget ditt i <strong>${orgName}</strong> er nå publisert!</p>
     ${previewText ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin:16px 0"><p style="margin:0;font-size:14px;color:#374151;white-space:pre-line">${previewText}</p></div>` : ''}
     <a href="${url}" style="display:inline-block;background:#10b981;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600">Se innlegget →</a>
     <p style="font-size:11px;color:#9ca3af;margin-top:20px">

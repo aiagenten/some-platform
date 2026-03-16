@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, Inbox } from 'lucide-react'
 
 type Post = {
   id: string
@@ -17,14 +18,14 @@ type Post = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-200 text-gray-700',
-  pending_approval: 'bg-yellow-200 text-yellow-800',
-  approved: 'bg-green-200 text-green-800',
-  scheduled: 'bg-green-200 text-green-800',
-  published: 'bg-blue-200 text-blue-800',
-  rejected: 'bg-red-200 text-red-800',
-  publishing: 'bg-blue-100 text-blue-600',
-  failed: 'bg-red-300 text-red-900',
+  draft: 'bg-slate-100 text-slate-700',
+  pending_approval: 'bg-amber-50 text-amber-700',
+  approved: 'bg-emerald-50 text-emerald-700',
+  scheduled: 'bg-emerald-50 text-emerald-700',
+  published: 'bg-indigo-50 text-indigo-700',
+  rejected: 'bg-red-50 text-red-700',
+  publishing: 'bg-blue-50 text-blue-600',
+  failed: 'bg-red-100 text-red-800',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,11 +39,11 @@ const STATUS_LABELS: Record<string, string> = {
   failed: 'Feilet',
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📸',
-  facebook: '📘',
-  linkedin: '💼',
-  tiktok: '🎵',
+const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  instagram: Instagram,
+  facebook: Facebook,
+  linkedin: Linkedin,
+  tiktok: Music,
 }
 
 const FILTER_OPTIONS = [
@@ -91,9 +92,9 @@ export default function PostsPage() {
   }, [filter])
 
   return (
-    <div>
+    <div className="animate-fade-in-up">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Innlegg</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Innlegg</h1>
       </div>
 
       {/* Filters */}
@@ -102,15 +103,15 @@ export default function PostsPage() {
           <button
             key={opt.value}
             onClick={() => setFilter(opt.value)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
               filter === opt.value
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:shadow-sm'
             }`}
           >
             {opt.label}
             {opt.value !== 'all' && (
-              <span className="ml-1 opacity-75">
+              <span className="ml-1.5 opacity-75">
                 ({posts.filter(p => opt.value === 'all' || p.status === opt.value).length})
               </span>
             )}
@@ -120,57 +121,61 @@ export default function PostsPage() {
 
       {/* Posts list */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Laster...</div>
+        <div className="text-center py-12 text-slate-400">Laster...</div>
       ) : posts.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-4xl mb-3">📭</div>
-          <p className="text-gray-500">Ingen innlegg funnet</p>
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/60">
+          <Inbox className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500">Ingen innlegg funnet</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {posts.map((post) => (
-            <Link
-              key={post.id}
-              href={`/dashboard/posts/${post.id}`}
-              className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition"
-            >
-              {/* Image thumbnail */}
-              {post.content_image_url ? (
-                <img
-                  src={post.content_image_url}
-                  alt=""
-                  className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-xl">
-                  {PLATFORM_ICONS[post.platform] || '📱'}
-                </div>
-              )}
+          {posts.map((post) => {
+            const PlatformIcon = PLATFORM_ICONS[post.platform] || Smartphone
+            return (
+              <Link
+                key={post.id}
+                href={`/dashboard/posts/${post.id}`}
+                className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-200/60 hover:border-indigo-200 hover:shadow-md transition-all duration-300 group"
+              >
+                {/* Image thumbnail */}
+                {post.content_image_url ? (
+                  <img
+                    src={post.content_image_url}
+                    alt=""
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center flex-shrink-0">
+                    <PlatformIcon className="w-6 h-6 text-slate-400" />
+                  </div>
+                )}
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 truncate">
-                  {post.caption || post.content_text || 'Ingen innhold'}
-                </p>
-                <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-                  <span>{PLATFORM_ICONS[post.platform]} {post.platform}</span>
-                  <span>·</span>
-                  <span>{post.format}</span>
-                  {post.scheduled_for && (
-                    <>
-                      <span>·</span>
-                      <span>{new Date(post.scheduled_for).toLocaleDateString('nb-NO')}</span>
-                    </>
-                  )}
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-900 truncate font-medium group-hover:text-indigo-700 transition-colors">
+                    {post.caption || post.content_text || 'Ingen innhold'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
+                    <PlatformIcon className="w-3.5 h-3.5" />
+                    <span className="capitalize">{post.platform}</span>
+                    <span>·</span>
+                    <span>{post.format}</span>
+                    {post.scheduled_for && (
+                      <>
+                        <span>·</span>
+                        <span>{new Date(post.scheduled_for).toLocaleDateString('nb-NO')}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Status */}
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_COLORS[post.status]}`}>
-                {STATUS_LABELS[post.status] || post.status}
-              </span>
-            </Link>
-          ))}
+                {/* Status */}
+                <span className={`text-xs px-3 py-1.5 rounded-full font-medium flex-shrink-0 ${STATUS_COLORS[post.status]}`}>
+                  {STATUS_LABELS[post.status] || post.status}
+                </span>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
