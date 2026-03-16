@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/calendar', label: 'Kalender', icon: '📅' },
   { href: '/dashboard/posts', label: 'Innlegg', icon: '📝' },
   { href: '/dashboard/generate', label: 'Generer', icon: '✨' },
+  { href: '/dashboard/video', label: 'Video', icon: '🎬' },
   { href: '/dashboard/settings', label: 'Innstillinger', icon: '⚙️' },
 ]
 
