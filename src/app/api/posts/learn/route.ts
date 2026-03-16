@@ -359,8 +359,10 @@ function generateSimpleDiff(original: string, edited: string): string {
   }
 
   // Detect common patterns
-  const emojiRemoved = (original.match(/[\u{1F600}-\u{1F6FF}]/gu) || []).length >
-    (edited.match(/[\u{1F600}-\u{1F6FF}]/gu) || []).length
+  // eslint-disable-next-line no-misleading-character-class
+  const emojiRegex = /[\uD83C-\uDBFF\uDC00-\uDFFF]+/g
+  const emojiRemoved = (original.match(emojiRegex) || []).length >
+    (edited.match(emojiRegex) || []).length
   const shorterText = edited.length < original.length * 0.8
   const hashtagsRemoved = (original.match(/#/g) || []).length > (edited.match(/#/g) || []).length
 

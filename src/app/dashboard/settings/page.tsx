@@ -49,6 +49,9 @@ function SettingsContent() {
   const [learnings, setLearnings] = useState<BrandLearning[]>([])
   const [learningsLoading, setLearningsLoading] = useState(true)
   const [togglingLearning, setTogglingLearning] = useState<string | null>(null)
+  const [notifPrefs, setNotifPrefs] = useState({ email_on_approval: true, email_on_publish: true })
+  const [notifLoading, setNotifLoading] = useState(true)
+  const [savingNotif, setSavingNotif] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -94,6 +97,14 @@ function SettingsContent() {
         setLearnings(learningsJson.learnings || [])
       }
       setLearningsLoading(false)
+
+      // Fetch notification preferences
+      const notifRes = await fetch('/api/notifications/preferences')
+      if (notifRes.ok) {
+        const notifJson = await notifRes.json()
+        setNotifPrefs(notifJson.preferences || { email_on_approval: true, email_on_publish: true })
+      }
+      setNotifLoading(false)
     }
     load()
   }, [])
@@ -101,6 +112,19 @@ function SettingsContent() {
   const handleConnectFacebook = () => {
     if (!orgId) return
     window.location.href = `/api/auth/facebook?org_id=${orgId}`
+  }
+
+  const handleNotifToggle = async (key: 'email_on_approval' | 'email_on_publish') => {
+    setSavingNotif(true)
+    const newPrefs = { ...notifPrefs, [key]: !notifPrefs[key] }
+    setNotifPrefs(newPrefs)
+
+    await fetch('/api/notifications/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPrefs),
+    })
+    setSavingNotif(false)
   }
 
   const handleToggleLearning = async (learningId: string, currentActive: boolean) => {
@@ -239,6 +263,55 @@ function SettingsContent() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Notification Preferences */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <h2 className="font-semibold text-gray-900 mb-4">🔔 Varslinger</h2>
+        {notifLoading ? (
+          <p className="text-gray-400 text-sm">Laster...</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">E-post ved godkjenning</p>
+                <p className="text-xs text-gray-500">Få varsel når innhold venter på godkjenning</p>
+              </div>
+              <button
+                onClick={() => handleNotifToggle('email_on_approval')}
+                disabled={savingNotif}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  notifPrefs.email_on_approval ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
+                    notifPrefs.email_on_approval ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">E-post ved publisering</p>
+                <p className="text-xs text-gray-500">Få varsel når ditt innlegg blir publisert</p>
+              </div>
+              <button
+                onClick={() => handleNotifToggle('email_on_publish')}
+                disabled={savingNotif}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  notifPrefs.email_on_publish ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
+                    notifPrefs.email_on_publish ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Brand Learnings */}
