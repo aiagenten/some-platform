@@ -1,0 +1,241 @@
+{
+  "version": "1.0",
+  "description": "Video-templates for SoMe-plattformen. Hver template definerer scener, overganger, stemning og merkevare-variabler.",
+  "templates": [
+    {
+      "template_id": "video_promo_slideshow",
+      "name": "Promo Slideshow",
+      "description": "Visuell slideshow for produkter eller tjenester. Perfekt for å vise frem tilbud, nye produkter eller tjenesteoversikt.",
+      "duration_seconds": 30,
+      "scenes": [
+        {
+          "type": "title",
+          "duration": 4,
+          "default_text": "Oppdag {brand_name}",
+          "transition": "fade"
+        },
+        {
+          "type": "image",
+          "duration": 5,
+          "default_text": "{product_1_name}",
+          "transition": "slide"
+        },
+        {
+          "type": "image",
+          "duration": 5,
+          "default_text": "{product_2_name}",
+          "transition": "slide"
+        },
+        {
+          "type": "image",
+          "duration": 5,
+          "default_text": "{product_3_name}",
+          "transition": "slide"
+        },
+        {
+          "type": "text",
+          "duration": 5,
+          "default_text": "Kvalitet du kan stole på",
+          "transition": "fade"
+        },
+        {
+          "type": "cta",
+          "duration": 6,
+          "default_text": "Besøk {website} i dag!",
+          "transition": "zoom"
+        }
+      ],
+      "music_mood": "upbeat",
+      "best_for": ["instagram_reels", "facebook_feed", "facebook_stories", "produkt_lansering", "kampanje"],
+      "brand_variables": ["{brand_name}", "{colors}", "{logo}", "{website}", "{product_1_name}", "{product_2_name}", "{product_3_name}"]
+    },
+    {
+      "template_id": "video_tips_tricks",
+      "name": "Tips & Tricks",
+      "description": "Edukativt format med nummererte tips. Bygger autoritet og gir verdi til følgere.",
+      "duration_seconds": 45,
+      "scenes": [
+        {
+          "type": "title",
+          "duration": 4,
+          "default_text": "3 tips fra {brand_name}",
+          "transition": "zoom"
+        },
+        {
+          "type": "text",
+          "duration": 8,
+          "default_text": "Tips 1: {tip_1}",
+          "transition": "slide"
+        },
+        {
+          "type": "image",
+          "duration": 4,
+          "default_text": "",
+          "transition": "fade"
+        },
+        {
+          "type": "text",
+          "duration": 8,
+          "default_text": "Tips 2: {tip_2}",
+          "transition": "slide"
+        },
+        {
+          "type": "image",
+          "duration": 4,
+          "default_text": "",
+          "transition": "fade"
+        },
+        {
+          "type": "text",
+          "duration": 8,
+          "default_text": "Tips 3: {tip_3}",
+          "transition": "slide"
+        },
+        {
+          "type": "cta",
+          "duration": 5,
+          "default_text": "Følg {brand_name} for flere tips!",
+          "transition": "fade"
+        }
+      ],
+      "music_mood": "calm",
+      "best_for": ["instagram_reels", "linkedin_video", "youtube_shorts", "edukasjon", "thought_leadership"],
+      "brand_variables": ["{brand_name}", "{colors}", "{logo}", "{tip_1}", "{tip_2}", "{tip_3}"]
+    },
+    {
+      "template_id": "video_behind_scenes",
+      "name": "Behind the Scenes",
+      "description": "Autentisk innblikk bak kulissene. Bygger tillit og menneskeliggjør merkevaren.",
+      "duration_seconds": 40,
+      "scenes": [
+        {
+          "type": "title",
+          "duration": 3,
+          "default_text": "Bak kulissene hos {brand_name}",
+          "transition": "fade"
+        },
+        {
+          "type": "image",
+          "duration": 7,
+          "default_text": "Slik starter dagen vår",
+          "transition": "fade"
+        },
+        {
+          "type": "image",
+          "duration": 7,
+          "default_text": "Her skjer magien ✨",
+          "transition": "slide"
+        },
+        {
+          "type": "text",
+          "duration": 6,
+          "default_text": "{behind_scenes_fact}",
+          "transition": "fade"
+        },
+        {
+          "type": "image",
+          "duration": 7,
+          "default_text": "Teamet i aksjon",
+          "transition": "slide"
+        },
+        {
+          "type": "text",
+          "duration": 5,
+          "default_text": "Vi elsker det vi gjør 💪",
+          "transition": "fade"
+        },
+        {
+          "type": "cta",
+          "duration": 5,
+          "default_text": "Bli med på reisen — følg {brand_name}!",
+          "transition": "zoom"
+        }
+      ],
+      "music_mood": "calm",
+      "best_for": ["instagram_stories", "instagram_reels", "facebook_stories", "tiktok", "merkevarebygging"],
+      "brand_variables": ["{brand_name}", "{colors}", "{logo}", "{behind_scenes_fact}"]
+    },
+    {
+      "template_id": "video_testimonial",
+      "name": "Kundecase / Testimonial",
+      "description": "Vis frem fornøyde kunder med sitat, resultat og sosial proof.",
+      "duration_seconds": 35,
+      "scenes": [
+        {
+          "type": "title",
+          "duration": 4,
+          "default_text": "Hva kundene sier om {brand_name}",
+          "transition": "fade"
+        },
+        {
+          "type": "image",
+          "duration": 5,
+          "default_text": "{customer_name}",
+          "transition": "fade"
+        },
+        {
+          "type": "text",
+          "duration": 8,
+          "default_text": "\"{customer_quote}\"",
+          "transition": "slide"
+        },
+        {
+          "type": "text",
+          "duration": 6,
+          "default_text": "Resultat: {customer_result}",
+          "transition": "slide"
+        },
+        {
+          "type": "text",
+          "duration": 5,
+          "default_text": "⭐⭐⭐⭐⭐",
+          "transition": "fade"
+        },
+        {
+          "type": "cta",
+          "duration": 7,
+          "default_text": "Bli vår neste suksesshistorie — kontakt {brand_name}!",
+          "transition": "zoom"
+        }
+      ],
+      "music_mood": "corporate",
+      "best_for": ["linkedin_video", "facebook_feed", "instagram_feed", "sosial_proof", "salg"],
+      "brand_variables": ["{brand_name}", "{colors}", "{logo}", "{customer_name}", "{customer_quote}", "{customer_result}"]
+    },
+    {
+      "template_id": "video_offer_cta",
+      "name": "Tilbud / CTA",
+      "description": "Kort, punchy video for tidsbegrensede tilbud og kampanjer. Optimalisert for konvertering.",
+      "duration_seconds": 15,
+      "scenes": [
+        {
+          "type": "title",
+          "duration": 3,
+          "default_text": "🔥 {offer_headline}",
+          "transition": "zoom"
+        },
+        {
+          "type": "text",
+          "duration": 3,
+          "default_text": "{offer_details}",
+          "transition": "slide"
+        },
+        {
+          "type": "image",
+          "duration": 3,
+          "default_text": "",
+          "transition": "zoom"
+        },
+        {
+          "type": "cta",
+          "duration": 6,
+          "default_text": "Kun i dag! {offer_code} — Bestill nå på {website}",
+          "transition": "zoom"
+        }
+      ],
+      "music_mood": "energetic",
+      "best_for": ["instagram_stories", "facebook_feed", "tiktok", "kampanje", "salg", "flash_sale"],
+      "brand_variables": ["{brand_name}", "{colors}", "{logo}", "{website}", "{offer_headline}", "{offer_details}", "{offer_code}"]
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "version": "1.0",
+  "description": "Testdata for SoMe-plattformen — CoverHeads coverband fra Bergen.",
+
+  "brand_profile": {
+    "brand_id": "coverheads",
+    "name": "CoverHeads",
+    "website": "https://coverheads.no",
+    "industry": "underholdning",
+    "sub_industry": "livemusikk",
+    "location": "Bergen, Norge",
+    "description": "CoverHeads er Bergens kuleste coverband. Vi spiller alt fra 80-talls klassikere til dagens hits — perfekt for bryllup, firmafester, festivaler og privatarrangementer. Fem energiske musikere som garanterer fullt dansegulv!",
+    "tone_of_voice": "Uformell, energisk, humoristisk og inkluderende. Vi snakker til folk som elsker god musikk og en skikkelig fest. Bergensk sjarm og selvironi.",
+    "target_audience": ["Eventplanleggere", "Brudepar", "HR-ansvarlige for firmafester", "Festglade 25-55 år", "Festival-arrangører"],
+    "brand_values": ["Energi", "Glede", "Profesjonalitet", "Inkludering", "Musikkglede"],
+    "visual_style": "Sterke farger, konsertbilder, behind-the-scenes, uformelt og autentisk. Hovedfarger: elektrisk blå (#1E90FF) og hvit (#FFFFFF) med aksent i oransje (#FF6B35).",
+    "colors": {
+      "primary": "#1E90FF",
+      "secondary": "#FFFFFF",
+      "accent": "#FF6B35"
+    },
+    "logo_url": "https://coverheads.no/assets/logo.png",
+    "hashtags": ["#CoverHeads", "#CoverheadsBergen", "#Coverband", "#Livemusikk", "#Bergen", "#Festmusikk", "#Bryllupsband"],
+    "social_accounts": {
+      "instagram": "@coverheads_bergen",
+      "facebook": "CoverHeadsBergen",
+      "linkedin": "CoverHeads"
+    },
+    "band_members": [
+      {"name": "Morten", "role": "Vokal & gitar", "fun_fact": "Kan teksten til over 500 sanger"},
+      {"name": "Lise", "role": "Vokal & keys", "fun_fact": "Tidligere kordirigent"},
+      {"name": "Stian", "role": "Gitar", "fun_fact": "Har spilt på alle puber i Bergen"},
+      {"name": "Janne", "role": "Bass", "fun_fact": "Dagjobb som tannlege"},
+      {"name": "Eirik", "role": "Trommer", "fun_fact": "Trente konditori før han valgte trommestikker"}
+    ]
+  },
+
+  "posts": [
+    {
+      "post_id": "ch-001",
+      "platform": "instagram",
+      "type": "image",
+      "status": "published",
+      "created_at": "2026-03-10T14:00:00Z",
+      "published_at": "2026-03-10T18:00:00Z",
+      "content": "🎸 Forrige lørdag tok vi av på Bergenhus Festung! 400 mennesker, fullt dansegulv fra første låt. Takk til alle som kom — dere er syke! 🔥\n\nNeste stopp: Firmafest for Fjord Consulting 22. mars. Privat, men vi lover det blir like vilt 😏\n\n#CoverHeads #CoverheadsBergen #Livemusikk #Bergen #Festmusikk #KonsertBergen",
+      "image_prompt": "Energisk konsertbilde, band på scene med blått lys, publikum danser, innendørs festlokale, Bergen",
+      "scheduled_time": "2026-03-10T18:00:00Z",
+      "rejection": null
+    },
+    {
+      "post_id": "ch-002",
+      "platform": "facebook",
+      "type": "image",
+      "status": "published",
+      "created_at": "2026-03-08T09:00:00Z",
+      "published_at": "2026-03-08T12:00:00Z",
+      "content": "🎶 STORE NYHETER! 🎶\n\nVi har nettopp lagt til 15 nye låter i repertoaret — inkludert Hozier, Dagny og litt klassisk Springsteen. Setlisten vår er nå på over 120 sanger!\n\nPlanlegger du bryllup eller firmafest i 2026? Vi har fortsatt noen ledige datoer i mai og juni. Send oss en melding, så finner vi den perfekte musikkpakken for dere! 🎤\n\n👉 coverheads.no/booking\n\n#CoverHeads #Bryllupsband #Firmafest #Coverband #LivemusikkBergen",
+      "image_prompt": "Setliste på papir med håndskrevne sangtitler, gitarer i bakgrunnen, varmt lys, øvingslokale",
+      "scheduled_time": "2026-03-08T12:00:00Z",
+      "rejection": null
+    },
+    {
+      "post_id": "ch-003",
+      "platform": "instagram",
+      "type": "carousel",
+      "status": "approved",
+      "created_at": "2026-03-14T10:00:00Z",
+      "published_at": null,
+      "content": "🎤 Møt bandet! Del 1: Morten — vår frontmann som kan teksten til over 500 sanger (ja, vi har talt).\n\nFra Bon Jovi til Beyoncé, fra ABBA til Arctic Monkeys — Morten leverer ALLTID. Og ja, han tar requests 😎\n\nHvem vil dere møte neste gang? Kommentér! 👇\n\n#CoverHeads #MøtBandet #CoverheadsBergen #Vokal #Frontmann",
+      "image_prompt": "Portrett av mannlig vokalist med mikrofon, konsertbelysning, energisk positur, blått scenelys",
+      "scheduled_time": "2026-03-17T17:00:00Z",
+      "rejection": null
+    },
+    {
+      "post_id": "ch-004",
+      "platform": "linkedin",
+      "type": "text",
+      "status": "published",
+      "created_at": "2026-03-05T08:00:00Z",
+      "published_at": "2026-03-05T09:00:00Z",
+      "content": "Visste du at musikkvalg på firmafesten kan påvirke medarbeidertilfredshet?\n\nVi i CoverHeads har spilt på over 80 firmafester de siste 3 årene, og mønsteret er tydelig:\n\n✅ Live coverband → folk BLIR på festen\n✅ Kjente låter → alle føler seg inkludert\n✅ Interaksjon med publikum → bedre stemning enn DJ\n\nEn firmafest handler om teambuilding. Musikk som folk synger med på, skaper fellesskap.\n\nPlanlegger dere firmafest i 2026? Ta kontakt for en uforpliktende prat.\n\n🔗 coverheads.no/firmafest",
+      "image_prompt": null,
+      "scheduled_time": "2026-03-05T09:00:00Z",
+      "rejection": null
+    },
+    {
+      "post_id": "ch-005",
+      "platform": "instagram",
+      "type": "reel",
+      "status": "draft",
+      "created_at": "2026-03-15T11:00:00Z",
+      "published_at": null,
+      "content": "POV: Lydsjekk kl 15:00 vs. showtime kl 22:00 🎸🔥\n\nFra «en-to, en-to» til FULL FEST på 7 timer. Behind the scenes fra lørdagens gig på Terminus!\n\n🎵 Låt: Don't Stop Me Now — Queen\n\n#CoverHeads #BehindTheScenes #Lydsjekk #Livemusikk #Bergen #Reels",
+      "image_prompt": "Split-screen: rolig lydsjekk dagtid vs. energisk konsert kveldstid, samme scene",
+      "scheduled_time": null,
+      "rejection": null
+    },
+    {
+      "post_id": "ch-006",
+      "platform": "facebook",
+      "type": "event",
+      "status": "pending",
+      "created_at": "2026-03-15T13:00:00Z",
+      "published_at": null,
+      "content": "🎉 GRATIS KONSERT! 🎉\n\nCoverHeads spiller på Torgallmenningen i Bergen lørdag 4. april kl 18:00!\n\nDet blir 2 timer med de beste hitsa fra 80-tallet til i dag. Ta med venner, familie og godt humør — vi tar oss av resten! 🎶\n\nArrangør: Bergen Live\nSted: Torgallmenningen, Bergen\nTid: Lørdag 4. april, kl 18:00-20:00\nPris: GRATIS!\n\n#CoverHeads #BergenLive #GratisKonsert #Torgallmenningen #Livemusikk",
+      "image_prompt": "Utendørs konsertscene på Torgallmenningen Bergen, kveldssol, folk samlet, festlig stemning",
+      "scheduled_time": "2026-03-20T10:00:00Z",
+      "rejection": null
+    },
+    {
+      "post_id": "ch-007",
+      "platform": "instagram",
+      "type": "image",
+      "status": "rejected",
+      "created_at": "2026-03-12T09:00:00Z",
+      "published_at": null,
+      "content": "Hei folkens! Vi har nå åpnet for booking høsten 2026. Kontakt oss i dag for å sikre din dato!\n\nVi tilbyr profesjonell underholdning for alle typer arrangementer.\n\nTa kontakt via nettsiden.\n\n#CoverHeads",
+      "image_prompt": "Generisk kontorbilde med laptop",
+      "scheduled_time": null,
+      "rejection": {
+        "category": "tone_mismatch",
+        "severity": "minor",
+        "comment": "For formelt og kjedelig! Dette høres ut som en advokatfirma, ikke et coverband. Trenger mer energi, emojis og bergensk sjarm. Bildeforslaget er også helt feil — skal være konsertrelatert.",
+        "rejected_at": "2026-03-12T11:30:00Z",
+        "rejected_by": "system"
+      }
+    },
+    {
+      "post_id": "ch-008",
+      "platform": "facebook",
+      "type": "image",
+      "status": "rejected",
+      "created_at": "2026-03-13T15:00:00Z",
+      "published_at": null,
+      "content": "🎸 CoverHeads har 50% rabatt på alle bookinger i mars!! Vi er de billigste i Bergen og garantert best — ingen andre band kan matche oss! Slå til NÅ før det er for sent!!! 🔥🔥🔥\n\nBooking: coverheads.no\n\n#CoverHeads #BILLIG #Rabatt #BestIBergen #Coverband",
+      "image_prompt": "Rød salgsplakat med store bokstaver '50% RABATT', klistremerke-stil",
+      "scheduled_time": null,
+      "rejection": {
+        "category": "off_brand",
+        "severity": "major",
+        "comment": "Bryter med merkevareretningslinjene: 1) Vi konkurrerer ikke på pris, vi konkurrerer på kvalitet og opplevelse. 2) 'Billigst' og aggressivt salgspress er off-brand. 3) Visuelt forslag (rød salgsplakat) passer ikke vår visuelle identitet. Trenger full omskriving med fokus på opplevelse, ikke pris.",
+        "rejected_at": "2026-03-13T16:45:00Z",
+        "rejected_by": "brand_manager"
+      }
+    },
+    {
+      "post_id": "ch-009",
+      "platform": "instagram",
+      "type": "story",
+      "status": "draft",
+      "created_at": "2026-03-16T08:00:00Z",
+      "published_at": null,
+      "content": "Mandagsmotivasjon: Bare 5 dager til helgekonsert! 🎸\n\nSwipe up for å se hvem som spiller denne uka ➡️\n\n#CoverHeads #Mandagsmotivasjon",
+      "image_prompt": "Morsomt bilde av bandmedlem som later som hen sover på trommene, humoristisk mandag-stemning",
+      "scheduled_time": null,
+      "rejection": null
+    },
+    {
+      "post_id": "ch-010",
+      "platform": "linkedin",
+      "type": "image",
+      "status": "pending",
+      "created_at": "2026-03-15T14:00:00Z",
+      "published_at": null,
+      "content": "3 ting vi har lært etter 200+ arrangementer:\n\n1️⃣ Kommunikasjon er alt. Vi har alltid en dedikert kontaktperson per event. Ingen misforståelser på den store dagen.\n\n2️⃣ Tilpasning slår templat. Hvert arrangement er unikt — vi skreddersyr setlisten etter publikum, ikke etter hva som er lettest å spille.\n\n3️⃣ Profesjonalitet betyr forberedelse. Lydsjekk, backups, plan B for utstyr. Det som ser uanstrengt ut, krever mye arbeid bak kulissene.\n\nResultat: 98% av kundene booker oss igjen eller anbefaler oss videre.\n\nSkal bedriften din arrangere noe? La oss ta en prat.\n\n📧 booking@coverheads.no\n🔗 coverheads.no",
+      "image_prompt": "Profesjonelt bilde av band som gjør lydsjekk, fokusert stemning, teknisk utstyr synlig, backstage-vibe",
+      "scheduled_time": "2026-03-18T08:30:00Z",
+      "rejection": null
+    }
+  ],
+
+  "status_summary": {
+    "draft": ["ch-005", "ch-009"],
+    "pending": ["ch-006", "ch-010"],
+    "approved": ["ch-003"],
+    "published": ["ch-001", "ch-002", "ch-004"],
+    "rejected": ["ch-007", "ch-008"]
+  }
+}

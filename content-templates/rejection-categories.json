@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "description": "Avvisnings-kategorier for innholdsgodkjenning. Hver kategori har auto-fix prompt og severity-nivå.",
+  "categories": [
+    {
+      "id": "tone_mismatch",
+      "name": "Feil tone",
+      "description": "Innholdet matcher ikke merkevarens tone of voice (for formelt, for uformelt, feil energi).",
+      "severity": "minor",
+      "auto_fix_prompt": "Skriv om dette innholdet slik at det matcher følgende tone of voice: {brand_tone}. Behold samme budskap og lengde, men juster ordvalg, setningsoppbygging og energi. Merkevarens tone er: {brand_tone_description}.",
+      "examples": ["For formelt for en uformell merkevare", "For mye slang for B2B-bedrift", "Mangler entusiasme"]
+    },
+    {
+      "id": "factual_error",
+      "name": "Faktafeil",
+      "description": "Innholdet inneholder feil informasjon — feil tall, datoer, påstander eller misvisende utsagn.",
+      "severity": "major",
+      "auto_fix_prompt": "Denne posten inneholder en faktafeil. Gå gjennom innholdet og korriger feilinformasjonen basert på følgende korrekte fakta: {correction_notes}. Behold tone og format uendret.",
+      "examples": ["Feil pris eller åpningstid", "Feil dato for arrangement", "Misvisende statistikk"]
+    },
+    {
+      "id": "wrong_topic",
+      "name": "Feil tema",
+      "description": "Innholdet handler om noe som ikke er relevant for merkevarens innholdsstrategi eller målgruppe.",
+      "severity": "major",
+      "auto_fix_prompt": "Denne posten er utenfor merkevarens innholdsområder. Merkevarens fokus-temaer er: {brand_topics}. Skriv om posten slik at den holder seg innenfor disse temaene, men prøv å beholde kjernebudskapet der det er mulig.",
+      "examples": ["IT-selskap som poster om matlaging uten kobling", "Irrelevant for bransjen"]
+    },
+    {
+      "id": "bad_image",
+      "name": "Dårlig bilde",
+      "description": "Bildet er uskarpt, har feil dimensjoner, dårlig komposisjon, eller matcher ikke innholdet.",
+      "severity": "major",
+      "auto_fix_prompt": "Bildet tilknyttet denne posten er ikke godkjent. Grunn: {image_rejection_reason}. Generer et nytt bilde som matcher postens budskap, med merkevarefarger ({brand_colors}) og stil ({brand_visual_style}). Format: {required_dimensions}.",
+      "examples": ["Pikselert bilde", "Feil format/dimensjoner", "Bilde som ikke matcher teksten"]
+    },
+    {
+      "id": "formatting",
+      "name": "Formateringsfeil",
+      "description": "Feil i formatering: mangler hashtags, emojis, linjeskift, eller har feil struktur for plattformen.",
+      "severity": "minor",
+      "auto_fix_prompt": "Fikser formateringen i denne posten for {platform}. Regler: {platform_formatting_rules}. Sørg for riktig bruk av linjeskift, hashtags (maks {max_hashtags}), emojis og lengde. Behold innholdet uendret.",
+      "examples": ["Mangler hashtags på Instagram", "For mange emojis", "Ingen linjeskift i lang tekst"]
+    },
+    {
+      "id": "too_long",
+      "name": "For lang",
+      "description": "Innholdet overskrider anbefalt lengde for plattformen.",
+      "severity": "minor",
+      "auto_fix_prompt": "Denne posten er for lang for {platform} (maks {max_length} tegn). Forkort innholdet til under grensen mens du beholder kjernebudskapet og CTA. Prioriter: 1) Hovedbudskap, 2) CTA, 3) Detaljer.",
+      "examples": ["Instagram-caption over 2200 tegn", "LinkedIn-post som mister folk halvveis"]
+    },
+    {
+      "id": "too_short",
+      "name": "For kort",
+      "description": "Innholdet er for kort og gir ikke nok verdi eller kontekst.",
+      "severity": "minor",
+      "auto_fix_prompt": "Denne posten er for kort og mangler substans. Utvid innholdet til minst {min_length} tegn. Legg til: kontekst, verdi for leseren, og en tydelig CTA. Behold samme tone ({brand_tone}) og tema.",
+      "examples": ["Bare et bilde uten tekst", "Én setning uten kontekst"]
+    },
+    {
+      "id": "off_brand",
+      "name": "Off brand",
+      "description": "Innholdet bryter med merkevareretningslinjer — feil farger, feil logo-bruk, feil verdier eller kontroversielt.",
+      "severity": "major",
+      "auto_fix_prompt": "Denne posten er ikke i tråd med merkevareretningslinjene. Problemet er: {off_brand_reason}. Skriv om slik at innholdet reflekterer merkevarens verdier ({brand_values}), visuell identitet ({brand_visual_guidelines}), og budskapsplattform. Fjern eventuelle kontroversielle elementer.",
+      "examples": ["Upassende humor", "Feil fargekode i grafikk", "Budskap som motstrider merkevarens verdier"]
+    },
+    {
+      "id": "other",
+      "name": "Annet",
+      "description": "Avvisning som ikke passer i noen annen kategori. Krever manuell beskrivelse.",
+      "severity": "major",
+      "auto_fix_prompt": "Denne posten ble avvist med følgende kommentar: {rejection_comment}. Skriv om innholdet basert på tilbakemeldingen. Behold merkevare-tone og plattformkrav.",
+      "examples": ["Spesifikke kundekrav", "Juridiske hensyn", "Sesongrelaterte justeringer"]
+    }
+  ],
+  "severity_definitions": {
+    "minor": {
+      "label": "Mindre feil",
+      "description": "Kan fikses automatisk av AI uten manuell gjennomgang. Resultatet sendes direkte til ny review.",
+      "auto_fix": true
+    },
+    "major": {
+      "label": "Alvorlig feil",
+      "description": "Krever manuell gjennomgang. AI kan foreslå en fix, men en person må godkjenne den.",
+      "auto_fix": false
+    }
+  }
+}

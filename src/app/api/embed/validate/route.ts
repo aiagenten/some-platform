@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up the embed token
+    const supabaseAdmin = getSupabaseAdmin()
     const { data: embedToken, error } = await supabaseAdmin
       .from('embed_tokens')
       .select('id, org_id, allowed_origins, permissions, expires_at, active')
