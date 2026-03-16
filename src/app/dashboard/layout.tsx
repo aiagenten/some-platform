@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Oversikt', icon: '📊' },
   { href: '/dashboard/calendar', label: 'Kalender', icon: '📅' },
   { href: '/dashboard/posts', label: 'Innlegg', icon: '📝' },
+  { href: '/dashboard/generate', label: 'Generer', icon: '✨' },
+  { href: '/dashboard/settings', label: 'Innstillinger', icon: '⚙️' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

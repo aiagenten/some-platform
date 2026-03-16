@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import PlatformPreview from '@/components/PlatformPreview'
 
 type Post = {
   id: string
@@ -22,6 +23,8 @@ type Post = {
   approved_by: string | null
   approved_at: string | null
   rejection_reason: string | null
+  published_at: string | null
+  published_id: string | null
   created_at: string
   updated_at: string
 }
@@ -76,6 +79,9 @@ export default function PostDetailPage() {
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [rejectComment, setRejectComment] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [publishLoading, setPublishLoading] = useState(false)
+  const [orgName, setOrgName] = useState('')
+  const [orgLogo, setOrgLogo] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -88,7 +94,19 @@ export default function PostDetailPage() {
         .select('org_id')
         .eq('id', user.id)
         .single()
-      if (profile) setOrgId(profile.org_id)
+      if (profile) {
+        setOrgId(profile.org_id)
+        // Fetch org info for preview
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('name, logo_url')
+          .eq('id', profile.org_id)
+          .single()
+        if (org) {
+          setOrgName(org.name)
+          setOrgLogo(org.logo_url)
+        }
+      }
 
       const { data: postData } = await supabase
         .from('social_posts')
@@ -164,6 +182,37 @@ export default function PostDetailPage() {
     setShowRejectForm(false)
     setRejectComment('')
     setActionLoading(false)
+  }
+
+  const handlePublish = async () => {
+    if (!post) return
+    setPublishLoading(true)
+    try {
+      const res = await fetch('/api/posts/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: post.id }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPost({ ...post, status: 'publishing' })
+        // Poll for status update after a few seconds
+        setTimeout(async () => {
+          const { data: updated } = await supabase
+            .from('social_posts')
+            .select('*')
+            .eq('id', post.id)
+            .single()
+          if (updated) setPost(updated)
+        }, 5000)
+      } else {
+        alert(data.error || 'Publisering feilet')
+      }
+    } catch {
+      alert('Nettverksfeil')
+    } finally {
+      setPublishLoading(false)
+    }
   }
 
   const handleRegenerate = async () => {
@@ -290,6 +339,17 @@ export default function PostDetailPage() {
               />
             </div>
           )}
+
+          {/* E9: Platform Preview */}
+          {(post.caption || post.content_text) && (
+            <PlatformPreview
+              caption={post.caption || post.content_text || ''}
+              imageUrl={post.content_image_url}
+              platform={post.platform}
+              brandName={orgName}
+              brandLogo={orgLogo}
+            />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -343,6 +403,35 @@ export default function PostDetailPage() {
               >
                 🔄 Regenerer
               </button>
+
+              {/* E11: Publish button — only for approved posts */}
+              {(post.status === 'approved' || post.status === 'scheduled') && (
+                <button
+                  onClick={handlePublish}
+                  disabled={publishLoading}
+                  className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 mt-2"
+                >
+                  {publishLoading ? '⏳ Publiserer...' : '🚀 Publiser nå'}
+                </button>
+              )}
+
+              {post.status === 'published' && post.published_at && (
+                <div className="w-full bg-green-50 text-green-700 py-2.5 rounded-lg text-center text-sm font-medium mt-2">
+                  ✓ Publisert {new Date(post.published_at).toLocaleString('nb-NO')}
+                </div>
+              )}
+
+              {post.status === 'publishing' && (
+                <div className="w-full bg-blue-50 text-blue-600 py-2.5 rounded-lg text-center text-sm font-medium mt-2 animate-pulse">
+                  ⏳ Publisering pågår...
+                </div>
+              )}
+
+              {post.status === 'failed' && (
+                <div className="w-full bg-red-50 text-red-600 py-2.5 rounded-lg text-center text-sm font-medium mt-2">
+                  ❌ Publisering feilet
+                </div>
+              )}
             </div>
 
             {/* Approval info */}
