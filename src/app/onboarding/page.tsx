@@ -170,20 +170,35 @@ function OnboardingPage() {
     setFetchingPosts(false)
   }, [orgId])
 
-  // Check for Facebook callback params on mount
+  // Check for Facebook or LinkedIn callback params on mount
   useEffect(() => {
     const fbConnected = searchParams.get('fb_connected')
+    const liConnected = searchParams.get('li_connected')
     const accountsParam = searchParams.get('accounts')
 
-    if (fbConnected === 'true' && accountsParam) {
+    if ((fbConnected === 'true' || liConnected === 'true') && accountsParam) {
       try {
         const accounts: ConnectedAccount[] = JSON.parse(decodeURIComponent(accountsParam))
         setStep(2) // Go to SoMe step
+
+        // Merge with existing connected accounts
+        setConnectedAccounts(prev => {
+          const existing = new Set(prev.map(a => `${a.platform}-${a.account_id}`))
+          const merged = [...prev]
+          for (const acc of accounts) {
+            if (!existing.has(`${acc.platform}-${acc.account_id}`)) {
+              merged.push(acc)
+            }
+          }
+          return merged
+        })
+
         handleFacebookCallback(accounts)
 
         // Clean URL
         const url = new URL(window.location.href)
         url.searchParams.delete('fb_connected')
+        url.searchParams.delete('li_connected')
         url.searchParams.delete('accounts')
         url.searchParams.delete('pages')
         window.history.replaceState({}, '', url.pathname)
@@ -195,8 +210,12 @@ function OnboardingPage() {
 
   const startFacebookOAuth = () => {
     if (!orgId) return
-    // Redirect to our Facebook OAuth endpoint with onboarding context
     window.location.href = `/api/auth/facebook?org_id=${orgId}&redirect_to=onboarding`
+  }
+
+  const startLinkedInOAuth = () => {
+    if (!orgId) return
+    window.location.href = `/api/auth/linkedin?org_id=${orgId}&redirect_to=onboarding`
   }
 
   const togglePlatform = (id: string) => {
@@ -430,18 +449,38 @@ function OnboardingPage() {
                 </div>
               )}
 
-              {/* LinkedIn placeholder */}
+              {/* LinkedIn OAuth */}
               {selectedPlatforms.includes('linkedin') && (
-                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm opacity-60">
-                  <div className="flex items-center gap-3">
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
+                  <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center">
                       <Linkedin className="w-5 h-5 text-sky-600" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-900">LinkedIn</h3>
-                      <p className="text-sm text-slate-500">Kommer snart — krever egen OAuth-oppsett</p>
+                      <p className="text-sm text-slate-500">Koble til for personlig profil og bedriftssider</p>
                     </div>
                   </div>
+
+                  {connectedAccounts.some(a => a.platform === 'linkedin') ? (
+                    <div className="space-y-2 mb-4">
+                      {connectedAccounts.filter(a => a.platform === 'linkedin').map((acc) => (
+                        <div key={`${acc.platform}-${acc.account_id}`} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
+                          <Check className="w-4 h-4 text-emerald-600" />
+                          <span className="text-sm text-emerald-700 font-medium">LinkedIn</span>
+                          <span className="text-sm text-emerald-600">— {acc.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={startLinkedInOAuth}
+                      className="w-full flex items-center justify-center gap-2 bg-sky-600 text-white py-3 rounded-xl font-medium hover:bg-sky-700 transition-all duration-200"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Koble til LinkedIn
+                    </button>
+                  )}
                 </div>
               )}
 

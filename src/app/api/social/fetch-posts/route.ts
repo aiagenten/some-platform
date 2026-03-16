@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 
 const GRAPH_API_VERSION = 'v19.0'
 
+const LINKEDIN_HEADERS = {
+  'LinkedIn-Version': '202405',
+  'X-RestLi-Protocol-Version': '2.0.0',
+}
+
 async function fetchFacebookPosts(accessToken: string, accountId: string) {
   const fields = 'message,created_time,full_picture,permalink_url,shares,likes.summary(true),comments.summary(true)'
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${accountId}/feed?fields=${fields}&limit=25&access_token=${accessToken}`
@@ -55,6 +60,90 @@ async function fetchInstagramPosts(accessToken: string, accountId: string) {
   }))
 }
 
+async function fetchLinkedInPosts(accessToken: string, accountId: string) {
+  // accountId format: "person:{id}" or "organization:{id}"
+  const [accountType, id] = accountId.includes(':') ? accountId.split(':') : ['person', accountId]
+
+  const authorUrn = accountType === 'organization'
+    ? `urn:li:organization:${id}`
+    : `urn:li:person:${id}`
+
+  const url = new URL('https://api.linkedin.com/rest/posts')
+  url.searchParams.set('author', authorUrn)
+  url.searchParams.set('q', 'author')
+  url.searchParams.set('count', '25')
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...LINKEDIN_HEADERS,
+    },
+  })
+
+  if (!res.ok) {
+    const errorText = await res.text()
+    console.error('LinkedIn posts API error:', res.status, errorText)
+    throw new Error(`LinkedIn API error: ${res.status} ${errorText}`)
+  }
+
+  const data = await res.json()
+  const elements = data.elements || []
+
+  return elements.map((post: Record<string, unknown>) => {
+    // Extract text content from the post
+    let text = ''
+
+    // LinkedIn posts can have commentary (text content)
+    if (post.commentary) {
+      text = post.commentary as string
+    }
+
+    // Some posts have specificContent with share commentary
+    if (!text && post.specificContent) {
+      const specific = post.specificContent as Record<string, unknown>
+      const shareContent = specific['com.linkedin.ugc.ShareContent'] as Record<string, unknown> | undefined
+      if (shareContent?.shareCommentary) {
+        const commentary = shareContent.shareCommentary as Record<string, unknown>
+        text = (commentary.text as string) || ''
+      }
+    }
+
+    // Extract image if available
+    let imageUrl: string | null = null
+    if (post.content) {
+      const content = post.content as Record<string, unknown>
+      const media = content.media as Record<string, unknown> | undefined
+      if (media?.id) {
+        // LinkedIn media URLs need to be resolved separately, use thumbnail if available
+        imageUrl = null
+      }
+      // Article shares may have a thumbnail
+      const article = content.article as Record<string, unknown> | undefined
+      if (article?.thumbnail) {
+        imageUrl = article.thumbnail as string
+      }
+    }
+
+    return {
+      id: post.id || post.urn || '',
+      text,
+      created_at: post.createdAt
+        ? new Date(post.createdAt as number).toISOString()
+        : post.publishedAt
+          ? new Date(post.publishedAt as number).toISOString()
+          : null,
+      image_url: imageUrl,
+      permalink: post.id
+        ? `https://www.linkedin.com/feed/update/${post.id}`
+        : null,
+      likes: 0, // Would need separate social actions API call
+      comments: 0,
+      shares: 0,
+      platform: 'linkedin',
+    }
+  }).filter((post: { text: string }) => post.text && post.text.trim().length > 0)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
@@ -84,12 +173,8 @@ export async function POST(request: NextRequest) {
         posts = await fetchInstagramPosts(access_token, account_id)
         break
       case 'linkedin':
-        // LinkedIn placeholder — requires separate OAuth app
-        return NextResponse.json({
-          posts: [],
-          platform: 'linkedin',
-          message: 'LinkedIn-integrasjon er ikke tilgjengelig ennå. Krever egen OAuth-app.',
-        })
+        posts = await fetchLinkedInPosts(access_token, account_id)
+        break
       default:
         return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
     }
