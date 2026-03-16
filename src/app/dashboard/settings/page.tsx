@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -23,6 +23,14 @@ const PLATFORM_INFO: Record<string, { icon: string; label: string; color: string
 }
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Laster innstillinger...</div>}>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+function SettingsContent() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [orgId, setOrgId] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
