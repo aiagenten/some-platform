@@ -330,7 +330,7 @@ const imagePromptData = (imagePrompts as Record<string, any>)
 // Helper: extract caption from generated text
 function extractCaption(text: string): string {
   // Clean up any remaining AI scaffolding
-  let cleaned = text
+  const cleaned = text
     // Remove section headers like "**1. Hook:**", "**2. Brødtekst:**", etc.
     .replace(/\*\*\d+\.\s*[^*]+:\*\*/g, '')
     // Remove markdown bold/italic
