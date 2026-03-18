@@ -10,7 +10,14 @@ const BRAND_EXTRACTION_PROMPT = `Du er en merkevareanalytiker. Analyser følgend
 VIKTIG: Skriv ALT på norsk (bokmål). Alle beskrivelser, dos/donts, nøkkelmeldinger — alt skal være på norsk.
 
 Returner et JSON-objekt med disse feltene:
-- colors: array med hex-fargekoder funnet på siden (e.g. ["#1a1a2e", "#e94560"]). Let etter farger i CSS, inline styles, og design. Hvis du ikke finner eksakte farger, foreslå farger som passer merkevaren.
+- colors: array med 3-5 HEX-fargekoder som representerer merkevarens faktiske BRAND-farger (e.g. ["#7c3aed", "#1a1a2e", "#f5f5f5"]). 
+  REGLER FOR FARGEVALG:
+  * Prioriter CSS-variabler (--primary, --brand, --accent, --color-primary osv.)
+  * Prioriter farger fra logo og fremtredende UI-elementer (knapper, overskrifter, bakgrunner)
+  * IGNORER generiske utility-farger: ren hvit (#ffffff, #fff), ren sort (#000000, #000), og veldig vanlige nøytrale grånyanser
+  * IGNORER Tailwind standard-farger som #2563eb (blue-600), #3b82f6 (blue-500) hvis de ikke er tydelig merkevarefarger
+  * Velg de mest DISTINKTE og KARAKTERISTISKE fargene for merkevaren
+  * Maks 5 farger — fokuser på kvalitet, ikke kvantitet
 - fonts: array med fontnavn brukt (e.g. ["Inter", "Georgia"])
 - logo_url: URL til logoen hvis funnet, eller null
 - tone: ett norsk ord for tonen (f.eks. "profesjonell", "leken", "autoritativ", "vennlig")
@@ -75,8 +82,45 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
     const logoUrl = $('img[alt*="logo" i], img[class*="logo" i], img[id*="logo" i]').first().attr('src') || null
 
     // Extract colors from inline styles and CSS
-    const styleText = $('style').text() + $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
-    const colorMatches = styleText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+    const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
+    const embeddedStyleText = $('style').text()
+    const allStyleText = embeddedStyleText + ' ' + inlineStyleText
+
+    // Extract CSS custom properties (brand variables like --primary, --brand-color etc.)
+    const cssVarMatches = allStyleText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+    const cssVarColors = cssVarMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
+
+    // Extract all hex colors
+    const allColorMatches = allStyleText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+
+    // Fetch external stylesheets for more color data
+    const externalCssColors: string[] = []
+    const cssLinks = $('link[rel="stylesheet"]').map((_, el) => $(el).attr('href')).get().slice(0, 3)
+    for (const href of cssLinks) {
+      try {
+        const cssUrl = href.startsWith('http') ? href : new URL(href, url).toString()
+        const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(5000) })
+        if (cssRes.ok) {
+          const cssText = await cssRes.text()
+          // Extract CSS variable colors first
+          const varMatches = cssText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+          varMatches.forEach(m => {
+            const hex = m.match(/#[0-9a-fA-F]{3,8}/)?.[0]
+            if (hex) externalCssColors.push(hex)
+          })
+          // Also grab all hex colors from CSS
+          const hexMatches = cssText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+          externalCssColors.push(...hexMatches.slice(0, 30))
+        }
+      } catch { /* ignore failed CSS fetches */ }
+    }
+
+    // Combine: prioritize CSS variable colors, then all collected colors
+    const priorityColors = Array.from(new Set(cssVarColors))
+    const allColors = Array.from(new Set([...allColorMatches, ...externalCssColors]))
+    const colorSummary = priorityColors.length
+      ? `CSS variable brand colors (highest priority): ${priorityColors.join(', ')}\nAll colors found: ${allColors.slice(0, 20).join(', ')}`
+      : `Colors found in stylesheets: ${allColors.slice(0, 20).join(', ')}`
 
     const content = [
       `Title: ${title}`,
@@ -85,7 +129,7 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
       `Subheadlines: ${h2s}`,
       `Content:\n${paragraphs}`,
       logoUrl ? `Logo: ${logoUrl}` : '',
-      colorMatches.length ? `Colors found: ${Array.from(new Set(colorMatches)).slice(0, 10).join(', ')}` : '',
+      colorSummary,
     ].filter(Boolean).join('\n\n')
 
     return content.slice(0, 8000)
