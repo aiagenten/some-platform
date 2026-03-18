@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon } from 'lucide-react'
+import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles } from 'lucide-react'
 
 type BrandProfile = {
   id: string
@@ -57,6 +57,10 @@ export default function BrandPage() {
   const [trainingPosts, setTrainingPosts] = useState<TrainingPost[]>([])
   const [learnings, setLearnings] = useState<Learning[]>([])
   const [excludedPosts, setExcludedPosts] = useState<string[]>([])
+  const [toneInput, setToneInput] = useState("")
+  const [toneInputType, setToneInputType] = useState<"text" | "url">("url")
+  const [addingTone, setAddingTone] = useState(false)
+  const [toneSamples, setToneSamples] = useState<{ id: string; source_url: string | null; content_preview: string; source_type: string; created_at: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -116,6 +120,13 @@ export default function BrandPage() {
         .order('created_at', { ascending: false })
 
       setLearnings(learningsData || [])
+
+      const { data: samplesData } = await supabase
+        .from('tone_samples')
+        .select('id, source_url, content_preview, source_type, created_at')
+        .eq('org_id', profile.org_id)
+        .order('created_at', { ascending: false })
+      setToneSamples(samplesData || [])
 
       const inactivePostIds = (learningsData || [])
         .filter(l => !l.active && l.source_post_id)
@@ -178,6 +189,32 @@ export default function BrandPage() {
     }
 
     setScraping(false)
+  }
+
+  const handleAddToneSample = async () => {
+    if (!toneInput.trim() || !orgId) return
+    setAddingTone(true)
+    try {
+      const res = await fetch("/api/brand/tone-sample", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: orgId,
+          [toneInputType]: toneInput.trim()
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setMessage({ type: "success", text: `${data.rules_extracted} skrivestilregler ble hentet ut og lagt til i merkevaren!` })
+        setToneInput("")
+        const { data: samplesData } = await supabase.from("tone_samples").select("id, source_url, content_preview, source_type, created_at").eq("org_id", orgId).order("created_at", { ascending: false })
+        setToneSamples(samplesData || [])
+      } else {
+        setMessage({ type: "error", text: data.error || "Noe gikk galt" })
+      }
+    } finally {
+      setAddingTone(false)
+    }
   }
 
   const handleToggleExclude = async (postId: string) => {
@@ -425,6 +462,58 @@ export default function BrandPage() {
               })
             ) : (
               <p className="text-sm text-slate-400 text-center py-8">Ingen treningsinnlegg ennå. Publiser innlegg for å trene merkevaren.</p>
+            )}
+          </div>
+
+          {/* Tone of Voice-eksempler */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-900 mb-1">Tone of Voice-eksempler</h2>
+            <p className="text-sm text-slate-500 mb-4">Legg til artikler, blogginnlegg eller tekster du har skrevet. AI-en analyserer stilen og bruker den som inspirasjon.</p>
+
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => setToneInputType("url")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${toneInputType === "url" ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "border-slate-200 text-slate-500"}`}>🔗 URL til artikkel</button>
+              <button onClick={() => setToneInputType("text")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${toneInputType === "text" ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "border-slate-200 text-slate-500"}`}>📝 Lim inn tekst</button>
+            </div>
+
+            {toneInputType === "url" ? (
+              <input
+                type="url"
+                value={toneInput}
+                onChange={e => setToneInput(e.target.value)}
+                placeholder="https://dinblogg.no/artikkel"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-3"
+              />
+            ) : (
+              <textarea
+                value={toneInput}
+                onChange={e => setToneInput(e.target.value)}
+                placeholder="Lim inn tekst her (blogginnlegg, nyhetsbrev, artikkel...)..."
+                rows={5}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-3 resize-none"
+              />
+            )}
+
+            <button
+              onClick={handleAddToneSample}
+              disabled={addingTone || !toneInput.trim()}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-all"
+            >
+              {addingTone ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyserer...</> : <><Sparkles className="w-4 h-4" /> Analyser og legg til</>}
+            </button>
+
+            {toneSamples.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lagt til</p>
+                {toneSamples.map(sample => (
+                  <div key={sample.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="text-lg">{sample.source_type === "url" ? "🔗" : "📝"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-700 truncate">{sample.source_url || "Innlimt tekst"}</p>
+                      <p className="text-xs text-slate-400 truncate">{sample.content_preview}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
