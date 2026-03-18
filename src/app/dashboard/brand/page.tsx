@@ -28,6 +28,24 @@ type BrandAsset = {
   url: string
 }
 
+type TrainingPost = {
+  id: string
+  platform: string
+  content_text: string | null
+  caption: string | null
+  created_at: string
+  status: string
+  ai_generated: boolean
+}
+
+type Learning = {
+  id: string
+  rule: string
+  learning_type: string
+  active: boolean
+  source_post_id: string | null
+}
+
 export default function BrandPage() {
   const [orgId, setOrgId] = useState<string | null>(null)
   const [brand, setBrand] = useState<BrandProfile | null>(null)
@@ -36,6 +54,9 @@ export default function BrandPage() {
   const [uploading, setUploading] = useState(false)
   const [scraping, setScraping] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [trainingPosts, setTrainingPosts] = useState<TrainingPost[]>([])
+  const [learnings, setLearnings] = useState<Learning[]>([])
+  const [excludedPosts, setExcludedPosts] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -78,6 +99,28 @@ export default function BrandPage() {
         })
         setAssets(assetList)
       }
+
+      const { data: postsData } = await supabase
+        .from('social_posts')
+        .select('id, platform, content_text, caption, created_at, status, ai_generated')
+        .eq('org_id', profile.org_id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      setTrainingPosts(postsData || [])
+
+      const { data: learningsData } = await supabase
+        .from('brand_learnings')
+        .select('id, rule, learning_type, active, source_post_id')
+        .eq('org_id', profile.org_id)
+        .order('created_at', { ascending: false })
+
+      setLearnings(learningsData || [])
+
+      const inactivePostIds = (learningsData || [])
+        .filter(l => !l.active && l.source_post_id)
+        .map(l => l.source_post_id!)
+      setExcludedPosts(Array.from(new Set(inactivePostIds)))
 
       setLoading(false)
     }
@@ -135,6 +178,26 @@ export default function BrandPage() {
     }
 
     setScraping(false)
+  }
+
+  const handleToggleExclude = async (postId: string) => {
+    const isCurrentlyExcluded = excludedPosts.includes(postId)
+
+    setExcludedPosts(prev =>
+      isCurrentlyExcluded ? prev.filter(id => id !== postId) : [...prev, postId]
+    )
+
+    const postLearnings = learnings.filter(l => l.source_post_id === postId)
+    for (const learning of postLearnings) {
+      await supabase
+        .from('brand_learnings')
+        .update({ active: isCurrentlyExcluded })
+        .eq('id', learning.id)
+    }
+
+    setLearnings(prev => prev.map(l =>
+      l.source_post_id === postId ? { ...l, active: isCurrentlyExcluded } : l
+    ))
   }
 
   if (loading) {
@@ -322,6 +385,46 @@ export default function BrandPage() {
               </div>
             ) : (
               <p className="text-sm text-slate-400">Ingen bilder lastet opp enda</p>
+            )}
+          </div>
+
+          {/* Treningsinnlegg */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-semibold text-slate-900">Treningsinnlegg</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Innlegg AI-en lærer av. Fjern de som ikke representerer merkevaren godt.</p>
+              </div>
+            </div>
+
+            {trainingPosts.length > 0 ? (
+              trainingPosts.map(post => {
+                const postLearnings = learnings.filter(l => l.source_post_id === post.id)
+                const isExcluded = excludedPosts.includes(post.id)
+
+                return (
+                  <div key={post.id} className={`p-4 rounded-xl border mb-3 transition-all ${isExcluded ? 'opacity-40 border-slate-200 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-slate-500 uppercase">{post.platform}</span>
+                          {post.ai_generated && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">AI-generert</span>}
+                          {postLearnings.length > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{postLearnings.length} læring{postLearnings.length > 1 ? 'er' : ''}</span>}
+                        </div>
+                        <p className="text-sm text-slate-700 line-clamp-2">{post.caption || post.content_text || 'Ingen tekst'}</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleExclude(post.id)}
+                        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-all ${isExcluded ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100' : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'}`}
+                      >
+                        {isExcluded ? 'Inkluder' : 'Fjern'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-8">Ingen treningsinnlegg ennå. Publiser innlegg for å trene merkevaren.</p>
             )}
           </div>
         </div>
