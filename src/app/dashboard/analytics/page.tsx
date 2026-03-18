@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Eye, Radio, Flame, Heart, MessageCircle, Share2, BarChart3, FileText, Instagram, Facebook, Linkedin, Music } from 'lucide-react'
+import { Eye, Radio, Flame, Heart, MessageCircle, Share2, BarChart3, FileText, Instagram, Facebook, Linkedin, Music, RefreshCw } from 'lucide-react'
 
 type AnalyticsData = {
   totals: {
@@ -52,27 +52,46 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('30')
   const [platform, setPlatform] = useState('')
+  const [polling, setPolling] = useState(false)
+  const [lastPolled, setLastPolled] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  const loadData = async () => {
+    setLoading(true)
+    const params = new URLSearchParams({ period })
+    if (platform) params.set('platform', platform)
+
+    const res = await fetch(`/api/analytics?${params}`)
+    if (res.ok) {
+      const json = await res.json()
+      setData(json)
+    }
+    setLoading(false)
+  }
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-
-      setLoading(true)
-      const params = new URLSearchParams({ period })
-      if (platform) params.set('platform', platform)
-
-      const res = await fetch(`/api/analytics?${params}`)
-      if (res.ok) {
-        const json = await res.json()
-        setData(json)
-      }
-      setLoading(false)
+      loadData()
     }
     load()
   }, [period, platform])
+
+  const handlePollNow = async () => {
+    setPolling(true)
+    try {
+      const res = await fetch("/api/analytics/poll", { method: "POST" })
+      const data = await res.json()
+      setLastPolled(new Date().toLocaleTimeString("no-NO"))
+      if (data.polled > 0) {
+        loadData()
+      }
+    } finally {
+      setPolling(false)
+    }
+  }
 
   const formatNumber = (n: number) => {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
@@ -92,6 +111,14 @@ export default function AnalyticsPage() {
           <p className="text-slate-500 text-sm mt-1">Oversikt over innholdsytelse</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={handlePollNow}
+            disabled={polling}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${polling ? "animate-spin" : ""}`} />
+            {polling ? "Henter..." : lastPolled ? `Oppdatert ${lastPolled}` : "Oppdater n\u00e5"}
+          </button>
           <select
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
