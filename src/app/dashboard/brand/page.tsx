@@ -8,13 +8,19 @@ import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as Im
 type BrandProfile = {
   id: string
   org_id: string
-  brand_name: string | null
-  brand_colors: string[]
-  tone_of_voice: string | null
+  colors: string[]
+  fonts: string[]
+  tone: string | null
+  voice_description: string | null
+  tone_keywords: string[]
+  tagline: string | null
+  description: string | null
+  target_audience: string | null
   do_list: string[]
   dont_list: string[]
+  key_messages: string[]
   logo_url: string | null
-  website_url: string | null
+  source_url: string | null
 }
 
 type BrandAsset = {
@@ -52,7 +58,9 @@ export default function BrandPage() {
         .from('brand_profiles')
         .select('*')
         .eq('org_id', profile.org_id)
-        .single()
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
       if (brandData) setBrand(brandData)
 
@@ -105,7 +113,7 @@ export default function BrandPage() {
   }
 
   const handleRescrape = async () => {
-    if (!orgId || !brand?.website_url) return
+    if (!orgId || !brand?.source_url) return
     setScraping(true)
     setMessage(null)
 
@@ -113,7 +121,7 @@ export default function BrandPage() {
       const res = await fetch('/api/brand/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ org_id: orgId, website_url: brand.website_url }),
+        body: JSON.stringify({ org_id: orgId, website_url: brand.source_url }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -144,7 +152,7 @@ export default function BrandPage() {
           <h1 className="text-2xl font-bold text-slate-900">Merkevare</h1>
           <p className="text-slate-500 text-sm mt-1">Din merkevare-profil og visuell identitet</p>
         </div>
-        {brand?.website_url && (
+        {brand?.source_url && (
           <button
             onClick={handleRescrape}
             disabled={scraping}
@@ -173,20 +181,32 @@ export default function BrandPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Brand Name & Colors */}
+          {/* Brand Profile */}
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h2 className="font-semibold text-slate-900 mb-4">Merkevareprofil</h2>
-            {brand.brand_name && (
+            {(brand.tagline || brand.description) && (
               <div className="mb-4">
                 <p className="text-xs font-medium text-slate-500 mb-1">Merkenavn</p>
-                <p className="text-lg font-semibold text-slate-900">{brand.brand_name}</p>
+                <p className="text-lg font-semibold text-slate-900">{brand.tagline || brand.description?.split(".")[0]}</p>
               </div>
             )}
-            {brand.brand_colors && brand.brand_colors.length > 0 && (
+            {brand.description && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-slate-500 mb-1">Beskrivelse</p>
+                <p className="text-sm text-slate-700">{brand.description}</p>
+              </div>
+            )}
+            {brand.target_audience && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-slate-500 mb-1">Målgruppe</p>
+                <p className="text-sm text-slate-700">{brand.target_audience}</p>
+              </div>
+            )}
+            {brand.colors && brand.colors.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-2">Farger</p>
                 <div className="flex flex-wrap gap-2">
-                  {brand.brand_colors.map((color, i) => (
+                  {brand.colors.map((color, i) => (
                     <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
                       <div
                         className="w-5 h-5 rounded-md border border-slate-200"
@@ -201,10 +221,33 @@ export default function BrandPage() {
           </div>
 
           {/* Tone of Voice */}
-          {brand.tone_of_voice && (
+          {(brand.tone || brand.voice_description) && (
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
               <h2 className="font-semibold text-slate-900 mb-2">Tone og stemme</h2>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{brand.tone_of_voice}</p>
+              {brand.tone && <p className="text-sm text-slate-700 mb-2"><span className="font-medium">Tone:</span> {brand.tone}</p>}
+              {brand.voice_description && <p className="text-sm text-slate-700 whitespace-pre-wrap">{brand.voice_description}</p>}
+              {brand.tone_keywords && brand.tone_keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {brand.tone_keywords.map((kw, i) => (
+                    <span key={i} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium border border-indigo-100">{kw}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Key Messages */}
+          {brand.key_messages && brand.key_messages.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+              <h2 className="font-semibold text-slate-900 mb-3">Nøkkelbudskap</h2>
+              <ul className="space-y-2">
+                {brand.key_messages.map((msg, i) => (
+                  <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                    <span className="text-indigo-500 mt-0.5">•</span>
+                    {msg}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
