@@ -111,6 +111,11 @@ function SettingsContent() {
     window.location.href = `/api/auth/facebook?org_id=${orgId}`
   }
 
+  const handleConnectLinkedIn = () => {
+    if (!orgId) return
+    window.location.href = `/api/auth/linkedin?org_id=${orgId}`
+  }
+
   const handleNotifToggle = async (key: 'email_on_approval' | 'email_on_publish') => {
     setSavingNotif(true)
     const newPrefs = { ...notifPrefs, [key]: !notifPrefs[key] }
@@ -255,15 +260,19 @@ function SettingsContent() {
             </div>
           </button>
 
-          <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 text-left opacity-60 cursor-not-allowed">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-              <Linkedin className="w-5 h-5 text-slate-600" />
+          <button
+            onClick={handleConnectLinkedIn}
+            disabled={!orgId}
+            className="flex items-center gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
+          >
+            <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center">
+              <Linkedin className="w-5 h-5 text-sky-700" />
             </div>
             <div>
-              <p className="font-medium text-slate-600">LinkedIn</p>
-              <p className="text-xs text-slate-500">Kommer snart</p>
+              <p className="font-medium text-sky-800">LinkedIn</p>
+              <p className="text-xs text-sky-600">Koble til profil og bedriftssider</p>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
