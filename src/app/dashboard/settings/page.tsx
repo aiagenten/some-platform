@@ -231,6 +231,9 @@ function SettingsContent() {
                       {meta?.ig_username && (
                         <span className="text-slate-500 font-normal ml-1">@{meta.ig_username}</span>
                       )}
+                      {account.platform === 'linkedin' && meta?.account_type === 'organization' && (
+                        <span className="ml-2 text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full border border-sky-200 font-medium">Bedrift</span>
+                      )}
                     </p>
                     <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
                       <span>{info.label}</span>
@@ -289,18 +292,11 @@ function SettingsContent() {
       </div>
 
       {/* Cloud Storage */}
-      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mt-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <HardDrive className="w-5 h-5 text-slate-600" />
-          <h2 className="font-semibold text-slate-900">Bildegalleri</h2>
-        </div>
-        <p className="text-xs text-slate-500 mb-4">Koble til skylagring for enkel tilgang til bilder når du lager innlegg.</p>
+      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm mt-6">
+        <h2 className="font-semibold text-slate-900 mb-1">Bildegalleri</h2>
+        <p className="text-sm text-slate-500 mb-4">Koble til skylagring for enkel tilgang til bilder ved publisering.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            onClick={handleConnectGoogleDrive}
-            disabled={!userId}
-            className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
-          >
+          <button onClick={handleConnectGoogleDrive} disabled={!userId} className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
               <HardDrive className="w-5 h-5 text-green-700" />
             </div>
@@ -309,17 +305,13 @@ function SettingsContent() {
               <p className="text-xs text-green-600">Koble til for tilgang til bilder</p>
             </div>
           </button>
-          <button
-            onClick={handleConnectOneDrive}
-            disabled={!userId}
-            className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
-          >
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-              <Cloud className="w-5 h-5 text-blue-700" />
+          <button onClick={handleConnectOneDrive} disabled={!userId} className="flex items-center gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center">
+              <Cloud className="w-5 h-5 text-sky-700" />
             </div>
             <div>
-              <p className="font-medium text-blue-800">OneDrive</p>
-              <p className="text-xs text-blue-600">Koble til for tilgang til bilder</p>
+              <p className="font-medium text-sky-800">Microsoft OneDrive</p>
+              <p className="text-xs text-sky-600">Koble til for tilgang til bilder</p>
             </div>
           </button>
         </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2 } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon } from 'lucide-react'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -35,6 +35,8 @@ type GeneratedContent = {
   caption: string | null
   hashtags: string[]
   image_url: string | null
+  best_time: string | null
+  image_suggestion: string | null
 }
 
 export default function GeneratePage() {
@@ -104,6 +106,8 @@ export default function GeneratePage() {
           caption: regenerateText ? data.generated.caption : (prev?.caption || null),
           hashtags: regenerateText ? data.generated.hashtags : (prev?.hashtags || []),
           image_url: regenerateImage ? data.generated.image_url : (prev?.image_url || null),
+          best_time: regenerateText ? (data.generated.best_time || null) : (prev?.best_time || null),
+          image_suggestion: regenerateText ? (data.generated.image_suggestion || null) : (prev?.image_suggestion || null),
         }))
       } else {
         setGenerated(data.generated)
@@ -269,6 +273,24 @@ export default function GeneratePage() {
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400">Ingen tekst generert</p>
+                )}
+                {generated?.best_time && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200 mt-3">
+                    <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-800">Beste tidspunkt å poste</p>
+                      <p className="text-xs text-amber-700">{generated.best_time}</p>
+                    </div>
+                  </div>
+                )}
+                {generated?.image_suggestion && (
+                  <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200 mt-2">
+                    <ImageIcon className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-purple-800">Bildeforslag</p>
+                      <p className="text-xs text-purple-700">{generated.image_suggestion}</p>
+                    </div>
+                  </div>
                 )}
               </div>
 

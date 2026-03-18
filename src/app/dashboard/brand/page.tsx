@@ -1,0 +1,288 @@
+'use client'
+
+import { useEffect, useState, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon } from 'lucide-react'
+
+type BrandProfile = {
+  id: string
+  org_id: string
+  brand_name: string | null
+  brand_colors: string[]
+  tone_of_voice: string | null
+  do_list: string[]
+  dont_list: string[]
+  logo_url: string | null
+  website_url: string | null
+}
+
+type BrandAsset = {
+  name: string
+  url: string
+}
+
+export default function BrandPage() {
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [brand, setBrand] = useState<BrandProfile | null>(null)
+  const [assets, setAssets] = useState<BrandAsset[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [scraping, setScraping] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('org_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile) return
+      setOrgId(profile.org_id)
+
+      const { data: brandData } = await supabase
+        .from('brand_profiles')
+        .select('*')
+        .eq('org_id', profile.org_id)
+        .single()
+
+      if (brandData) setBrand(brandData)
+
+      // Load brand assets
+      const { data: files } = await supabase.storage
+        .from('brand-assets')
+        .list(profile.org_id, { limit: 50 })
+
+      if (files && files.length > 0) {
+        const assetList = files.map((f) => {
+          const { data: urlData } = supabase.storage
+            .from('brand-assets')
+            .getPublicUrl(`${profile.org_id}/${f.name}`)
+          return { name: f.name, url: urlData.publicUrl }
+        })
+        setAssets(assetList)
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !orgId) return
+
+    setUploading(true)
+    setMessage(null)
+
+    const ext = file.name.split('.').pop()
+    const path = `${orgId}/${Date.now()}.${ext}`
+
+    const { error } = await supabase.storage
+      .from('brand-assets')
+      .upload(path, file)
+
+    if (error) {
+      setMessage({ type: 'error', text: `Opplasting feilet: ${error.message}` })
+    } else {
+      const { data: urlData } = supabase.storage
+        .from('brand-assets')
+        .getPublicUrl(path)
+      setAssets(prev => [...prev, { name: file.name, url: urlData.publicUrl }])
+      setMessage({ type: 'success', text: 'Bilde lastet opp!' })
+    }
+
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleRescrape = async () => {
+    if (!orgId || !brand?.website_url) return
+    setScraping(true)
+    setMessage(null)
+
+    try {
+      const res = await fetch('/api/brand/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: orgId, website_url: brand.website_url }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.brand) setBrand(data.brand)
+        setMessage({ type: 'success', text: 'Merkevare re-analysert!' })
+      } else {
+        setMessage({ type: 'error', text: 'Re-analyse feilet' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Nettverksfeil' })
+    }
+
+    setScraping(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in-up flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="animate-fade-in-up">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Merkevare</h1>
+          <p className="text-slate-500 text-sm mt-1">Din merkevare-profil og visuell identitet</p>
+        </div>
+        {brand?.website_url && (
+          <button
+            onClick={handleRescrape}
+            disabled={scraping}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-all duration-200 disabled:opacity-50 border border-indigo-100"
+          >
+            {scraping ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {scraping ? 'Analyserer...' : 'Re-analyser nettside'}
+          </button>
+        )}
+      </div>
+
+      {message && (
+        <div className={`mb-6 p-4 rounded-2xl text-sm flex items-center gap-2 ${
+          message.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <XCircle className="w-5 h-5 flex-shrink-0" />}
+          {message.text}
+        </div>
+      )}
+
+      {!brand ? (
+        <div className="bg-white rounded-2xl border border-slate-200/60 p-12 text-center shadow-sm">
+          <Palette className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500">Ingen merkevare-profil funnet.</p>
+          <p className="text-sm text-slate-400 mt-1">Gå til innstillinger for å sette opp din merkevare.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Brand Name & Colors */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-900 mb-4">Merkevareprofil</h2>
+            {brand.brand_name && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-slate-500 mb-1">Merkenavn</p>
+                <p className="text-lg font-semibold text-slate-900">{brand.brand_name}</p>
+              </div>
+            )}
+            {brand.brand_colors && brand.brand_colors.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-2">Farger</p>
+                <div className="flex flex-wrap gap-2">
+                  {brand.brand_colors.map((color, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                      <div
+                        className="w-5 h-5 rounded-md border border-slate-200"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-xs font-mono text-slate-700">{color}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tone of Voice */}
+          {brand.tone_of_voice && (
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+              <h2 className="font-semibold text-slate-900 mb-2">Tone og stemme</h2>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{brand.tone_of_voice}</p>
+            </div>
+          )}
+
+          {/* Do / Don't */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {brand.do_list && brand.do_list.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+                <h2 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  Gjør dette
+                </h2>
+                <ul className="space-y-2">
+                  {brand.do_list.map((item, i) => (
+                    <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                      <span className="text-emerald-500 mt-0.5">+</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {brand.dont_list && brand.dont_list.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+                <h2 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
+                  <XCircle className="w-5 h-5 text-red-600" />
+                  Unngå dette
+                </h2>
+                <ul className="space-y-2">
+                  {brand.dont_list.map((item, i) => (
+                    <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                      <span className="text-red-500 mt-0.5">-</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Logo Upload */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-slate-600" />
+              Brand-bilder
+            </h2>
+
+            <div className="mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-100 transition-all duration-200 disabled:opacity-50 border border-slate-200"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading ? 'Laster opp...' : 'Last opp bilde'}
+              </button>
+            </div>
+
+            {assets.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {assets.map((asset, i) => (
+                  <div key={i} className="aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">Ingen bilder lastet opp enda</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
