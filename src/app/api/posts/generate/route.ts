@@ -119,6 +119,8 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
     let generatedText = null
     let generatedCaption = null
     let generatedHashtags: string[] = []
+    let bestTime: string | null = null
+    let imageSuggestion: string | null = null
 
     if (!regenerate_image) {
       const platformRules: Record<string, string> = {
@@ -196,12 +198,46 @@ Returner dette JSON-formatet:
       try {
         const jsonMatch = fullText.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          generatedText = parsed.text || fullText
-          generatedCaption = parsed.text || extractCaption(fullText)
-          generatedHashtags = parsed.hashtags || extractHashtags(fullText)
-          ;(body as Record<string, unknown>)._best_time = parsed.best_time || null
-          ;(body as Record<string, unknown>)._image_suggestion = parsed.image_suggestion || null
+          // Fix literal newlines inside JSON string values before parsing
+          const fixedJson = jsonMatch[0]
+            .replace(/("(?:[^"\\]|\\.)*")|[\n\r]/g, (_match: string, strGroup: string) => {
+              if (strGroup) return strGroup // inside a string — keep as-is (already escaped)
+              return ' ' // outside strings — replace newlines with space
+            })
+            // Also fix unescaped newlines inside string values by a simpler approach
+            .replace(/"text"\s*:\s*"([\s\S]*?)(?<!\\)",/g, (_: string, txt: string) =>
+              `"text": "${txt.replace(/\n/g, '\\n').replace(/\r/g, '')}",`
+            )
+
+          let parsed: Record<string, unknown> = {}
+          try {
+            parsed = JSON.parse(fixedJson)
+          } catch {
+            // More aggressive fix: extract fields with regex
+            const textMatch = fullText.match(/"text"\s*:\s*"([\s\S]*?)",\s*"hashtags"/)
+            const hashtagsMatch = fullText.match(/"hashtags"\s*:\s*(\[[\s\S]*?\])/)
+            const bestTimeMatch = fullText.match(/"best_time"\s*:\s*"([^"]*)"/)
+            const imageSuggMatch = fullText.match(/"image_suggestion"\s*:\s*"([^"]*)"/)
+
+            if (textMatch) {
+              parsed.text = textMatch[1].replace(/\\n/g, '\n')
+              parsed.hashtags = hashtagsMatch ? JSON.parse(hashtagsMatch[1]) : []
+              parsed.best_time = bestTimeMatch?.[1] || null
+              parsed.image_suggestion = imageSuggMatch?.[1] || null
+            }
+          }
+
+          if (parsed.text) {
+            generatedText = (parsed.text as string).replace(/\\n/g, '\n')
+            generatedCaption = generatedText
+            generatedHashtags = (parsed.hashtags as string[]) || []
+            bestTime = (parsed.best_time as string) || null
+            imageSuggestion = (parsed.image_suggestion as string) || null
+          } else {
+            generatedText = extractCaption(fullText)
+            generatedCaption = generatedText
+            generatedHashtags = extractHashtags(fullText)
+          }
         } else {
           generatedText = extractCaption(fullText)
           generatedCaption = generatedText
@@ -365,8 +401,8 @@ const imagePromptData = (imagePrompts as Record<string, any>)
         caption: generatedCaption,
         hashtags: generatedHashtags,
         image_url: imageUrl,
-        best_time: (body as Record<string, unknown>)._best_time || null,
-        image_suggestion: (body as Record<string, unknown>)._image_suggestion || null,
+        best_time: bestTime,
+        image_suggestion: imageSuggestion,
       },
     })
   } catch (err) {
