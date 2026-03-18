@@ -23,10 +23,9 @@ export async function POST() {
   // Get published posts from last 90 days
   const { data: posts } = await adminSupabase
     .from("social_posts")
-    .select("id, platform, platform_post_id, published_at")
+    .select("id, platform, platform_post_id, published_id, published_at")
     .eq("org_id", orgId)
     .eq("status", "published")
-    .not("platform_post_id", "is", null)
     .gte("published_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
 
   if (!posts || posts.length === 0) {
@@ -36,10 +35,14 @@ export async function POST() {
   const results = { polled: 0, errors: [] as string[] }
 
   for (const post of posts) {
+    // Use platform_post_id or fall back to published_id
+    const postExtId = (post as Record<string, string>).platform_post_id || (post as Record<string, string>).published_id
+    if (!postExtId) continue
+
     const account = accounts?.find(a => a.platform === post.platform)
     if (!account) continue
 
-    const token = account.access_token || (account.metadata as Record<string, string>)?.access_token
+    const token = (account as Record<string, string>).access_token || (account.metadata as Record<string, string>)?.access_token
     if (!token) continue
 
     try {
@@ -52,7 +55,7 @@ export async function POST() {
           : "post_impressions,post_reach,post_engaged_users"
 
         const res = await fetch(
-          `https://graph.facebook.com/v19.0/${post.platform_post_id}/insights?metric=${insightMetrics}&access_token=${token}`,
+          `https://graph.facebook.com/v19.0/${postExtId}/insights?metric=${insightMetrics}&access_token=${token}`,
           { signal: AbortSignal.timeout(10000) }
         )
 
@@ -66,7 +69,7 @@ export async function POST() {
           if (post.platform === "instagram") {
             // Also get basic metrics
             const basicRes = await fetch(
-              `https://graph.facebook.com/v19.0/${post.platform_post_id}?fields=like_count,comments_count&access_token=${token}`,
+              `https://graph.facebook.com/v19.0/${postExtId}?fields=like_count,comments_count&access_token=${token}`,
               { signal: AbortSignal.timeout(10000) }
             )
             const basicData = basicRes.ok ? await basicRes.json() : {}
@@ -87,7 +90,7 @@ export async function POST() {
             }
             // Get reactions and comments count
             const detailRes = await fetch(
-              `https://graph.facebook.com/v19.0/${post.platform_post_id}?fields=reactions.summary(total_count),comments.summary(total_count),shares&access_token=${token}`,
+              `https://graph.facebook.com/v19.0/${postExtId}?fields=reactions.summary(total_count),comments.summary(total_count),shares&access_token=${token}`,
               { signal: AbortSignal.timeout(10000) }
             )
             if (detailRes.ok) {
@@ -106,7 +109,7 @@ export async function POST() {
         if (!orgUrn) continue
 
         const res = await fetch(
-          `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&shares[0]=${encodeURIComponent(post.platform_post_id)}`,
+          `https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&shares[0]=${encodeURIComponent(postExtId)}`,
           {
             headers: {
               "Authorization": `Bearer ${token}`,
@@ -145,7 +148,7 @@ export async function POST() {
         results.polled++
       }
     } catch (e) {
-      results.errors.push(`${post.platform}/${post.platform_post_id}: ${e}`)
+      results.errors.push(`${post.platform}/${postExtId}: ${e}`)
     }
   }
 

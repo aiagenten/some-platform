@@ -93,12 +93,14 @@ Deno.serve(async (req) => {
     }
 
     // Success — update post
+    const platformPostId = result.id || result.post_id || null
     await supabase
       .from('social_posts')
       .update({
         status: 'published',
         published_at: new Date().toISOString(),
-        published_id: result.id || result.post_id || null,
+        published_id: platformPostId,
+        platform_post_id: platformPostId,
       })
       .eq('id', post_id)
 
