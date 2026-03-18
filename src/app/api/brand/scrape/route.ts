@@ -33,16 +33,19 @@ Returner et JSON-objekt med disse feltene:
 
 Svar KUN med gyldig JSON, ingen markdown, ingen forklaring.`
 
-async function scrapeWithFirecrawl(url: string): Promise<string | null> {
+async function scrapeWithFirecrawl(url: string): Promise<{ content: string; html: string | null } | null> {
   if (!FIRECRAWL_API_KEY) return null
 
   try {
     const FirecrawlApp = (await import('@mendable/firecrawl-js')).default
     const app = new FirecrawlApp({ apiKey: FIRECRAWL_API_KEY })
-    const result = await app.scrape(url, { formats: ['markdown'] })
+    const result = await app.scrape(url, { formats: ['markdown', 'rawHtml'] }) as Record<string, unknown>
 
-    if (result && (result as Record<string, unknown>).markdown) {
-      return ((result as Record<string, unknown>).markdown as string).slice(0, 8000)
+    if (result && result.markdown) {
+      return {
+        content: (result.markdown as string).slice(0, 8000),
+        html: (result.rawHtml as string | null) || null,
+      }
     }
     return null
   } catch (error) {
@@ -195,8 +198,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Try Firecrawl first, fallback to Cheerio
-    let scrapedContent = await scrapeWithFirecrawl(url)
+    let scrapedContent: string | null = null
+    let scrapedHtml: string | null = null
     let scrapeMethod = 'firecrawl'
+
+    const firecrawlResult = await scrapeWithFirecrawl(url)
+    if (firecrawlResult) {
+      scrapedContent = firecrawlResult.content
+      scrapedHtml = firecrawlResult.html
+    }
 
     if (!scrapedContent) {
       scrapedContent = await scrapeWithCheerio(url)
@@ -204,9 +214,55 @@ export async function POST(request: NextRequest) {
     }
 
     if (!scrapedContent) {
-      // Last resort: just send the URL to AI and let it work with its knowledge
       scrapedContent = `Website URL: ${url}\nNote: Could not scrape the website content directly. Please analyze based on the URL and any knowledge you have about this website/brand.`
       scrapeMethod = 'url-only'
+    }
+
+    // If Firecrawl returned HTML, extract colors from it and append to content
+    if (scrapedHtml) {
+      try {
+        const $ = cheerio.load(scrapedHtml)
+        const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
+        const embeddedStyleText = $('style').text()
+        const allStyleText = embeddedStyleText + ' ' + inlineStyleText
+
+        // CSS custom properties (highest priority)
+        const cssVarMatches = allStyleText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+        const cssVarColors = cssVarMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
+
+        // All hex colors
+        const allColorMatches = allStyleText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+
+        // Fetch external stylesheets
+        const externalCssColors: string[] = []
+        const cssLinks = $('link[rel="stylesheet"]').map((_, el) => $(el).attr('href')).get().slice(0, 3)
+        for (const href of cssLinks) {
+          try {
+            const cssUrl = href.startsWith('http') ? href : new URL(href, url).toString()
+            const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(5000) })
+            if (cssRes.ok) {
+              const cssText = await cssRes.text()
+              const varMatches = cssText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+              varMatches.forEach(m => {
+                const hex = m.match(/#[0-9a-fA-F]{3,8}/)?.[0]
+                if (hex) externalCssColors.push(hex)
+              })
+              const hexMatches = cssText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+              externalCssColors.push(...hexMatches.slice(0, 30))
+            }
+          } catch { /* ignore failed CSS fetches */ }
+        }
+
+        const priorityColors = Array.from(new Set(cssVarColors))
+        const allColors = Array.from(new Set([...allColorMatches, ...externalCssColors]))
+        const colorSummary = priorityColors.length
+          ? `CSS variable brand colors (highest priority): ${priorityColors.join(', ')}\nAll colors found: ${allColors.slice(0, 20).join(', ')}`
+          : `Colors found in stylesheets: ${allColors.slice(0, 20).join(', ')}`
+
+        scrapedContent += `\n\n${colorSummary}`
+      } catch (e) {
+        console.warn('Color extraction from Firecrawl HTML failed:', e)
+      }
     }
 
     // Extract brand profile via AI
