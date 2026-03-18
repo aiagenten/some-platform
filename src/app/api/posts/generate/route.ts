@@ -59,6 +59,13 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .single()
 
+    // Fetch org name
+    const { data: orgData } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', org_id)
+      .single()
+
     // Fetch brand learnings
     const { data: learnings } = await supabase
       .from('brand_learnings')
@@ -69,7 +76,7 @@ export async function POST(request: NextRequest) {
       .limit(10)
 
     // Build template variables
-    const brandName = brandProfile?.description?.split('.')[0] || 'Brand'
+    const brandName = orgData?.name || brandProfile?.tagline?.split(' ').slice(0, 3).join(' ') || 'din bedrift'
     const tone = brandProfile?.tone
       ? `${brandProfile.tone}${brandProfile.voice_description ? ' — ' + brandProfile.voice_description : ''}`
       : 'Profesjonell og vennlig'
@@ -114,33 +121,59 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
     let generatedHashtags: string[] = []
 
     if (!regenerate_image) {
+      const platformRules: Record<string, string> = {
+        instagram: `INSTAGRAM-REGLER:
+- Tekst: 150-300 ord. Hook i første linje (vises uten "mer"-klikk).
+- Emojier: bruk sparsomt og naturlig, aldri på rad.
+- Hashtags: IKKE i selve teksten — de returneres separat i "hashtags"-feltet.
+- Ingen lenker i teksten (Instagram klikker ikke dem).
+- Avslutt med en CTA eller spørsmål.`,
+        facebook: `FACEBOOK-REGLER:
+- Tekst: 100-250 ord. Kortere innlegg gir bedre rekkevidde i 2024/2025.
+- Emojier: tillatt, men ikke overdrev.
+- Hashtags: 1-3 maks — Facebook er ikke hashtagdrevet. Returneres separat.
+- Lenker fungerer, men begrens til én.
+- Personlig og konversasjonelt tone fungerer best.`,
+        linkedin: `LINKEDIN-REGLER (2024/2025 best practices):
+- Tekst: 150-300 ord. Første linje er avgjørende — vises uten "se mer".
+- Struktur: Hook → Verdi/innsikt → Avslutning med spørsmål/refleksjon.
+- INGEN emojier i starten av linjer (klisjé på LinkedIn).
+- Bruk linjeskift aktivt — korte avsnitt øker lesbarheten.
+- Hashtags: maks 3-5 relevante LinkedIn-hashtags. Returneres separat.
+- Del personlige erfaringer og konkrete innsikter — ikke reklame.
+- Ingen klisjeer som "Spent to announce", "I'm humbled", "Game-changer".`,
+      }
+
+      const systemPrompt = `Du er en ekspert SoMe-strateg for norske bedrifter. Du skriver for ${brandName}.
+
+${platformRules[platform] || platformRules.instagram}
+
+ABSOLUTTE REGLER:
+- Skriv ALLTID på norsk (bokmål)
+- Returner KUN gyldig JSON — ingen markdown, ingen forklaring utenfor JSON
+- Teksten skal være klar til å poste direkte — ingen instruksjoner, ingen "Hook:"-labels, ingen seksjonsoverskrifter
+- Skriv som et menneske, ikke som en AI
+
+Returner dette JSON-formatet:
+{
+  "text": "Selve post-teksten klar til posting. Ingen hashtags her.",
+  "hashtags": ["#hashtag1", "#hashtag2"],
+  "best_time": "Tirsdag-torsdag kl 08-10 eller 17-19",
+  "image_suggestion": "Kort beskrivelse av hvilket bilde som vil fungere godt"
+}`
+
       const textResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://some-platform.aiagenten.no',
+          'HTTP-Referer': 'https://some.aiagenten.no',
         },
         body: JSON.stringify({
           model: 'google/gemini-2.0-flash-001',
           messages: [
-            {
-              role: 'system',
-              content: `Du er en ekspert SoMe-strateg som skriver innhold for norske bedrifter.
-
-VIKTIGE REGLER:
-- Skriv ALLTID på norsk (bokmål)
-- Returner KUN selve post-teksten — ingen overskrifter, ingen "Hook:", ingen "Brødtekst:", ingen "CTA:", ingen nummerering
-- Ingen markdown-formatering (ingen **, ingen ##, ingen ---)
-- Teksten skal være klar til å lime rett inn i en SoMe-post
-- Avslutt med relevante hashtags på egen linje (maks 5 hashtags)
-- Bruk emojier naturlig og sparsomt
-- Skriv som et menneske, ikke som en AI`
-            },
-            {
-              role: 'user',
-              content: filledPrompt
-            }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: filledPrompt }
           ],
           temperature: 0.8,
           max_tokens: 2000,
@@ -159,10 +192,26 @@ VIKTIGE REGLER:
       const textData = await textResponse.json()
       const fullText = textData.choices?.[0]?.message?.content || ''
 
-      // Parse the generated text — extract caption, hashtags
-      generatedText = fullText
-      generatedCaption = extractCaption(fullText)
-      generatedHashtags = extractHashtags(fullText)
+      // Parse structured JSON response
+      try {
+        const jsonMatch = fullText.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          generatedText = parsed.text || fullText
+          generatedCaption = parsed.text || extractCaption(fullText)
+          generatedHashtags = parsed.hashtags || extractHashtags(fullText)
+          ;(body as Record<string, unknown>)._best_time = parsed.best_time || null
+          ;(body as Record<string, unknown>)._image_suggestion = parsed.image_suggestion || null
+        } else {
+          generatedText = extractCaption(fullText)
+          generatedCaption = generatedText
+          generatedHashtags = extractHashtags(fullText)
+        }
+      } catch {
+        generatedText = extractCaption(fullText)
+        generatedCaption = generatedText
+        generatedHashtags = extractHashtags(fullText)
+      }
     }
 
     // Generate image via OpenAI Images API
@@ -316,6 +365,8 @@ const imagePromptData = (imagePrompts as Record<string, any>)
         caption: generatedCaption,
         hashtags: generatedHashtags,
         image_url: imageUrl,
+        best_time: (body as Record<string, unknown>)._best_time || null,
+        image_suggestion: (body as Record<string, unknown>)._image_suggestion || null,
       },
     })
   } catch (err) {
