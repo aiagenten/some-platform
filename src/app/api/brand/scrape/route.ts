@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import * as cheerio from 'cheerio'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
@@ -190,6 +191,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Use admin client for DB writes to bypass RLS
+    const adminSupabase = createAdminClient()
+
     const body = await request.json()
     const { url, org_id } = body
 
@@ -287,9 +291,9 @@ export async function POST(request: NextRequest) {
       industry: brandProfile.industry || null,
     }
 
-    // If org_id provided, save to database
+    // If org_id provided, save to database (use admin client to bypass RLS)
     if (org_id) {
-      const { data: saved, error: saveError } = await supabase
+      const { data: saved, error: saveError } = await adminSupabase
         .from('brand_profiles')
         .upsert(
           {
