@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Instagram, Facebook, Linkedin, Music, Link2, Bell, Brain, BookOpen, X, Pencil, TrendingUp, User, FileText, CheckCircle2, XCircle } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Link2, Bell, Brain, BookOpen, X, Pencil, TrendingUp, User, FileText, CheckCircle2, XCircle, HardDrive, Cloud } from 'lucide-react'
 
 type BrandLearning = {
   id: string
@@ -44,6 +44,7 @@ export default function SettingsPage() {
 function SettingsContent() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [orgId, setOrgId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
@@ -65,6 +66,7 @@ function SettingsContent() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      setUserId(user.id)
 
       const { data: profile } = await supabase
         .from('users')
@@ -114,6 +116,16 @@ function SettingsContent() {
   const handleConnectLinkedIn = () => {
     if (!orgId) return
     window.location.href = `/api/auth/linkedin?org_id=${orgId}`
+  }
+
+  const handleConnectGoogleDrive = () => {
+    if (!userId) return
+    window.location.href = `/api/auth/google-drive?user_id=${userId}`
+  }
+
+  const handleConnectOneDrive = () => {
+    if (!userId) return
+    window.location.href = `/api/auth/onedrive?user_id=${userId}`
   }
 
   const handleNotifToggle = async (key: 'email_on_approval' | 'email_on_publish') => {
@@ -271,6 +283,43 @@ function SettingsContent() {
             <div>
               <p className="font-medium text-sky-800">LinkedIn</p>
               <p className="text-xs text-sky-600">Koble til profil og bedriftssider</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Cloud Storage */}
+      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mt-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <HardDrive className="w-5 h-5 text-slate-600" />
+          <h2 className="font-semibold text-slate-900">Bildegalleri</h2>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">Koble til skylagring for enkel tilgang til bilder når du lager innlegg.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={handleConnectGoogleDrive}
+            disabled={!userId}
+            className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
+          >
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+              <HardDrive className="w-5 h-5 text-green-700" />
+            </div>
+            <div>
+              <p className="font-medium text-green-800">Google Drive</p>
+              <p className="text-xs text-green-600">Koble til for tilgang til bilder</p>
+            </div>
+          </button>
+          <button
+            onClick={handleConnectOneDrive}
+            disabled={!userId}
+            className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
+          >
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Cloud className="w-5 h-5 text-blue-700" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-800">OneDrive</p>
+              <p className="text-xs text-blue-600">Koble til for tilgang til bilder</p>
             </div>
           </button>
         </div>
