@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown } from 'lucide-react'
+import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown, Upload, Image as ImageIcon } from 'lucide-react'
 
 type BrandProfile = {
   colors: string[]
@@ -100,6 +100,11 @@ function OnboardingPage() {
   const [someError, setSomeError] = useState('')
   const [importedPostSelections, setImportedPostSelections] = useState<Record<string, boolean>>({})
   const [savingSelections, setSavingSelections] = useState(false)
+
+  // Logo upload state
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   // LinkedIn company page selection state
   const [selectedLinkedInAccount, setSelectedLinkedInAccount] = useState<string | null>(null)
@@ -450,9 +455,9 @@ function OnboardingPage() {
                     </div>
                   </div>
 
-                  {connectedAccounts.length > 0 ? (
+                  {connectedAccounts.some(a => a.platform === 'facebook' || a.platform === 'instagram') ? (
                     <div className="space-y-2 mb-4">
-                      {connectedAccounts.map((acc) => (
+                      {connectedAccounts.filter(a => a.platform === 'facebook' || a.platform === 'instagram').map((acc) => (
                         <div key={`${acc.platform}-${acc.account_id}`} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
                           <Check className="w-4 h-4 text-emerald-600" />
                           <span className="text-sm text-emerald-700 font-medium capitalize">{acc.platform}</span>
@@ -994,17 +999,36 @@ function OnboardingPage() {
                   <Type className="w-5 h-5 text-indigo-600" />
                   <h3 className="font-semibold text-slate-900">Fonter</h3>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {brandProfile.fonts.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        value={f}
-                        onChange={(e) => updateListItem('fonts', i, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                      <button onClick={() => removeListItem('fonts', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
-                        <X className="w-4 h-4" />
-                      </button>
+                    <div key={i}>
+                      {f && (
+                        // eslint-disable-next-line @next/next/no-page-custom-font
+                        <link
+                          rel="stylesheet"
+                          href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f).replace(/%20/g, '+')}&display=swap`}
+                        />
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={f}
+                          onChange={(e) => updateListItem('fonts', i, e.target.value)}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <button onClick={() => removeListItem('fonts', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {f && (
+                        <div className="mt-1.5 pl-1">
+                          <p className="text-base font-medium text-slate-800" style={{ fontFamily: `'${f}', sans-serif` }}>
+                            {f}
+                          </p>
+                          <p className="text-sm text-slate-500" style={{ fontFamily: `'${f}', sans-serif` }}>
+                            Aa Bb Cc 123
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button onClick={() => addListItem('fonts')} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
@@ -1177,6 +1201,79 @@ function OnboardingPage() {
                 <Sparkles className="w-4 h-4" /> Tone-of-voice fra {socialPosts.filter(p => p.text).length} eksisterende poster er inkludert i merkevaren.
               </p>
             )}
+
+            {/* Logo upload */}
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm text-left">
+              <div className="flex items-center gap-2 mb-1">
+                <ImageIcon className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-semibold text-slate-900">Last opp firmalogo</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">Logoen brukes i innlegg og som profilbilde</p>
+
+              {(logoPreview || brandProfile?.logo_url) && (
+                <div className="mb-4 flex justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoPreview || brandProfile?.logo_url || ''}
+                    alt="Logo"
+                    className="max-h-24 max-w-48 object-contain rounded-xl border border-slate-200 p-2"
+                  />
+                </div>
+              )}
+
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file || !orgId) return
+                  setUploadingLogo(true)
+                  try {
+                    const ext = file.name.split('.').pop() || 'png'
+                    const path = `${orgId}/logo.${ext}`
+                    const { error: uploadError } = await supabase.storage
+                      .from('brand-assets')
+                      .upload(path, file, { upsert: true })
+                    if (uploadError) throw uploadError
+                    const { data: urlData } = supabase.storage
+                      .from('brand-assets')
+                      .getPublicUrl(path)
+                    const publicUrl = urlData.publicUrl
+                    setLogoPreview(publicUrl)
+                    if (brandProfile) {
+                      setBrandProfile({ ...brandProfile, logo_url: publicUrl })
+                    }
+                    await supabase
+                      .from('brand_profiles')
+                      .update({ logo_url: publicUrl })
+                      .eq('org_id', orgId)
+                  } catch (err) {
+                    console.error('Logo upload error:', err)
+                  }
+                  setUploadingLogo(false)
+                }}
+              />
+              <button
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo}
+                className="w-full flex items-center justify-center gap-2 border border-slate-200 text-slate-700 py-3 rounded-xl font-medium hover:bg-slate-50 transition-all duration-200 disabled:opacity-50"
+              >
+                {uploadingLogo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Laster opp...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    {brandProfile?.logo_url || logoPreview ? 'Bytt logo' : 'Velg fil'}
+                  </>
+                )}
+              </button>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(4)}
