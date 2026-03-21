@@ -106,7 +106,15 @@ function OnboardingPage() {
   const supabase = createClient()
 
   // SoMe connection state
-  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([])
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('onboarding_accounts')
+        if (saved) return JSON.parse(saved)
+      } catch {}
+    }
+    return []
+  })
   const [fetchingPosts, setFetchingPosts] = useState(false)
   const [socialPosts, setSocialPosts] = useState<SocialPost[]>([])
   const [analyzingTone, setAnalyzingTone] = useState(false)
@@ -140,6 +148,13 @@ function OnboardingPage() {
     }
     getOrg()
   }, [])
+
+  // Persist connected accounts to localStorage
+  useEffect(() => {
+    if (connectedAccounts.length > 0) {
+      try { localStorage.setItem('onboarding_accounts', JSON.stringify(connectedAccounts)) } catch {}
+    }
+  }, [connectedAccounts])
 
   // Auto-select first LinkedIn organization account when accounts change
   useEffect(() => {
@@ -386,7 +401,10 @@ function OnboardingPage() {
     }
 
     setSaving(false)
-    try { localStorage.removeItem('onboarding_platforms') } catch {}
+    try {
+      localStorage.removeItem('onboarding_platforms')
+      localStorage.removeItem('onboarding_accounts')
+    } catch {}
     router.push('/dashboard')
   }
 
@@ -559,9 +577,7 @@ function OnboardingPage() {
                                       </>
                                     )}
                                   </div>
-                                  {isSelected && (
-                                    <span className="text-xs text-blue-600 mt-0.5 block">Anbefalt for merkevarebygging</span>
-                                  )}
+
                                 </div>
                                 {isSelected && (
                                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 font-medium shrink-0">
