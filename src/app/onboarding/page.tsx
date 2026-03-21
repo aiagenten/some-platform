@@ -66,8 +66,28 @@ const FRAMEWORK_COLORS = new Set([
   '#007bff', '#28a745', '#17a2b8',
 ])
 
+// Calculate color distance (simple RGB euclidean)
+function colorDistance(hex1: string, hex2: string): number {
+  const parse = (h: string) => {
+    const c = h.replace('#', '')
+    return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)]
+  }
+  const [r1,g1,b1] = parse(hex1)
+  const [r2,g2,b2] = parse(hex2)
+  return Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2)
+}
+
 function isSuspiciousColor(hex: string): boolean {
-  return FRAMEWORK_COLORS.has(hex.toLowerCase())
+  const h = hex.toLowerCase()
+  // Exact match
+  if (FRAMEWORK_COLORS.has(h)) return true
+  // Close match (distance < 30 = very similar)
+  for (const fw of FRAMEWORK_COLORS) {
+    try {
+      if (colorDistance(h, fw) < 30) return true
+    } catch { continue }
+  }
+  return false
 }
 
 function isPureWhiteOrBlack(hex: string): boolean {
