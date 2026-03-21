@@ -126,6 +126,9 @@ function OnboardingPage() {
   const [manualCompanyId, setManualCompanyId] = useState('')
   const [addingManualCompany, setAddingManualCompany] = useState(false)
 
+  // Meta page selection state
+  const [selectedMetaPageId, setSelectedMetaPageId] = useState<string | null>(null)
+
   useEffect(() => {
     async function getOrg() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -145,7 +148,15 @@ function OnboardingPage() {
     }
   }, [connectedAccounts, selectedLinkedInAccount])
 
-  // Fetch posts from all connected accounts
+  // Auto-select first Facebook page when Meta accounts change
+  useEffect(() => {
+    const facebookAccounts = connectedAccounts.filter(a => a.platform === 'facebook')
+    if (facebookAccounts.length > 0 && !selectedMetaPageId) {
+      setSelectedMetaPageId(facebookAccounts[0].account_id)
+    }
+  }, [connectedAccounts, selectedMetaPageId])
+
+  // Fetch posts from all connected accounts (filtered by selected Meta page)
   const fetchAllPosts = useCallback(async () => {
     if (connectedAccounts.length === 0) return
     setFetchingPosts(true)
@@ -154,7 +165,30 @@ function OnboardingPage() {
     try {
       const allPosts: SocialPost[] = []
 
-      for (const account of connectedAccounts) {
+      // Filter to only include the selected Meta page and its linked Instagram
+      const accountsToFetch = connectedAccounts.filter(account => {
+        if (account.platform === 'facebook') {
+          return !selectedMetaPageId || account.account_id === selectedMetaPageId
+        }
+        if (account.platform === 'instagram') {
+          if (!selectedMetaPageId) return true
+          // Find the selected Facebook page's associated Instagram account
+          // Instagram accounts from Meta OAuth share the same page relationship
+          const selectedFbPage = connectedAccounts.find(a => a.platform === 'facebook' && a.account_id === selectedMetaPageId)
+          if (!selectedFbPage) return true
+          // Match Instagram account linked to the selected Facebook page by name similarity or keep if only one
+          const allInstagram = connectedAccounts.filter(a => a.platform === 'instagram')
+          if (allInstagram.length <= 1) return true
+          // If multiple Instagram accounts, match by index with Facebook pages
+          const fbPages = connectedAccounts.filter(a => a.platform === 'facebook')
+          const selectedFbIndex = fbPages.findIndex(a => a.account_id === selectedMetaPageId)
+          const thisIgIndex = allInstagram.findIndex(a => a.account_id === account.account_id)
+          return selectedFbIndex === thisIgIndex
+        }
+        return true // LinkedIn and other platforms pass through
+      })
+
+      for (const account of accountsToFetch) {
         try {
           const res = await fetch('/api/social/fetch-posts', {
             method: 'POST',
@@ -210,7 +244,7 @@ function OnboardingPage() {
     }
 
     setFetchingPosts(false)
-  }, [connectedAccounts, orgId])
+  }, [connectedAccounts, orgId, selectedMetaPageId])
 
   // Check for Facebook or LinkedIn callback params on mount — just save accounts, don't fetch posts
   useEffect(() => {
@@ -471,14 +505,71 @@ function OnboardingPage() {
                   </div>
 
                   {connectedAccounts.some(a => a.platform === 'facebook' || a.platform === 'instagram') ? (
-                    <div className="space-y-2 mb-4">
-                      {connectedAccounts.filter(a => a.platform === 'facebook' || a.platform === 'instagram').map((acc) => (
-                        <div key={`${acc.platform}-${acc.account_id}`} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
-                          <Check className="w-4 h-4 text-emerald-600" />
-                          <span className="text-sm text-emerald-700 font-medium capitalize">{acc.platform}</span>
-                          <span className="text-sm text-emerald-600">— {acc.name}</span>
+                    <div className="mb-4">
+                      {/* Meta page selector - group by Facebook page */}
+                      {connectedAccounts.filter(a => a.platform === 'facebook').length > 1 ? (
+                        <div className="space-y-2 mb-3">
+                          <p className="text-sm text-slate-600 mb-2">Velg hvilken side du vil bygge merkevare for:</p>
+                          {connectedAccounts.filter(a => a.platform === 'facebook').map((fbAcc) => {
+                            const fbPages = connectedAccounts.filter(a => a.platform === 'facebook')
+                            const fbIndex = fbPages.findIndex(a => a.account_id === fbAcc.account_id)
+                            const allInstagram = connectedAccounts.filter(a => a.platform === 'instagram')
+                            const linkedIg = allInstagram[fbIndex] || null
+                            const isSelected = selectedMetaPageId === fbAcc.account_id
+                            return (
+                              <button
+                                key={`meta-page-${fbAcc.account_id}`}
+                                onClick={() => setSelectedMetaPageId(fbAcc.account_id)}
+                                className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border-2 transition-all text-left ${
+                                  isSelected
+                                    ? 'border-blue-400 bg-blue-50'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  isSelected ? 'border-blue-500' : 'border-slate-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <Facebook className="w-4 h-4 text-blue-600" />
+                                    <span className="text-sm font-medium text-slate-900">{fbAcc.name}</span>
+                                    {linkedIg && (
+                                      <>
+                                        <span className="text-slate-300">|</span>
+                                        <Instagram className="w-4 h-4 text-pink-600" />
+                                        <span className="text-sm text-slate-600">{linkedIg.name}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-xs text-blue-600 mt-0.5 block">Anbefalt for merkevarebygging</span>
+                                  )}
+                                </div>
+                                {isSelected && (
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 font-medium shrink-0">
+                                    Valgt
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                          <p className="text-xs text-slate-500 mt-2">
+                            Velg hvilken side du vil bygge merkevare for. Du kan legge til flere merkevarer senere.
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="space-y-2 mb-3">
+                          {connectedAccounts.filter(a => a.platform === 'facebook' || a.platform === 'instagram').map((acc) => (
+                            <div key={`${acc.platform}-${acc.account_id}`} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span className="text-sm text-emerald-700 font-medium capitalize">{acc.platform}</span>
+                              <span className="text-sm text-emerald-600">— {acc.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <button
