@@ -165,27 +165,26 @@ function OnboardingPage() {
     try {
       const allPosts: SocialPost[] = []
 
-      // Filter to only include the selected Meta page and its linked Instagram
+      // Filter accounts: only selected Meta page + its Instagram, only selected LinkedIn account
       const accountsToFetch = connectedAccounts.filter(account => {
         if (account.platform === 'facebook') {
           return !selectedMetaPageId || account.account_id === selectedMetaPageId
         }
         if (account.platform === 'instagram') {
           if (!selectedMetaPageId) return true
-          // Find the selected Facebook page's associated Instagram account
-          // Instagram accounts from Meta OAuth share the same page relationship
-          const selectedFbPage = connectedAccounts.find(a => a.platform === 'facebook' && a.account_id === selectedMetaPageId)
-          if (!selectedFbPage) return true
-          // Match Instagram account linked to the selected Facebook page by name similarity or keep if only one
           const allInstagram = connectedAccounts.filter(a => a.platform === 'instagram')
           if (allInstagram.length <= 1) return true
-          // If multiple Instagram accounts, match by index with Facebook pages
           const fbPages = connectedAccounts.filter(a => a.platform === 'facebook')
           const selectedFbIndex = fbPages.findIndex(a => a.account_id === selectedMetaPageId)
           const thisIgIndex = allInstagram.findIndex(a => a.account_id === account.account_id)
           return selectedFbIndex === thisIgIndex
         }
-        return true // LinkedIn and other platforms pass through
+        if (account.platform === 'linkedin') {
+          // Only fetch from the selected LinkedIn account (organization page)
+          if (!selectedLinkedInAccount) return false
+          return account.account_id === selectedLinkedInAccount
+        }
+        return true
       })
 
       for (const account of accountsToFetch) {
@@ -756,7 +755,7 @@ function OnboardingPage() {
                     <div>
                       <h3 className="font-semibold text-slate-900">Hent poster</h3>
                       <p className="text-sm text-slate-500">
-                        {connectedAccounts.length} konto{connectedAccounts.length !== 1 ? 'er' : ''} tilkoblet. Klikk for å hente poster fra alle kontoer.
+                        Klikk for å hente poster fra valgte kontoer for merkevareanalyse.
                       </p>
                     </div>
                   </div>
@@ -765,7 +764,7 @@ function OnboardingPage() {
                     className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/20"
                   >
                     <MessageSquare className="w-4 h-4" />
-                    Hent poster fra alle kontoer
+                    Hent poster
                   </button>
                 </div>
               )}

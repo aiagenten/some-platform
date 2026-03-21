@@ -86,7 +86,8 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
   if (!res.ok) {
     const errorText = await res.text()
     console.error('LinkedIn posts API error:', res.status, errorText)
-    throw new Error(`LinkedIn API error: ${res.status} ${errorText}`)
+    // Return empty array instead of throwing — account may not have access
+    return []
   }
 
   const data = await res.json()
