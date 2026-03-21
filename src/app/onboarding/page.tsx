@@ -227,27 +227,69 @@ function OnboardingPage() {
     }
   }, [connectedAccounts, selectedLinkedInAccount])
 
-  // Auto-select first Facebook page when Meta accounts change
+  // Auto-select first Facebook page when Meta accounts change (only if none selected)
   useEffect(() => {
     const facebookAccounts = connectedAccounts.filter(a => a.platform === 'facebook')
     if (facebookAccounts.length > 0 && !selectedMetaPageId) {
-      setSelectedMetaPageId(facebookAccounts[0].account_id)
+      // Restore from localStorage if available
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('onboarding_meta_page') : null
+      if (saved && facebookAccounts.some(a => a.account_id === saved)) {
+        setSelectedMetaPageId(saved)
+      } else {
+        setSelectedMetaPageId(facebookAccounts[0].account_id)
+      }
     }
   }, [connectedAccounts, selectedMetaPageId])
 
-  // Auto-fill brand tag from first connected account name (if empty)
+  // Persist Meta page selection to localStorage
   useEffect(() => {
-    if (brandTag) return
-    const orgAccount = connectedAccounts.find(a => a.platform === 'linkedin' && a.account_id.startsWith('organization:'))
-    if (orgAccount && orgAccount.name && !orgAccount.name.startsWith('Bedrift #')) {
-      setBrandTag(orgAccount.name)
-      return
+    if (selectedMetaPageId) {
+      try { localStorage.setItem('onboarding_meta_page', selectedMetaPageId) } catch {}
     }
-    const fbAccount = connectedAccounts.find(a => a.platform === 'facebook')
-    if (fbAccount && fbAccount.name) {
-      setBrandTag(fbAccount.name)
+  }, [selectedMetaPageId])
+
+  // Persist LinkedIn account selection to localStorage
+  useEffect(() => {
+    if (selectedLinkedInAccount) {
+      try { localStorage.setItem('onboarding_linkedin_account', selectedLinkedInAccount) } catch {}
     }
-  }, [connectedAccounts, brandTag])
+  }, [selectedLinkedInAccount])
+
+  // Restore LinkedIn selection from localStorage (after OAuth redirect)
+  useEffect(() => {
+    if (!selectedLinkedInAccount) {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('onboarding_linkedin_account') : null
+      if (saved && connectedAccounts.some(a => a.platform === 'linkedin' && a.account_id === saved)) {
+        setSelectedLinkedInAccount(saved)
+      }
+    }
+  }, [connectedAccounts, selectedLinkedInAccount])
+
+  // Update brand tag based on selected accounts (reactive to selection changes)
+  useEffect(() => {
+    // Priority: selected Meta page name > selected LinkedIn org name
+    if (selectedMetaPageId) {
+      const selectedPage = connectedAccounts.find(a => a.platform === 'facebook' && a.account_id === selectedMetaPageId)
+      if (selectedPage?.name) {
+        setBrandTag(selectedPage.name)
+        return
+      }
+    }
+    if (selectedLinkedInAccount?.startsWith('organization:')) {
+      const selectedOrg = connectedAccounts.find(a => a.platform === 'linkedin' && a.account_id === selectedLinkedInAccount)
+      if (selectedOrg?.name && !selectedOrg.name.startsWith('Bedrift #')) {
+        setBrandTag(selectedOrg.name)
+        return
+      }
+    }
+    // Fallback: first available account name
+    const firstNamed = connectedAccounts.find(a =>
+      a.name && !a.name.startsWith('Bedrift #') && !a.name.startsWith('LinkedIn Personal')
+    )
+    if (firstNamed && !brandTag) {
+      setBrandTag(firstNamed.name)
+    }
+  }, [selectedMetaPageId, selectedLinkedInAccount, connectedAccounts])
 
   // Fetch posts from all connected accounts (filtered by selected Meta page)
   const fetchAllPosts = useCallback(async () => {
@@ -519,6 +561,8 @@ function OnboardingPage() {
     try {
       localStorage.removeItem('onboarding_platforms')
       localStorage.removeItem('onboarding_accounts')
+      localStorage.removeItem('onboarding_meta_page')
+      localStorage.removeItem('onboarding_linkedin_account')
     } catch {}
     router.push('/dashboard')
   }
