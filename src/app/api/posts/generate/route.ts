@@ -60,12 +60,18 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .single()
 
-    // Fetch org name
+    // Fetch org name and settings
     const { data: orgData } = await supabase
       .from('organizations')
-      .select('name')
+      .select('name, settings')
       .eq('id', org_id)
       .single()
+
+    // Get image generation settings
+    const orgSettings = (orgData?.settings as Record<string, unknown>) || {}
+    const configuredImageModel = (orgSettings.image_model as string) || 'nano-banana'
+    const activeStyleId = (orgSettings.active_image_style as string) || 'scandinavian-photo'
+    const imageStyles = (orgSettings.image_styles as Array<{ id: string; name: string; prompt: string }>) || []
 
     // Fetch brand learnings
     const { data: learnings } = await supabase
@@ -265,22 +271,26 @@ Returner dette JSON-formatet:
             .join(', ')
         : 'professional, clean colors'
 
-      // Default image style — photorealistic Scandinavian
-      const imageStyle = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
+      // Get the active image style from org settings, or use default
+      const defaultStylePrompt = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. {situation}. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
+      
+      const activeStyle = imageStyles.find(s => s.id === activeStyleId)
+      const stylePrompt = activeStyle?.prompt || defaultStylePrompt
 
       const imageContext = imageSuggestion || generatedText?.substring(0, 200) || topic || 'professional business scene'
 
-      const imageGenPrompt = `${imageStyle}
+      // Replace {situation} placeholder in style prompt
+      const styledPrompt = stylePrompt.replace(/\{situation\}/g, imageContext)
 
-Scene: ${imageContext}
+      const imageGenPrompt = `${styledPrompt}
 
 Brand colors for subtle accent/props: ${brandColorDesc}
 Industry: ${brandProfile?.description || 'technology and business'}
 
-IMPORTANT: No text overlays, no UI elements, no logos. Pure photograph.`
+IMPORTANT: No text overlays, no UI elements, no logos.`
 
-      // Choose image model: 'gpt-image' or 'nano-banana' (default)
-      const selectedImageModel = image_model || 'nano-banana'
+      // Use configured model from org settings, or override from request body
+      const selectedImageModel = image_model || configuredImageModel
 
       try {
         let b64: string | null = null
