@@ -114,6 +114,7 @@ function OnboardingPage() {
   const [someError, setSomeError] = useState('')
   const [importedPostSelections, setImportedPostSelections] = useState<Record<string, boolean>>({})
   const [savingSelections, setSavingSelections] = useState(false)
+  const [postsFetched, setPostsFetched] = useState(false)
 
   // Logo upload state
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -243,7 +244,8 @@ function OnboardingPage() {
     }
 
     setFetchingPosts(false)
-  }, [connectedAccounts, orgId, selectedMetaPageId])
+    setPostsFetched(true)
+  }, [connectedAccounts, orgId, selectedMetaPageId, selectedLinkedInAccount])
 
   // Check for Facebook or LinkedIn callback params on mount — just save accounts, don't fetch posts
   useEffect(() => {
@@ -748,7 +750,7 @@ function OnboardingPage() {
               )}
 
               {/* Fetch posts button — shown when accounts are connected but posts haven't been fetched yet */}
-              {connectedAccounts.length > 0 && socialPosts.length === 0 && !fetchingPosts && (
+              {connectedAccounts.length > 0 && !postsFetched && !fetchingPosts && (
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-3">
                     <Sparkles className="w-5 h-5 text-indigo-600" />
@@ -765,6 +767,22 @@ function OnboardingPage() {
                   >
                     <MessageSquare className="w-4 h-4" />
                     Hent poster
+                  </button>
+                </div>
+              )}
+
+              {/* No posts found after fetch */}
+              {postsFetched && socialPosts.length === 0 && !fetchingPosts && !analyzingTone && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6 mb-4">
+                  <p className="text-sm text-amber-800 font-medium mb-1">Ingen poster funnet</p>
+                  <p className="text-sm text-amber-700">
+                    Vi fant ingen poster fra de valgte kontoene. Du kan fortsette uten tone-analyse — merkevaren bygges fra nettsiden din i stedet.
+                  </p>
+                  <button
+                    onClick={() => { setPostsFetched(false) }}
+                    className="mt-3 text-sm text-amber-700 underline hover:text-amber-900"
+                  >
+                    Prøv igjen
                   </button>
                 </div>
               )}
@@ -1003,13 +1021,13 @@ function OnboardingPage() {
                   disabled={
                     fetchingPosts || analyzingTone || savingSelections ||
                     (selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:')) ||
-                    (connectedAccounts.length > 0 && socialPosts.length === 0)
+                    (connectedAccounts.length > 0 && !postsFetched)
                   }
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
                 >
                   {savingSelections ? 'Lagrer...' : connectedAccounts.length === 0 && hasFacebookOrInstagram
                     ? 'Hopp over'
-                    : connectedAccounts.length > 0 && socialPosts.length === 0
+                    : connectedAccounts.length > 0 && !postsFetched
                       ? 'Hent poster først'
                       : 'Neste'}
                 </button>
