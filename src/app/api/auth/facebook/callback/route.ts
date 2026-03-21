@@ -128,6 +128,7 @@ export async function GET(request: NextRequest) {
           account_id: ig.id,
           name: ig.username || page.name,
           access_token: page.access_token,
+          facebook_page_id: page.id,
         })
       }
     }

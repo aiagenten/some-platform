@@ -50,6 +50,7 @@ type ConnectedAccount = {
   account_id: string
   name: string
   access_token: string
+  facebook_page_id?: string // For Instagram accounts: which FB page they belong to
 }
 
 const PLATFORM_CONFIG: Record<string, { icon: typeof Linkedin; color: string; bg: string }> = {
@@ -203,12 +204,13 @@ function OnboardingPage() {
         }
         if (account.platform === 'instagram') {
           if (!selectedMetaPageId) return true
+          // Match Instagram to its parent Facebook page
+          if (account.facebook_page_id) {
+            return account.facebook_page_id === selectedMetaPageId
+          }
+          // If only one Instagram account, include it
           const allInstagram = connectedAccounts.filter(a => a.platform === 'instagram')
-          if (allInstagram.length <= 1) return true
-          const fbPages = connectedAccounts.filter(a => a.platform === 'facebook')
-          const selectedFbIndex = fbPages.findIndex(a => a.account_id === selectedMetaPageId)
-          const thisIgIndex = allInstagram.findIndex(a => a.account_id === account.account_id)
-          return selectedFbIndex === thisIgIndex
+          return allInstagram.length <= 1
         }
         if (account.platform === 'linkedin') {
           // Only fetch from the selected LinkedIn account (organization page)
@@ -545,10 +547,9 @@ function OnboardingPage() {
                         <div className="space-y-2 mb-3">
                           <p className="text-sm text-slate-600 mb-2">Velg hvilken side du vil bygge merkevare for:</p>
                           {connectedAccounts.filter(a => a.platform === 'facebook').map((fbAcc) => {
-                            const fbPages = connectedAccounts.filter(a => a.platform === 'facebook')
-                            const fbIndex = fbPages.findIndex(a => a.account_id === fbAcc.account_id)
-                            const allInstagram = connectedAccounts.filter(a => a.platform === 'instagram')
-                            const linkedIg = allInstagram[fbIndex] || null
+                            const linkedIg = connectedAccounts.find(
+                              a => a.platform === 'instagram' && a.facebook_page_id === fbAcc.account_id
+                            ) || null
                             const isSelected = selectedMetaPageId === fbAcc.account_id
                             return (
                               <button
