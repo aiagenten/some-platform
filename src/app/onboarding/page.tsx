@@ -45,31 +45,29 @@ const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = 
   { value: '', label: 'Ingen rolle', description: 'Ekstra farge' },
 ]
 
-// Check if a color is near-white or near-black (skip these from scraping)
-function isNearWhiteOrBlack(hex: string): boolean {
+// Check if a color is pure white or pure black (only filter these extremes)
+function isPureWhiteOrBlack(hex: string): boolean {
   const h = hex.toLowerCase().replace('#', '')
   if (h.length !== 6) return false
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
-  const brightness = (r + g + b) / 3
-  return brightness > 240 || brightness < 15
+  return h === 'ffffff' || h === '000000' || h === 'fff' || h === '000'
 }
 
 // Convert flat hex strings to BrandColor[] with smart role assignment
 function hexArrayToColors(hexArray: string[]): BrandColor[] {
-  // Filter out near-white and near-black colors from scraping
-  const filtered = hexArray.filter(hex => !isNearWhiteOrBlack(hex))
+  // Only filter out pure #000000 and #ffffff — trust the AI's color selection
+  const filtered = hexArray.filter(hex => !isPureWhiteOrBlack(hex))
 
-  // Take max 3 brand colors from scraping
-  const brandColors: BrandColor[] = filtered.slice(0, 3).map((hex, i) => ({
+  // Keep all brand colors AI returned (max 5), auto-assign first two roles
+  const brandColors: BrandColor[] = filtered.slice(0, 5).map((hex, i) => ({
     hex,
     role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : '') as ColorRole,
   }))
 
-  // Always add text dark and text light
-  brandColors.push({ hex: '#1a1a2e', role: 'neutral_dark' })
-  brandColors.push({ hex: '#fafafa', role: 'neutral_light' })
+  // Add text dark and text light if not already present
+  const hasDark = brandColors.some(c => c.role === 'neutral_dark')
+  const hasLight = brandColors.some(c => c.role === 'neutral_light')
+  if (!hasDark) brandColors.push({ hex: '#1a1a2e', role: 'neutral_dark' })
+  if (!hasLight) brandColors.push({ hex: '#fafafa', role: 'neutral_light' })
 
   return brandColors
 }
