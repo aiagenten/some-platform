@@ -130,6 +130,11 @@ function OnboardingPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
+  // Post image color extraction state
+  const [postImageColors, setPostImageColors] = useState<string[]>([])
+  const [postColorConfidence, setPostColorConfidence] = useState<string>('')
+  const [extractingImageColors, setExtractingImageColors] = useState(false)
+
   // LinkedIn company page selection state
   const [selectedLinkedInAccount, setSelectedLinkedInAccount] = useState<string | null>(null)
   const [publishToPersonal, setPublishToPersonal] = useState(false)
@@ -249,6 +254,28 @@ function OnboardingPage() {
       setImportedPostSelections(selections)
 
       // Auto-analyze tone if we have posts with text
+      // Extract colors from post images (in parallel with tone analysis)
+      const postsWithImages = allPosts.filter(p => p.image_url)
+      if (postsWithImages.length > 0) {
+        setExtractingImageColors(true)
+        fetch('/api/brand/extract-image-colors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_urls: postsWithImages.map(p => p.image_url).slice(0, 6),
+          }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.colors && data.colors.length > 0) {
+              setPostImageColors(data.colors)
+              setPostColorConfidence(data.confidence || 'low')
+            }
+          })
+          .catch(err => console.error('Image color extraction error:', err))
+          .finally(() => setExtractingImageColors(false))
+      }
+
       const postsWithText = allPosts.filter(p => p.text && p.text.trim().length > 0)
       if (postsWithText.length > 0) {
         setAnalyzingTone(true)
@@ -362,6 +389,27 @@ function OnboardingPage() {
         data.dont_list = Array.from(
           new Set([...(data.dont_list || []), ...(toneProfile.donts || [])])
         ).slice(0, 8)
+      }
+
+      // Merge colors from post images if available and confidence is medium+
+      if (postImageColors.length > 0 && (postColorConfidence === 'high' || postColorConfidence === 'medium')) {
+        // Post image colors take priority — put them first, then add unique scraped colors
+        const mergedColors = [...postImageColors]
+        for (const c of (data.colors || [])) {
+          if (!mergedColors.some(mc => mc.toLowerCase() === c.toLowerCase())) {
+            mergedColors.push(c)
+          }
+        }
+        data.colors = mergedColors.slice(0, 6)
+      } else if (postImageColors.length > 0) {
+        // Low confidence — append post image colors after scraped ones for reference
+        const mergedColors = [...(data.colors || [])]
+        for (const c of postImageColors) {
+          if (!mergedColors.some(mc => mc.toLowerCase() === c.toLowerCase())) {
+            mergedColors.push(c)
+          }
+        }
+        data.colors = mergedColors.slice(0, 6)
       }
 
       setBrandProfile(data)
@@ -862,6 +910,41 @@ function OnboardingPage() {
                 </div>
               )}
 
+              {extractingImageColors && (
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-4">
+                  <div className="flex items-center gap-3">
+                    <Palette className="w-5 h-5 text-blue-600 animate-pulse" />
+                    <p className="text-sm text-blue-700 font-medium">
+                      Analyserer farger fra postbildene dine...
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {postImageColors.length > 0 && !extractingImageColors && (
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Palette className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-semibold text-slate-900">Merkevarefarger fra bilder</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {postImageColors.map((c, i) => (
+                      <div key={i} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                        <div
+                          className="w-5 h-5 rounded-md border border-slate-200"
+                          style={{ backgroundColor: c }}
+                        />
+                        <span className="text-xs font-mono text-slate-600">{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    {postColorConfidence === 'high' ? '✅ Høy treffsikkerhet' : postColorConfidence === 'medium' ? '🟡 Middels treffsikkerhet' : '⚪ Lav treffsikkerhet — verifiser fargene'}.
+                    Disse blir flettet inn i merkevaren etter nettsideanalyse.
+                  </p>
+                </div>
+              )}
+
               {/* Tone analysis result summary */}
               {toneProfile && !analyzingTone && (
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
@@ -1079,7 +1162,7 @@ function OnboardingPage() {
                     setStep(3)
                   }}
                   disabled={
-                    fetchingPosts || analyzingTone || savingSelections ||
+                    fetchingPosts || analyzingTone || extractingImageColors || savingSelections ||
                     (selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:')) ||
                     (connectedAccounts.length > 0 && !postsFetched)
                   }
@@ -1150,18 +1233,107 @@ function OnboardingPage() {
               </p>
             </div>
 
-            {/* Tone from SoMe banner */}
-            {toneProfile && (
-              <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 mb-6 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-purple-800">Tone fra SoMe-analyse inkludert</p>
-                  <p className="text-xs text-purple-600 mt-1">
-                    Do&apos;s, don&apos;ts og tone-nøkkelord er merget fra {socialPosts.filter(p => p.text).length} analyserte poster.
-                  </p>
+            {/* Brand Card Preview */}
+            <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-semibold text-slate-900">Merkevare-oppsummering</h3>
+              </div>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Logo */}
+                <div className="flex-shrink-0 flex items-center justify-center">
+                  {brandProfile.logo_url ? (
+                    <img
+                      src={brandProfile.logo_url}
+                      alt="Logo"
+                      className="max-h-20 max-w-32 object-contain rounded-xl border border-slate-200 p-2 bg-white"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-slate-300" />
+                    </div>
+                  )}
+                </div>
+                {/* Colors & Fonts */}
+                <div className="flex-1 space-y-3">
+                  {/* Color swatches */}
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-1.5">Farger</p>
+                    <div className="flex flex-wrap gap-2">
+                      {brandProfile.colors.map((c, i) => (
+                        <div key={i} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                          <div
+                            className="w-6 h-6 rounded-md border border-slate-200 shadow-inner"
+                            style={{ backgroundColor: c.startsWith('#') ? c : '#ccc' }}
+                          />
+                          <span className="text-xs font-mono text-slate-600">{c}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Fonts */}
+                  {brandProfile.fonts.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-1.5">Fonter</p>
+                      {/* Load Google Fonts for preview */}
+                      {brandProfile.fonts.map((f, i) => f ? (
+                        // eslint-disable-next-line @next/next/no-page-custom-font
+                        <link key={`preview-font-${i}`} rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f).replace(/%20/g, '+')}&display=swap`} />
+                      ) : null)}
+                      <div className="flex flex-wrap gap-2">
+                        {brandProfile.fonts.map((f, i) => (
+                          <span key={i} className="text-sm bg-white border border-slate-200 rounded-lg px-3 py-1 text-slate-700" style={{ fontFamily: `'${f}', sans-serif` }}>
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Tone */}
+                  {brandProfile.tone && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-1">Tone</p>
+                      <span className="text-sm bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg px-2.5 py-1 font-medium">
+                        {brandProfile.tone}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+              <p className="text-xs text-slate-500 mt-4 flex items-center gap-1">
+                💡 Ser dette riktig ut? Du kan justere alt nedenfor.
+              </p>
+            </div>
+
+            {/* Source info banners */}
+            <div className="space-y-3 mb-6">
+              {/* Tone from SoMe banner */}
+              {toneProfile && (
+                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-purple-800">Tone fra SoMe-analyse inkludert</p>
+                    <p className="text-xs text-purple-600 mt-1">
+                      Do&apos;s, don&apos;ts og tone-nøkkelord er merget fra {socialPosts.filter(p => p.text).length} analyserte poster.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Post image colors banner */}
+              {postImageColors.length > 0 && (
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+                  <Palette className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">Farger fra SoMe-bilder inkludert</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Vi analyserte bildene fra postene dine og fant merkevarefarger som er lagt til.
+                      {postColorConfidence === 'low' && ' Konfidensen er lav — sjekk at fargene stemmer.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Section 1: Description & Tagline */}
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
@@ -1190,10 +1362,13 @@ function OnboardingPage() {
             {/* Section 2: Colors & Fonts (side-by-side) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Palette className="w-5 h-5 text-indigo-600" />
                   <h3 className="font-semibold text-slate-900">Farger</h3>
                 </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  Hentet fra {postImageColors.length > 0 ? 'nettsiden og SoMe-bildene dine' : 'nettsiden din'}. Klikk for å justere dersom de ikke stemmer med ønsket profil.
+                </p>
                 <div className="space-y-2">
                   {brandProfile.colors.map((c, i) => (
                     <div key={i} className="flex items-center gap-2">
