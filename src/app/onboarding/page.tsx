@@ -45,12 +45,33 @@ const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = 
   { value: '', label: 'Ingen rolle', description: 'Ekstra farge' },
 ]
 
-// Convert flat hex strings to BrandColor[] with auto-assigned roles
+// Check if a color is near-white or near-black (skip these from scraping)
+function isNearWhiteOrBlack(hex: string): boolean {
+  const h = hex.toLowerCase().replace('#', '')
+  if (h.length !== 6) return false
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const brightness = (r + g + b) / 3
+  return brightness > 240 || brightness < 15
+}
+
+// Convert flat hex strings to BrandColor[] with smart role assignment
 function hexArrayToColors(hexArray: string[]): BrandColor[] {
-  return hexArray.map((hex, i) => ({
+  // Filter out near-white and near-black colors from scraping
+  const filtered = hexArray.filter(hex => !isNearWhiteOrBlack(hex))
+
+  // Take max 3 brand colors from scraping
+  const brandColors: BrandColor[] = filtered.slice(0, 3).map((hex, i) => ({
     hex,
-    role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'accent' : '') as ColorRole,
+    role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : '') as ColorRole,
   }))
+
+  // Always add text dark and text light
+  brandColors.push({ hex: '#1a1a2e', role: 'neutral_dark' })
+  brandColors.push({ hex: '#fafafa', role: 'neutral_light' })
+
+  return brandColors
 }
 
 // Convert flat font name strings to BrandFont[] with auto-assigned roles
@@ -511,8 +532,8 @@ function OnboardingPage() {
         }
       }
 
-      // Convert to BrandColor[] with auto-assigned roles
-      data.colors = hexArrayToColors(allColors.slice(0, 8))
+      // Convert to BrandColor[] with smart role assignment (max 3 brand + 2 text)
+      data.colors = hexArrayToColors(allColors)
 
       // Convert font names to BrandFont[] with roles
       if (data.fonts && Array.isArray(data.fonts)) {
@@ -1455,10 +1476,10 @@ function OnboardingPage() {
                   </div>
 
                   {/* Load Google Fonts with all weights */}
-                  {allFonts.map((f, i) => (
+                  {allFonts.map((f) => f.family ? (
                     // eslint-disable-next-line @next/next/no-page-custom-font
-                    <link key={`preview-font-${i}`} rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.family).replace(/%20/g, '+')}:wght@300;400;500;600;700;800&display=swap`} />
-                  ))}
+                    <link key={`preview-font-${f.family}`} rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.family).replace(/%20/g, '+')}:wght@300;400;500;600;700;800&display=swap`} />
+                  ) : null)}
 
                   {/* Mock SoMe post card */}
                   <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm max-w-lg mx-auto">
@@ -1484,27 +1505,33 @@ function OnboardingPage() {
                         />
                       )}
                       {/* Heading */}
-                      <h4
+                      <div
                         className="relative z-10 text-2xl mb-2 leading-tight"
                         style={{
                           fontFamily: headingFont ? `'${headingFont.family}', sans-serif` : 'sans-serif',
-                          fontWeight: headingFont?.weight || 700,
+                          fontWeight: headingFont?.weight ?? 700,
                           color: neutralLight || '#ffffff',
                         }}
                       >
                         Overskrift med din font
-                      </h4>
+                        <span className="block text-[10px] opacity-50 mt-1" style={{ fontWeight: 400 }}>
+                          {headingFont?.family || 'System'} — {FONT_WEIGHTS.find(w => w.value === (headingFont?.weight ?? 700))?.label || 'Bold'}
+                        </span>
+                      </div>
                       {/* Subheading */}
-                      <p
+                      <div
                         className="relative z-10 text-base opacity-90"
                         style={{
                           fontFamily: bodyFont ? `'${bodyFont.family}', sans-serif` : headingFont ? `'${headingFont.family}', sans-serif` : 'sans-serif',
-                          fontWeight: bodyFont?.weight || 400,
+                          fontWeight: bodyFont?.weight ?? 400,
                           color: neutralLight || '#ffffff',
                         }}
                       >
                         Undertekst med brødtekst-font
-                      </p>
+                        <span className="block text-[10px] opacity-50 mt-1" style={{ fontWeight: 400 }}>
+                          {bodyFont?.family || headingFont?.family || 'System'} — {FONT_WEIGHTS.find(w => w.value === (bodyFont?.weight ?? 400))?.label || 'Regular'}
+                        </span>
+                      </div>
                     </div>
                     {/* Text area below image */}
                     <div className="p-5 bg-white">
@@ -1512,7 +1539,7 @@ function OnboardingPage() {
                         className="text-sm leading-relaxed mb-3"
                         style={{
                           fontFamily: bodyFont ? `'${bodyFont.family}', sans-serif` : 'sans-serif',
-                          fontWeight: bodyFont?.weight || 400,
+                          fontWeight: bodyFont?.weight ?? 400,
                           color: neutralDark || '#1a1a1a',
                         }}
                       >
