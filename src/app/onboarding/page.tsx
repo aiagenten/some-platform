@@ -893,17 +893,35 @@ function OnboardingPage() {
                               onClick={async () => {
                                 if (!manualCompanyId || !orgId) return
                                 setAddingManualCompany(true)
+                                const existingLinkedin = connectedAccounts.find(a => a.platform === 'linkedin')
+                                const accessToken = existingLinkedin?.access_token || ''
+
+                                // Try to fetch the real org name
+                                let orgName = `Bedrift #${manualCompanyId}`
+                                try {
+                                  const nameRes = await fetch('/api/social/linkedin-org-name', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ access_token: accessToken, organization_id: manualCompanyId }),
+                                  })
+                                  if (nameRes.ok) {
+                                    const nameData = await nameRes.json()
+                                    if (nameData.name && !nameData.name.startsWith('Bedrift #')) {
+                                      orgName = nameData.name
+                                    }
+                                  }
+                                } catch { /* use fallback name */ }
+
                                 const newAccount: ConnectedAccount = {
                                   platform: 'linkedin',
                                   account_id: `organization:${manualCompanyId}`,
-                                  name: `Bedrift #${manualCompanyId}`,
-                                  access_token: connectedAccounts.find(a => a.platform === 'linkedin')?.access_token || '',
+                                  name: orgName,
+                                  access_token: accessToken,
                                 }
                                 setConnectedAccounts(prev => [...prev, newAccount])
                                 setSelectedLinkedInAccount(newAccount.account_id)
 
                                 // Save to database
-                                const existingLinkedin = connectedAccounts.find(a => a.platform === 'linkedin')
                                 if (existingLinkedin) {
                                   await fetch('/api/social/save-account', {
                                     method: 'POST',
@@ -912,7 +930,7 @@ function OnboardingPage() {
                                       org_id: orgId,
                                       platform: 'linkedin',
                                       account_id: `organization:${manualCompanyId}`,
-                                      account_name: `Bedrift #${manualCompanyId}`,
+                                      account_name: orgName,
                                       access_token: existingLinkedin.access_token,
                                       metadata: {
                                         account_type: 'organization',

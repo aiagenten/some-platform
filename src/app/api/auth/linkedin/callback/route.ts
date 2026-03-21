@@ -157,12 +157,14 @@ export async function GET(request: NextRequest) {
 
             const organizationId = organizationUrn.split(':').pop()
 
-            // Get organization details
-            let organizationName = `Organization ${organizationId}`
+            // Get organization details — try REST API first, then v2, then basic lookup
+            let organizationName = `Bedrift #${organizationId}`
             let vanityName: string | null = null
+            let logoUrl: string | null = null
 
             try {
-              const orgDetailRes = await fetch(
+              // Try REST API first
+              let orgDetailRes = await fetch(
                 `https://api.linkedin.com/rest/organizations/${organizationId}`,
                 {
                   headers: {
@@ -171,10 +173,36 @@ export async function GET(request: NextRequest) {
                   },
                 }
               )
+
+              // Fallback to v2 API if REST fails
+              if (!orgDetailRes.ok) {
+                console.log(`REST org details failed (${orgDetailRes.status}), trying v2...`)
+                orgDetailRes = await fetch(
+                  `https://api.linkedin.com/v2/organizations/${organizationId}?projection=(localizedName,vanityName,logoV2)`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                    },
+                  }
+                )
+              }
+
               if (orgDetailRes.ok) {
                 const orgDetails = await orgDetailRes.json()
-                organizationName = orgDetails.localizedName || organizationName
+                console.log(`Org ${organizationId} details:`, JSON.stringify(orgDetails).substring(0, 300))
+                // Try multiple field names for the org name
+                organizationName = orgDetails.localizedName
+                  || orgDetails.name?.localized?.no_NO
+                  || orgDetails.name?.localized?.en_US
+                  || orgDetails.name?.preferredLocale && orgDetails.name.localized?.[`${orgDetails.name.preferredLocale.language}_${orgDetails.name.preferredLocale.country}`]
+                  || organizationName
                 vanityName = orgDetails.vanityName || null
+                // Try to get logo URL
+                if (orgDetails.logoV2?.original) {
+                  logoUrl = orgDetails.logoV2.original
+                }
+              } else {
+                console.warn(`Could not fetch org details for ${organizationId}:`, orgDetailRes.status, await orgDetailRes.text().catch(() => ''))
               }
             } catch (e) {
               console.warn(`Could not fetch org details for ${organizationId}:`, e)
@@ -195,6 +223,7 @@ export async function GET(request: NextRequest) {
                 organization_urn: organizationUrn,
                 organization_id: organizationId,
                 vanity_name: vanityName,
+                logo_url: logoUrl,
                 user_id: userInfo.sub,
                 refresh_token: refreshToken,
               }),

@@ -71,39 +71,97 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
     ? `urn:li:organization:${id}`
     : `urn:li:person:${id}`
 
-  const url = new URL('https://api.linkedin.com/rest/posts')
-  url.searchParams.set('author', authorUrn)
-  url.searchParams.set('q', 'author')
-  url.searchParams.set('count', '50')
+  // Try REST API first (newer), then fall back to v2 UGC Posts API
+  let elements: Record<string, unknown>[] = []
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...LINKEDIN_HEADERS,
-    },
-  })
+  // Attempt 1: REST Posts API
+  try {
+    const url = new URL('https://api.linkedin.com/rest/posts')
+    url.searchParams.set('author', authorUrn)
+    url.searchParams.set('q', 'author')
+    url.searchParams.set('count', '50')
+    url.searchParams.set('sortBy', 'LAST_MODIFIED')
 
-  if (!res.ok) {
-    const errorText = await res.text()
-    console.error(`LinkedIn posts API error for ${authorUrn}:`, res.status, errorText)
-    // Return empty array instead of throwing — account may not have access
+    const res = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...LINKEDIN_HEADERS,
+      },
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      elements = data.elements || []
+      console.log(`LinkedIn REST posts for ${authorUrn}: ${elements.length} posts`)
+    } else {
+      const errorText = await res.text()
+      console.warn(`LinkedIn REST posts API failed for ${authorUrn}: ${res.status}`, errorText.substring(0, 200))
+    }
+  } catch (e) {
+    console.warn('LinkedIn REST posts error:', e)
+  }
+
+  // Attempt 2: v2 UGC Posts API (fallback)
+  if (elements.length === 0) {
+    try {
+      const ugcUrl = `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${encodeURIComponent(authorUrn)})&count=50`
+      const ugcRes = await fetch(ugcUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-RestLi-Protocol-Version': '2.0.0',
+        },
+      })
+
+      if (ugcRes.ok) {
+        const ugcData = await ugcRes.json()
+        elements = ugcData.elements || []
+        console.log(`LinkedIn UGC posts for ${authorUrn}: ${elements.length} posts`)
+      } else {
+        console.warn(`LinkedIn UGC posts API failed for ${authorUrn}: ${ugcRes.status}`)
+      }
+    } catch (e) {
+      console.warn('LinkedIn UGC posts error:', e)
+    }
+  }
+
+  // Attempt 3: v2 shares API (oldest fallback)
+  if (elements.length === 0) {
+    try {
+      const sharesUrl = `https://api.linkedin.com/v2/shares?q=owners&owners=${encodeURIComponent(authorUrn)}&count=50`
+      const sharesRes = await fetch(sharesUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-RestLi-Protocol-Version': '2.0.0',
+        },
+      })
+
+      if (sharesRes.ok) {
+        const sharesData = await sharesRes.json()
+        elements = sharesData.elements || []
+        console.log(`LinkedIn shares for ${authorUrn}: ${elements.length} posts`)
+      } else {
+        console.warn(`LinkedIn shares API failed for ${authorUrn}: ${sharesRes.status}`)
+      }
+    } catch (e) {
+      console.warn('LinkedIn shares error:', e)
+    }
+  }
+
+  if (elements.length === 0) {
+    console.log(`No LinkedIn posts found for ${authorUrn} across all API attempts`)
     return []
   }
 
-  const data = await res.json()
-  console.log(`LinkedIn posts for ${authorUrn}: ${(data.elements || []).length} posts, paging:`, JSON.stringify(data.paging || {}))
-  const elements = data.elements || []
-
   return elements.map((post: Record<string, unknown>) => {
-    // Extract text content from the post
+    // Extract text content from the post — handle multiple API formats
     let text = ''
 
-    // LinkedIn posts can have commentary (text content)
+    // REST API format: commentary field
     if (post.commentary) {
       text = post.commentary as string
     }
 
-    // Some posts have specificContent with share commentary
+    // UGC format: specificContent
     if (!text && post.specificContent) {
       const specific = post.specificContent as Record<string, unknown>
       const shareContent = specific['com.linkedin.ugc.ShareContent'] as Record<string, unknown> | undefined
@@ -113,42 +171,67 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
       }
     }
 
+    // Shares format: text field in content
+    if (!text && post.text) {
+      const textObj = post.text as Record<string, unknown>
+      text = (textObj.text as string) || ''
+    }
+
     // Extract image if available
     let imageUrl: string | null = null
     if (post.content) {
       const content = post.content as Record<string, unknown>
-      const media = content.media as Record<string, unknown> | undefined
-      if (media?.id) {
-        // LinkedIn media URLs need to be resolved separately, use thumbnail if available
-        imageUrl = null
+      // REST format
+      const multiImage = content.multiImage as Record<string, unknown> | undefined
+      if (multiImage?.images && Array.isArray(multiImage.images) && multiImage.images.length > 0) {
+        const firstImg = multiImage.images[0] as Record<string, unknown>
+        imageUrl = (firstImg.url as string) || null
       }
-      // Article shares may have a thumbnail
       const article = content.article as Record<string, unknown> | undefined
-      if (article?.thumbnail) {
+      if (!imageUrl && article?.thumbnail) {
         imageUrl = article.thumbnail as string
       }
     }
 
+    // UGC format images
+    if (!imageUrl && post.specificContent) {
+      const specific = post.specificContent as Record<string, unknown>
+      const shareContent = specific['com.linkedin.ugc.ShareContent'] as Record<string, unknown> | undefined
+      const shareMedia = shareContent?.media as Record<string, unknown>[] | undefined
+      if (shareMedia && shareMedia.length > 0) {
+        const firstMedia = shareMedia[0]
+        imageUrl = (firstMedia.thumbnails as Record<string, unknown>[])?.[0]?.url as string || null
+      }
+    }
+
+    // Shares format images
+    if (!imageUrl && post.distribution) {
+      // Shares API doesn't have easy image access, skip
+    }
+
     return {
-      id: post.id || post.urn || '',
+      id: post.id || post.urn || (post as Record<string, unknown>).activity || '',
       text,
       created_at: post.createdAt
         ? new Date(post.createdAt as number).toISOString()
         : post.publishedAt
           ? new Date(post.publishedAt as number).toISOString()
-          : null,
+          : post.created
+            ? new Date((post.created as Record<string, unknown>).time as number).toISOString()
+            : null,
       image_url: imageUrl,
       permalink: post.id
         ? `https://www.linkedin.com/feed/update/${post.id}`
         : null,
-      likes: 0, // Would need separate social actions API call
+      likes: 0,
       comments: 0,
       shares: 0,
       platform: 'linkedin',
     }
   }).filter((post: { text: string; created_at: string | null }) => {
+    // Keep posts even without text if they have other content
     if (!post.text || !post.text.trim().length) return false
-    // Filter out posts older than 12 months (LinkedIn API doesn't support a 'since' param)
+    // Filter out posts older than 12 months
     if (post.created_at) {
       const twelveMonthsAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
       if (new Date(post.created_at).getTime() < twelveMonthsAgo) return false
