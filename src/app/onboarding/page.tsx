@@ -52,6 +52,12 @@ type ConnectedAccount = {
   access_token: string
 }
 
+const PLATFORM_CONFIG: Record<string, { icon: typeof Linkedin; color: string; bg: string }> = {
+  linkedin: { icon: Linkedin, color: 'text-sky-600', bg: 'bg-sky-50 border-sky-200' },
+  facebook: { icon: Facebook, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
+  instagram: { icon: Instagram, color: 'text-pink-600', bg: 'bg-pink-50 border-pink-200' },
+}
+
 const PLATFORMS = [
   { id: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'border-sky-300 bg-sky-50 text-sky-700' },
   { id: 'facebook', label: 'Facebook', icon: Facebook, color: 'border-blue-300 bg-blue-50 text-blue-700' },
@@ -131,16 +137,16 @@ function OnboardingPage() {
     }
   }, [connectedAccounts, selectedLinkedInAccount])
 
-  // Handle Facebook OAuth callback
-  const handleFacebookCallback = useCallback(async (accounts: ConnectedAccount[]) => {
-    setConnectedAccounts(accounts)
+  // Fetch posts from all connected accounts
+  const fetchAllPosts = useCallback(async () => {
+    if (connectedAccounts.length === 0) return
     setFetchingPosts(true)
     setSomeError('')
 
     try {
       const allPosts: SocialPost[] = []
 
-      for (const account of accounts) {
+      for (const account of connectedAccounts) {
         try {
           const res = await fetch('/api/social/fetch-posts', {
             method: 'POST',
@@ -196,9 +202,9 @@ function OnboardingPage() {
     }
 
     setFetchingPosts(false)
-  }, [orgId])
+  }, [connectedAccounts, orgId])
 
-  // Check for Facebook or LinkedIn callback params on mount
+  // Check for Facebook or LinkedIn callback params on mount — just save accounts, don't fetch posts
   useEffect(() => {
     const fbConnected = searchParams.get('fb_connected')
     const liConnected = searchParams.get('li_connected')
@@ -209,7 +215,7 @@ function OnboardingPage() {
         const accounts: ConnectedAccount[] = JSON.parse(decodeURIComponent(accountsParam))
         setStep(2) // Go to SoMe step
 
-        // Merge with existing connected accounts
+        // Merge with existing connected accounts (don't fetch posts yet — wait for user to click 'Hent poster')
         setConnectedAccounts(prev => {
           const existing = new Set(prev.map(a => `${a.platform}-${a.account_id}`))
           const merged = [...prev]
@@ -220,8 +226,6 @@ function OnboardingPage() {
           }
           return merged
         })
-
-        handleFacebookCallback(accounts)
 
         // Clean URL
         const url = new URL(window.location.href)
@@ -234,7 +238,7 @@ function OnboardingPage() {
         console.error('Failed to parse accounts from callback')
       }
     }
-  }, [searchParams, handleFacebookCallback])
+  }, [searchParams])
 
   const startFacebookOAuth = () => {
     if (!orgId) return
@@ -642,6 +646,28 @@ function OnboardingPage() {
                 </div>
               )}
 
+              {/* Fetch posts button — shown when accounts are connected but posts haven't been fetched yet */}
+              {connectedAccounts.length > 0 && socialPosts.length === 0 && !fetchingPosts && (
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Hent poster</h3>
+                      <p className="text-sm text-slate-500">
+                        {connectedAccounts.length} konto{connectedAccounts.length !== 1 ? 'er' : ''} tilkoblet. Klikk for å hente poster fra alle kontoer.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={fetchAllPosts}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/20"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Hent poster fra alle kontoer
+                  </button>
+                </div>
+              )}
+
               {/* Post fetching / analysis status */}
               {fetchingPosts && (
                 <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 mb-4">
@@ -738,9 +764,11 @@ function OnboardingPage() {
                     </div>
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                  <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
                     {socialPosts.map((post) => {
                       const selected = importedPostSelections[post.id] ?? true
+                      const pConfig = PLATFORM_CONFIG[post.platform] || PLATFORM_CONFIG.facebook
+                      const PlatformIcon = pConfig.icon
                       return (
                         <button
                           key={post.id}
@@ -749,6 +777,18 @@ function OnboardingPage() {
                             selected ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white opacity-60'
                           }`}
                         >
+                          {/* Post thumbnail */}
+                          {post.image_url ? (
+                            <img
+                              src={post.image_url}
+                              alt=""
+                              className="w-12 h-12 rounded-lg object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                              <ImageIcon className="w-5 h-5 text-slate-300" />
+                            </div>
+                          )}
                           {selected ? (
                             <CheckSquare className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
                           ) : (
@@ -756,7 +796,10 @@ function OnboardingPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-xs font-medium text-slate-500 uppercase">{post.platform}</span>
+                              <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded border ${pConfig.bg}`}>
+                                <PlatformIcon className={`w-3 h-3 ${pConfig.color}`} />
+                                <span className={pConfig.color}>{post.platform === 'linkedin' ? 'LinkedIn' : post.platform === 'facebook' ? 'Facebook' : 'Instagram'}</span>
+                              </span>
                               {post.likes > 0 && <span className="text-xs text-slate-400">{post.likes} likes</span>}
                             </div>
                             <p className="text-sm text-slate-700 line-clamp-2">{post.text || 'Ingen tekst'}</p>
@@ -858,13 +901,16 @@ function OnboardingPage() {
                   }}
                   disabled={
                     fetchingPosts || analyzingTone || savingSelections ||
-                    (selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:'))
+                    (selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:')) ||
+                    (connectedAccounts.length > 0 && socialPosts.length === 0)
                   }
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
                 >
                   {savingSelections ? 'Lagrer...' : connectedAccounts.length === 0 && hasFacebookOrInstagram
                     ? 'Hopp over'
-                    : 'Neste'}
+                    : connectedAccounts.length > 0 && socialPosts.length === 0
+                      ? 'Hent poster først'
+                      : 'Neste'}
                 </button>
               </div>
             </div>

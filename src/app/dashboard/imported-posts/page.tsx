@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Loader2, Linkedin, Facebook, Instagram, Heart, MessageCircle, Share2, CheckSquare, Square, Sparkles, ExternalLink } from 'lucide-react'
+import { Loader2, Linkedin, Facebook, Instagram, Heart, MessageCircle, Share2, CheckSquare, Square, Sparkles, ExternalLink, Trash2 } from 'lucide-react'
 
 type ImportedPost = {
   id: string
@@ -128,7 +128,31 @@ export default function ImportedPostsPage() {
     setAnalyzing(false)
   }
 
+  const deletePost = async (postId: string) => {
+    setPosts(prev => prev.filter(p => p.id !== postId))
+    await supabase
+      .from('imported_social_posts')
+      .delete()
+      .eq('id', postId)
+  }
+
+  const deleteNonSelected = async () => {
+    const nonSelected = posts.filter(p => !p.is_learning_material)
+    if (nonSelected.length === 0) return
+
+    const confirmed = window.confirm('Er du sikker på at du vil slette alle ikke-valgte poster? Dette kan ikke angres.')
+    if (!confirmed) return
+
+    const idsToDelete = nonSelected.map(p => p.id)
+    setPosts(prev => prev.filter(p => p.is_learning_material))
+    await supabase
+      .from('imported_social_posts')
+      .delete()
+      .in('id', idsToDelete)
+  }
+
   const selectedCount = posts.filter(p => p.is_learning_material).length
+  const nonSelectedCount = posts.length - selectedCount
 
   if (loading) {
     return (
@@ -188,6 +212,15 @@ export default function ImportedPostsPage() {
               <Square className="w-3.5 h-3.5" />
               Fjern alle
             </button>
+            {nonSelectedCount > 0 && (
+              <button
+                onClick={deleteNonSelected}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg border border-red-200 hover:bg-red-100 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Slett ikke-valgte ({nonSelectedCount})
+              </button>
+            )}
           </div>
 
           {/* Post grid */}
@@ -252,21 +285,30 @@ export default function ImportedPostsPage() {
                       </p>
                     )}
 
-                    {/* Learning toggle */}
-                    <button
-                      onClick={() => toggleLearning(post.id, post.is_learning_material)}
-                      className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium border transition-all duration-200 ${
-                        post.is_learning_material
-                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                      }`}
-                    >
-                      {post.is_learning_material ? (
-                        <><CheckSquare className="w-3.5 h-3.5" /> Bruk som læringsmateriale</>
-                      ) : (
-                        <><Square className="w-3.5 h-3.5" /> Bruk som læringsmateriale</>
-                      )}
-                    </button>
+                    {/* Learning toggle + delete */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleLearning(post.id, post.is_learning_material)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium border transition-all duration-200 ${
+                          post.is_learning_material
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {post.is_learning_material ? (
+                          <><CheckSquare className="w-3.5 h-3.5" /> Læringsmateriale</>
+                        ) : (
+                          <><Square className="w-3.5 h-3.5" /> Læringsmateriale</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deletePost(post.id)}
+                        className="flex items-center justify-center px-2.5 py-2 rounded-xl text-xs font-medium border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-200"
+                        title="Slett"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )

@@ -9,9 +9,11 @@ const LINKEDIN_HEADERS = {
   'X-RestLi-Protocol-Version': '2.0.0',
 }
 
+// Fetch up to 50 posts per platform, limited to the last 12 months
 async function fetchFacebookPosts(accessToken: string, accountId: string) {
   const fields = 'message,created_time,full_picture,permalink_url,shares,likes.summary(true),comments.summary(true)'
-  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${accountId}/feed?fields=${fields}&limit=25&access_token=${accessToken}`
+  const twelveMonthsAgo = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${accountId}/feed?fields=${fields}&limit=50&since=${twelveMonthsAgo}&access_token=${accessToken}`
 
   const res = await fetch(url)
   const data = await res.json()
@@ -39,7 +41,7 @@ async function fetchFacebookPosts(accessToken: string, accountId: string) {
 
 async function fetchInstagramPosts(accessToken: string, accountId: string) {
   const fields = 'caption,timestamp,media_url,permalink,like_count,comments_count'
-  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${accountId}/media?fields=${fields}&limit=25&access_token=${accessToken}`
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${accountId}/media?fields=${fields}&limit=50&access_token=${accessToken}`
 
   const res = await fetch(url)
   const data = await res.json()
@@ -72,7 +74,7 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
   const url = new URL('https://api.linkedin.com/rest/posts')
   url.searchParams.set('author', authorUrn)
   url.searchParams.set('q', 'author')
-  url.searchParams.set('count', '25')
+  url.searchParams.set('count', '50')
 
   const res = await fetch(url.toString(), {
     headers: {
@@ -142,7 +144,15 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
       shares: 0,
       platform: 'linkedin',
     }
-  }).filter((post: { text: string }) => post.text && post.text.trim().length > 0)
+  }).filter((post: { text: string; created_at: string | null }) => {
+    if (!post.text || !post.text.trim().length) return false
+    // Filter out posts older than 12 months (LinkedIn API doesn't support a 'since' param)
+    if (post.created_at) {
+      const twelveMonthsAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
+      if (new Date(post.created_at).getTime() < twelveMonthsAgo) return false
+    }
+    return true
+  })
 }
 
 export async function POST(request: NextRequest) {
