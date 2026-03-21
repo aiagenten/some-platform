@@ -85,12 +85,13 @@ async function fetchLinkedInPosts(accessToken: string, accountId: string) {
 
   if (!res.ok) {
     const errorText = await res.text()
-    console.error('LinkedIn posts API error:', res.status, errorText)
+    console.error(`LinkedIn posts API error for ${authorUrn}:`, res.status, errorText)
     // Return empty array instead of throwing — account may not have access
     return []
   }
 
   const data = await res.json()
+  console.log(`LinkedIn posts for ${authorUrn}: ${(data.elements || []).length} posts, paging:`, JSON.stringify(data.paging || {}))
   const elements = data.elements || []
 
   return elements.map((post: Record<string, unknown>) => {
