@@ -14,7 +14,7 @@ type BrandColor = {
 type BrandProfile = {
   id: string
   org_id: string
-  colors: (string | BrandColor)[]
+  colors: BrandColor[]
   fonts: string[]
   tone: string | null
   voice_description: string | null
@@ -329,8 +329,8 @@ export default function BrandPage() {
                 <p className="text-xs font-medium text-slate-500 mb-2">Farger</p>
                 <div className="flex flex-wrap gap-2">
                   {brand.colors.map((color, i) => {
-                    const hex = typeof color === 'string' ? color : color.hex
-                    const role = typeof color === 'string' ? null : color.role
+                    const hex = color.hex
+                    const role = color.role
                     const roleLabels: Record<string, string> = {
                       primary: 'Primær',
                       secondary: 'Sekundær',

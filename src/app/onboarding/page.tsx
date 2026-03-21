@@ -13,7 +13,7 @@ type BrandColor = {
 }
 
 type BrandProfile = {
-  colors: string[] | BrandColor[]
+  colors: BrandColor[]
   fonts: string[]
   logo_url: string | null
   tone: string
@@ -37,22 +37,12 @@ const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = 
   { value: '', label: 'Ingen rolle', description: 'Ekstra farge' },
 ]
 
-// Helper: normalize colors array to BrandColor[] format
-function normalizeColors(colors: string[] | BrandColor[]): BrandColor[] {
-  if (!colors || colors.length === 0) return []
-  if (typeof colors[0] === 'string') {
-    return (colors as string[]).map((hex, i) => ({
-      hex,
-      role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'accent' : '') as ColorRole,
-    }))
-  }
-  return colors as BrandColor[]
-}
-
-// Helper: get flat hex array for backward compat (used by content generator)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function getColorHexArray(colors: BrandColor[]): string[] {
-  return colors.map(c => c.hex)
+// Convert flat hex strings to BrandColor[] with auto-assigned roles
+function hexArrayToColors(hexArray: string[]): BrandColor[] {
+  return hexArray.map((hex, i) => ({
+    hex,
+    role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'accent' : '') as ColorRole,
+  }))
 }
 
 type ToneProfile = {
@@ -447,8 +437,8 @@ function OnboardingPage() {
         }
       }
 
-      // Normalize to BrandColor[] with auto-assigned roles
-      data.colors = normalizeColors(allColors.slice(0, 8))
+      // Convert to BrandColor[] with auto-assigned roles
+      data.colors = hexArrayToColors(allColors.slice(0, 8))
 
       setBrandProfile(data)
       setStep(4)
@@ -461,12 +451,10 @@ function OnboardingPage() {
   const handleFinish = async () => {
     if (!orgId || !brandProfile) return
     setSaving(true)
-    // Save colors as BrandColor[] objects with roles
-    const colorsToSave = normalizeColors(brandProfile.colors)
     await supabase.from('brand_profiles').upsert({
       org_id: orgId,
       source_url: websiteUrl,
-      colors: colorsToSave,
+      colors: brandProfile.colors,
       fonts: brandProfile.fonts,
       logo_url: brandProfile.logo_url,
       tagline: brandProfile.tagline,
@@ -525,7 +513,7 @@ function OnboardingPage() {
   // Color-specific helpers (BrandColor objects)
   const getColors = (): BrandColor[] => {
     if (!brandProfile) return []
-    return normalizeColors(brandProfile.colors)
+    return brandProfile.colors || []
   }
 
   const updateColor = (index: number, hex: string) => {
