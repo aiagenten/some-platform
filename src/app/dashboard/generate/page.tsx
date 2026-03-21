@@ -98,6 +98,36 @@ export default function GeneratePage() {
     loadOrg()
   }, [])
 
+  // Generate a short headline from the post text
+  const getHeadline = useCallback(() => {
+    if (!generated?.text) return topic || ''
+    // Take first sentence or first line, max ~60 chars
+    const firstLine = generated.text.split('\n')[0].replace(/^[""'']|[""'']$/g, '').trim()
+    if (firstLine.length <= 60) return firstLine
+    // Try to cut at a word boundary
+    const cut = firstLine.substring(0, 57)
+    const lastSpace = cut.lastIndexOf(' ')
+    return (lastSpace > 30 ? cut.substring(0, lastSpace) : cut) + '...'
+  }, [generated?.text, topic])
+
+  // Helper: wrap text on canvas and return lines
+  const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+    const words = text.split(' ')
+    const lines: string[] = []
+    let currentLine = ''
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines.push(currentLine)
+        currentLine = word
+      } else {
+        currentLine = testLine
+      }
+    }
+    if (currentLine) lines.push(currentLine)
+    return lines
+  }
+
   // Render branded overlay on canvas
   const renderOverlay = useCallback(async () => {
     const canvas = canvasRef.current
@@ -106,84 +136,132 @@ export default function GeneratePage() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const size = 1080 // Instagram standard
+    const size = 1080
     canvas.width = size
     canvas.height = size
 
-    // Load the AI-generated image
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = async () => {
-      // Draw the base image
+    const loadImage = (src: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = src
+      })
+    }
+
+    try {
+      const img = await loadImage(generated.image_url)
+
+      // Draw base image (cover crop)
       const imgRatio = img.width / img.height
       let sx = 0, sy = 0, sw = img.width, sh = img.height
-      if (imgRatio > 1) {
-        sx = (img.width - img.height) / 2
-        sw = img.height
-      } else if (imgRatio < 1) {
-        sy = (img.height - img.width) / 2
-        sh = img.width
-      }
+      if (imgRatio > 1) { sx = (img.width - img.height) / 2; sw = img.height }
+      else if (imgRatio < 1) { sy = (img.height - img.width) / 2; sh = img.width }
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size)
 
-      // Semi-transparent gradient overlay at bottom for text readability
-      const gradient = ctx.createLinearGradient(0, size * 0.65, 0, size)
-      gradient.addColorStop(0, 'rgba(0,0,0,0)')
-      gradient.addColorStop(0.5, 'rgba(0,0,0,0.3)')
-      gradient.addColorStop(1, 'rgba(0,0,0,0.7)')
-      ctx.fillStyle = gradient
+      // Dark overlay for text readability
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
       ctx.fillRect(0, 0, size, size)
 
-      // Brand color accent bar at bottom
-      const primaryColor = brand.colors.find(c => c.role === 'primary')?.hex || '#6366f1'
-      ctx.fillStyle = primaryColor
-      ctx.fillRect(0, size - 6, size, 6)
+      // Colors
+      const primaryColor = brand.colors.find(c => c.role === 'primary')?.hex || '#9933ff'
+      const accentColor = brand.colors.find(c => c.role === 'accent')?.hex || primaryColor
 
-      // Brand name text at bottom-left
-      const headingFont = brand.fonts.find(f => f.role === 'heading')
-      const fontFamily = headingFont?.family || 'Inter'
-      ctx.font = `bold 32px '${fontFamily}', sans-serif`
-      ctx.fillStyle = '#ffffff'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(orgName || '', 40, size - 30)
+      // Fonts
+      const headingFontFamily = brand.fonts.find(f => f.role === 'heading')?.family || 'Inter'
+      const bodyFontFamily = brand.fonts.find(f => f.role === 'body')?.family || headingFontFamily
 
-      // Tagline below brand name
-      if (brand.tagline) {
-        const bodyFont = brand.fonts.find(f => f.role === 'body')
-        ctx.font = `400 20px '${bodyFont?.family || fontFamily}', sans-serif`
-        ctx.fillStyle = 'rgba(255,255,255,0.8)'
-        ctx.fillText(brand.tagline, 40, size - 30 + 28)
-      }
+      const pad = 60
 
-      // Logo in top-right corner
+      // === TOP: Logo + brand name ===
+      let logoBottom = pad + 30
       if (brand.logo_url) {
         try {
-          const logo = new Image()
-          logo.crossOrigin = 'anonymous'
-          logo.onload = () => {
-            const maxLogoH = 80
-            const logoRatio = logo.width / logo.height
-            const logoH = maxLogoH
-            const logoW = logoH * logoRatio
-            // White background circle/rect behind logo for visibility
-            ctx.save()
-            ctx.globalAlpha = 0.9
-            ctx.fillStyle = '#ffffff'
-            const padding = 12
-            ctx.beginPath()
-            ctx.roundRect(size - logoW - 30 - padding, 20 - padding, logoW + padding * 2, logoH + padding * 2, 16)
-            ctx.fill()
-            ctx.restore()
-            ctx.drawImage(logo, size - logoW - 30, 20, logoW, logoH)
-          }
-          logo.src = brand.logo_url
+          const logo = await loadImage(brand.logo_url)
+          const maxLogoH = 50
+          const logoRatio = logo.width / logo.height
+          const logoH = maxLogoH
+          const logoW = logoH * logoRatio
+          ctx.drawImage(logo, pad, pad, logoW, logoH)
+
+          // Brand name next to logo
+          ctx.font = `600 24px '${headingFontFamily}', sans-serif`
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(orgName, pad + logoW + 16, pad + logoH / 2)
+          logoBottom = pad + logoH + 20
         } catch {
-          // Logo load failed, skip
+          // Logo failed, just show name
+          ctx.font = `600 28px '${headingFontFamily}', sans-serif`
+          ctx.fillStyle = '#ffffff'
+          ctx.textBaseline = 'top'
+          ctx.fillText(orgName, pad, pad)
+          logoBottom = pad + 40
+        }
+      } else {
+        ctx.font = `600 28px '${headingFontFamily}', sans-serif`
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'top'
+        ctx.fillText(orgName, pad, pad)
+        logoBottom = pad + 40
+      }
+
+      // === MIDDLE: Big headline ===
+      const headline = getHeadline()
+      if (headline) {
+        ctx.font = `bold 72px '${headingFontFamily}', sans-serif`
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'top'
+
+        const headlineLines = wrapText(ctx, headline, size - pad * 2)
+        const headlineY = logoBottom + 40
+        headlineLines.forEach((line, i) => {
+          ctx.fillText(line, pad, headlineY + i * 86)
+        })
+
+        // Accent line under headline
+        const accentY = headlineY + headlineLines.length * 86 + 16
+        ctx.fillStyle = accentColor
+        ctx.fillRect(pad, accentY, 80, 5)
+
+        // Subtitle / image suggestion
+        if (generated.image_suggestion) {
+          ctx.font = `400 28px '${bodyFontFamily}', sans-serif`
+          ctx.fillStyle = 'rgba(255,255,255,0.75)'
+          const subLines = wrapText(ctx, generated.image_suggestion, size - pad * 2)
+          subLines.slice(0, 2).forEach((line, i) => {
+            ctx.fillText(line, pad, accentY + 30 + i * 36)
+          })
         }
       }
+
+      // === BOTTOM: CTA bar + website ===
+      // CTA button
+      const ctaY = size - pad - 70
+      const ctaText = 'Les mer på ' + (orgName.toLowerCase().replace(/\s+/g, '') + '.no')
+      ctx.font = `600 22px '${bodyFontFamily}', sans-serif`
+      const ctaWidth = ctx.measureText(ctaText).width + 48
+      
+      // CTA background
+      ctx.fillStyle = accentColor
+      ctx.beginPath()
+      ctx.roundRect(pad, ctaY, ctaWidth, 48, 12)
+      ctx.fill()
+
+      // CTA text
+      ctx.fillStyle = '#ffffff'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(ctaText, pad + 24, ctaY + 24)
+
+      // Primary color accent line at very bottom
+      ctx.fillStyle = primaryColor
+      ctx.fillRect(0, size - 5, size, 5)
+
+    } catch (err) {
+      console.error('Overlay render error:', err)
     }
-    img.src = generated.image_url
-  }, [generated?.image_url, brand, orgName])
+  }, [generated?.image_url, generated?.image_suggestion, brand, orgName, getHeadline])
 
   // Re-render overlay when image or brand changes
   useEffect(() => {
