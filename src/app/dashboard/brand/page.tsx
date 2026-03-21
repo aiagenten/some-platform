@@ -11,11 +11,17 @@ type BrandColor = {
   role: string
 }
 
+type BrandFont = {
+  family: string
+  role: string
+  weight: number
+}
+
 type BrandProfile = {
   id: string
   org_id: string
   colors: BrandColor[]
-  fonts: string[]
+  fonts: BrandFont[]
   tone: string | null
   voice_description: string | null
   tone_keywords: string[]

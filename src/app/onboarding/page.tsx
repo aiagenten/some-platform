@@ -12,9 +12,17 @@ type BrandColor = {
   role: ColorRole
 }
 
+type FontRole = 'heading' | 'body' | ''
+
+type BrandFont = {
+  family: string
+  role: FontRole
+  weight: number  // 400=regular, 500=medium, 600=semibold, 700=bold
+}
+
 type BrandProfile = {
   colors: BrandColor[]
-  fonts: string[]
+  fonts: BrandFont[]
   logo_url: string | null
   tone: string
   voice_description: string
@@ -44,6 +52,30 @@ function hexArrayToColors(hexArray: string[]): BrandColor[] {
     role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'accent' : '') as ColorRole,
   }))
 }
+
+// Convert flat font name strings to BrandFont[] with auto-assigned roles
+function fontNamesToFonts(names: string[]): BrandFont[] {
+  return names.map((family, i) => ({
+    family,
+    role: (i === 0 ? 'heading' : i === 1 ? 'body' : '') as FontRole,
+    weight: i === 0 ? 700 : 400,
+  }))
+}
+
+const FONT_ROLES: { value: FontRole; label: string }[] = [
+  { value: 'heading', label: 'Overskrift' },
+  { value: 'body', label: 'Brødtekst' },
+  { value: '', label: 'Ingen rolle' },
+]
+
+const FONT_WEIGHTS: { value: number; label: string }[] = [
+  { value: 300, label: 'Light' },
+  { value: 400, label: 'Regular' },
+  { value: 500, label: 'Medium' },
+  { value: 600, label: 'Semibold' },
+  { value: 700, label: 'Bold' },
+  { value: 800, label: 'Extrabold' },
+]
 
 type ToneProfile = {
   tone: string
@@ -440,6 +472,11 @@ function OnboardingPage() {
       // Convert to BrandColor[] with auto-assigned roles
       data.colors = hexArrayToColors(allColors.slice(0, 8))
 
+      // Convert font names to BrandFont[] with roles
+      if (data.fonts && Array.isArray(data.fonts)) {
+        data.fonts = fontNamesToFonts(data.fonts)
+      }
+
       setBrandProfile(data)
       setStep(4)
     } catch {
@@ -491,29 +528,64 @@ function OnboardingPage() {
     setBrandProfile({ ...brandProfile, [field]: value })
   }
 
-  const updateListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages', index: number, value: string) => {
+  const updateListItem = (field: 'do_list' | 'dont_list' | 'tone_keywords' | 'key_messages', index: number, value: string) => {
     if (!brandProfile) return
     const list = [...(brandProfile[field] as string[])]
     list[index] = value
     setBrandProfile({ ...brandProfile, [field]: list })
   }
 
-  const addListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages') => {
+  const addListItem = (field: 'do_list' | 'dont_list' | 'tone_keywords' | 'key_messages') => {
     if (!brandProfile) return
     setBrandProfile({ ...brandProfile, [field]: [...(brandProfile[field] as string[]), ''] })
   }
 
-  const removeListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages', index: number) => {
+  const removeListItem = (field: 'do_list' | 'dont_list' | 'tone_keywords' | 'key_messages', index: number) => {
     if (!brandProfile) return
     const list = [...(brandProfile[field] as string[])]
     list.splice(index, 1)
     setBrandProfile({ ...brandProfile, [field]: list })
   }
 
+  // Font-specific helpers
+  const getFonts = (): BrandFont[] => brandProfile?.fonts || []
+
+  const updateFont = (index: number, updates: Partial<BrandFont>) => {
+    if (!brandProfile) return
+    const fonts = [...brandProfile.fonts]
+    fonts[index] = { ...fonts[index], ...updates }
+    // Exclusive roles: heading and body can only be assigned once
+    if (updates.role) {
+      fonts.forEach((f, i) => { if (i !== index && f.role === updates.role) f.role = '' as FontRole })
+    }
+    setBrandProfile({ ...brandProfile, fonts })
+  }
+
+  const addFont = () => {
+    if (!brandProfile) return
+    setBrandProfile({ ...brandProfile, fonts: [...brandProfile.fonts, { family: '', role: '' as FontRole, weight: 400 }] })
+  }
+
+  const removeFont = (index: number) => {
+    if (!brandProfile) return
+    const fonts = [...brandProfile.fonts]
+    fonts.splice(index, 1)
+    setBrandProfile({ ...brandProfile, fonts: [...fonts] })
+  }
+
   // Color-specific helpers (BrandColor objects)
   const getColors = (): BrandColor[] => {
     if (!brandProfile) return []
     return brandProfile.colors || []
+  }
+
+  const getColorByRole = (role: ColorRole): string => {
+    const c = getColors().find(c => c.role === role)
+    return c?.hex || '#333333'
+  }
+
+  const getFontByRole = (role: FontRole): BrandFont | null => {
+    return getFonts().find(f => f.role === role) || null
   }
 
   const updateColor = (index: number, hex: string) => {
@@ -1298,83 +1370,128 @@ function OnboardingPage() {
               </p>
             </div>
 
-            {/* Brand Card Preview */}
-            <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-semibold text-slate-900">Merkevare-oppsummering</h3>
-              </div>
-              <div className="flex flex-col md:flex-row gap-6">
-                {/* Logo */}
-                <div className="flex-shrink-0 flex items-center justify-center">
-                  {brandProfile.logo_url ? (
-                    <img
-                      src={brandProfile.logo_url}
-                      alt="Logo"
-                      className="max-h-20 max-w-32 object-contain rounded-xl border border-slate-200 p-2 bg-white"
-                    />
-                  ) : (
-                    <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
-                      <ImageIcon className="w-8 h-8 text-slate-300" />
+            {/* Live Brand Preview — Mock SoMe Post */}
+            {(() => {
+              const headingFont = getFontByRole('heading')
+              const bodyFont = getFontByRole('body')
+              const primary = getColorByRole('primary')
+              const secondary = getColorByRole('secondary')
+              const accent = getColorByRole('accent')
+              const neutralDark = getColorByRole('neutral_dark')
+              const neutralLight = getColorByRole('neutral_light')
+              // Load all font weights for preview
+              const allFonts = getFonts().filter(f => f.family)
+              return (
+                <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-indigo-600" />
+                      <h3 className="font-semibold text-slate-900">Live forhåndsvisning</h3>
                     </div>
-                  )}
-                </div>
-                {/* Colors & Fonts */}
-                <div className="flex-1 space-y-3">
-                  {/* Color swatches with roles */}
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-1.5">Farger</p>
-                    <div className="flex flex-wrap gap-2">
-                      {getColors().map((c, i) => {
-                        const roleLabel = COLOR_ROLES.find(r => r.value === c.role)?.label
-                        return (
-                          <div key={i} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                            <div
-                              className="w-6 h-6 rounded-md border border-slate-200 shadow-inner"
-                              style={{ backgroundColor: c.hex.startsWith('#') ? c.hex : '#ccc' }}
-                            />
-                            <div className="flex flex-col">
-                              <span className="text-xs font-mono text-slate-600">{c.hex}</span>
-                              {c.role && <span className="text-[10px] text-indigo-600 font-medium">{roleLabel}</span>}
-                            </div>
-                          </div>
-                        )
-                      })}
+                    <span className="text-xs text-slate-400">Oppdateres når du endrer farger og fonter</span>
+                  </div>
+
+                  {/* Load Google Fonts with all weights */}
+                  {allFonts.map((f, i) => (
+                    // eslint-disable-next-line @next/next/no-page-custom-font
+                    <link key={`preview-font-${i}`} rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.family).replace(/%20/g, '+')}:wght@300;400;500;600;700;800&display=swap`} />
+                  ))}
+
+                  {/* Mock SoMe post card */}
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm max-w-lg mx-auto">
+                    {/* Image area with brand colors */}
+                    <div
+                      className="relative p-8 min-h-[220px] flex flex-col justify-center"
+                      style={{
+                        background: `linear-gradient(135deg, ${primary} 0%, ${secondary || primary} 100%)`,
+                      }}
+                    >
+                      {/* Decorative accent circle */}
+                      <div
+                        className="absolute top-4 right-4 w-16 h-16 rounded-full opacity-30"
+                        style={{ backgroundColor: accent || neutralLight || '#ffffff' }}
+                      />
+                      {/* Logo watermark */}
+                      {brandProfile.logo_url && (
+                        <img
+                          src={brandProfile.logo_url}
+                          alt=""
+                          className="absolute bottom-3 right-3 h-8 opacity-60"
+                          style={{ filter: 'brightness(10)' }}
+                        />
+                      )}
+                      {/* Heading */}
+                      <h4
+                        className="relative z-10 text-2xl mb-2 leading-tight"
+                        style={{
+                          fontFamily: headingFont ? `'${headingFont.family}', sans-serif` : 'sans-serif',
+                          fontWeight: headingFont?.weight || 700,
+                          color: neutralLight || '#ffffff',
+                        }}
+                      >
+                        Overskrift med din font
+                      </h4>
+                      {/* Subheading */}
+                      <p
+                        className="relative z-10 text-base opacity-90"
+                        style={{
+                          fontFamily: bodyFont ? `'${bodyFont.family}', sans-serif` : headingFont ? `'${headingFont.family}', sans-serif` : 'sans-serif',
+                          fontWeight: bodyFont?.weight || 400,
+                          color: neutralLight || '#ffffff',
+                        }}
+                      >
+                        Undertekst med brødtekst-font
+                      </p>
+                    </div>
+                    {/* Text area below image */}
+                    <div className="p-5 bg-white">
+                      <p
+                        className="text-sm leading-relaxed mb-3"
+                        style={{
+                          fontFamily: bodyFont ? `'${bodyFont.family}', sans-serif` : 'sans-serif',
+                          fontWeight: bodyFont?.weight || 400,
+                          color: neutralDark || '#1a1a1a',
+                        }}
+                      >
+                        Slik ser brødteksten ut i innleggene dine. Fonten, vekten og fargen oppdateres live når du endrer innstillingene nedenfor.
+                      </p>
+                      {/* CTA button */}
+                      <button
+                        className="px-5 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          backgroundColor: accent || primary,
+                          color: neutralLight || '#ffffff',
+                          fontFamily: headingFont ? `'${headingFont.family}', sans-serif` : 'sans-serif',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Aksent-knapp →
+                      </button>
                     </div>
                   </div>
-                  {/* Fonts */}
-                  {brandProfile.fonts.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-1.5">Fonter</p>
-                      {/* Load Google Fonts for preview */}
-                      {brandProfile.fonts.map((f, i) => f ? (
-                        // eslint-disable-next-line @next/next/no-page-custom-font
-                        <link key={`preview-font-${i}`} rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f).replace(/%20/g, '+')}&display=swap`} />
-                      ) : null)}
-                      <div className="flex flex-wrap gap-2">
-                        {brandProfile.fonts.map((f, i) => (
-                          <span key={i} className="text-sm bg-white border border-slate-200 rounded-lg px-3 py-1 text-slate-700" style={{ fontFamily: `'${f}', sans-serif` }}>
-                            {f}
-                          </span>
-                        ))}
+
+                  {/* Legend */}
+                  <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 justify-center">
+                    {[
+                      { label: 'Primær', color: primary },
+                      { label: 'Sekundær', color: secondary },
+                      { label: 'Aksent', color: accent },
+                      { label: 'Tekst mørk', color: neutralDark },
+                      { label: 'Tekst lys', color: neutralLight },
+                    ].filter(x => x.color && x.color !== '#333333').map((x, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-sm border border-slate-200" style={{ backgroundColor: x.color }} />
+                        <span className="text-[11px] text-slate-500">{x.label}</span>
                       </div>
-                    </div>
-                  )}
-                  {/* Tone */}
-                  {brandProfile.tone && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-1">Tone</p>
-                      <span className="text-sm bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg px-2.5 py-1 font-medium">
-                        {brandProfile.tone}
-                      </span>
-                    </div>
-                  )}
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-slate-500 mt-3 text-center">
+                    💡 Endre farger og fonter nedenfor — forhåndsvisningen oppdateres i sanntid
+                  </p>
                 </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-4 flex items-center gap-1">
-                💡 Ser dette riktig ut? Du kan justere alt nedenfor.
-              </p>
-            </div>
+              )
+            })()}
 
             {/* Source info banners */}
             <div className="space-y-3 mb-6">
@@ -1485,43 +1602,81 @@ function OnboardingPage() {
               </div>
 
               <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Type className="w-5 h-5 text-indigo-600" />
                   <h3 className="font-semibold text-slate-900">Fonter</h3>
                 </div>
-                <div className="space-y-3">
-                  {brandProfile.fonts.map((f, i) => (
-                    <div key={i}>
-                      {f && (
+                <p className="text-xs text-slate-500 mb-4">
+                  Velg rolle og vekt for hver font. Se forhåndsvisningen øverst for hvordan det ser ut.
+                </p>
+                <div className="space-y-4">
+                  {getFonts().map((f, i) => (
+                    <div key={i} className={`rounded-xl border p-3 transition-colors ${
+                      f.role === 'heading' ? 'border-indigo-200 bg-indigo-50/30' :
+                      f.role === 'body' ? 'border-emerald-200 bg-emerald-50/30' :
+                      'border-slate-200'
+                    }`}>
+                      {f.family && (
                         // eslint-disable-next-line @next/next/no-page-custom-font
                         <link
                           rel="stylesheet"
-                          href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f).replace(/%20/g, '+')}&display=swap`}
+                          href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.family).replace(/%20/g, '+')}:wght@300;400;500;600;700;800&display=swap`}
                         />
                       )}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-2">
                         <input
-                          value={f}
-                          onChange={(e) => updateListItem('fonts', i, e.target.value)}
-                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={f.family}
+                          onChange={(e) => updateFont(i, { family: e.target.value })}
+                          placeholder="Font-navn"
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                         />
-                        <button onClick={() => removeListItem('fonts', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
+                        <button onClick={() => removeFont(i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                      {f && (
-                        <div className="mt-1.5 pl-1">
-                          <p className="text-base font-medium text-slate-800" style={{ fontFamily: `'${f}', sans-serif` }}>
-                            {f}
+                      <div className="flex gap-2 mb-2">
+                        <select
+                          value={f.role}
+                          onChange={(e) => updateFont(i, { role: e.target.value as FontRole })}
+                          className={`flex-1 px-3 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500 ${
+                            f.role === 'heading' ? 'border-indigo-300 bg-indigo-50 text-indigo-800 font-medium' :
+                            f.role === 'body' ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-medium' :
+                            'border-slate-200 text-slate-600 bg-white'
+                          }`}
+                        >
+                          {FONT_ROLES.map(r => (
+                            <option key={r.value} value={r.value}>{r.label || 'Ingen rolle'}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={f.weight}
+                          onChange={(e) => updateFont(i, { weight: Number(e.target.value) })}
+                          className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          {FONT_WEIGHTS.map(w => (
+                            <option key={w.value} value={w.value}>{w.label} ({w.value})</option>
+                          ))}
+                        </select>
+                      </div>
+                      {f.family && (
+                        <div className="pl-1">
+                          <p
+                            className="text-lg text-slate-800 leading-tight"
+                            style={{ fontFamily: `'${f.family}', sans-serif`, fontWeight: f.weight }}
+                          >
+                            {f.family} — {FONT_WEIGHTS.find(w => w.value === f.weight)?.label || 'Regular'}
                           </p>
-                          <p className="text-sm text-slate-500" style={{ fontFamily: `'${f}', sans-serif` }}>
-                            Aa Bb Cc 123
+                          <p
+                            className="text-sm text-slate-500 mt-0.5"
+                            style={{ fontFamily: `'${f.family}', sans-serif`, fontWeight: f.weight }}
+                          >
+                            Aa Bb Cc Dd Ee Ff 0123456789
                           </p>
                         </div>
                       )}
                     </div>
                   ))}
-                  <button onClick={() => addListItem('fonts')} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
+                  <button onClick={addFont} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
                     <Plus className="w-3.5 h-3.5" /> Font
                   </button>
                 </div>
