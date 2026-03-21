@@ -1535,9 +1535,6 @@ function OnboardingPage() {
                         }}
                       >
                         Overskrift med din font
-                        <span className="block text-[10px] opacity-50 mt-1" style={{ fontWeight: 400 }}>
-                          {headingFont?.family || 'System'} — {FONT_WEIGHTS.find(w => w.value === (headingFont?.weight ?? 700))?.label || 'Bold'}
-                        </span>
                       </div>
                       {/* Subheading */}
                       <div
@@ -1549,9 +1546,6 @@ function OnboardingPage() {
                         }}
                       >
                         Undertekst med brødtekst-font
-                        <span className="block text-[10px] opacity-50 mt-1" style={{ fontWeight: 400 }}>
-                          {bodyFont?.family || headingFont?.family || 'System'} — {FONT_WEIGHTS.find(w => w.value === (bodyFont?.weight ?? 400))?.label || 'Regular'}
-                        </span>
                       </div>
                     </div>
                     {/* Text area below image */}
@@ -1604,61 +1598,21 @@ function OnboardingPage() {
               )
             })()}
 
-            {/* Source info banners */}
-            <div className="space-y-3 mb-6">
-              {/* Tone from SoMe banner */}
-              {toneProfile && (
-                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-purple-800">Tone fra SoMe-analyse inkludert</p>
-                    <p className="text-xs text-purple-600 mt-1">
-                      Do&apos;s, don&apos;ts og tone-nøkkelord er merget fra {socialPosts.filter(p => p.text).length} analyserte poster.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Post image colors banner */}
-              {postImageColors.length > 0 && (
-                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
-                  <Palette className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-800">Farger fra SoMe-bilder inkludert</p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Vi analyserte bildene fra postene dine og fant merkevarefarger som er lagt til.
-                      {postColorConfidence === 'low' && ' Konfidensen er lav — sjekk at fargene stemmer.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Section 1: Description & Tagline */}
-            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
-              <h3 className="font-semibold text-slate-900 mb-4">Beskrivelse</h3>
-              <div className="space-y-4">
+            {/* Post image colors banner (first) */}
+            {postImageColors.length > 0 && (
+              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-6 flex items-start gap-3">
+                <Palette className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Beskrivelse</label>
-                  <textarea
-                    value={brandProfile.description || ''}
-                    onChange={(e) => updateBrandField('description', e.target.value)}
-                    rows={3}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Tagline</label>
-                  <input
-                    value={brandProfile.tagline || ''}
-                    onChange={(e) => updateBrandField('tagline', e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 text-slate-900"
-                  />
+                  <p className="text-sm font-medium text-blue-800">Farger fra SoMe-bilder inkludert</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Vi analyserte bildene fra postene dine og fant merkevarefarger som er lagt til.
+                    {postColorConfidence === 'low' && ' Konfidensen er lav — sjekk at fargene stemmer.'}
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Section 2: Colors & Fonts (side-by-side) */}
+            {/* Section 1: Colors & Fonts (side-by-side) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-2">
@@ -1801,6 +1755,43 @@ function OnboardingPage() {
                 </div>
               </div>
             </div>
+
+            {/* Section 2: Description & Tagline */}
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
+              <h3 className="font-semibold text-slate-900 mb-4">Beskrivelse</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Beskrivelse</label>
+                  <textarea
+                    value={brandProfile.description || ''}
+                    onChange={(e) => updateBrandField('description', e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Tagline</label>
+                  <input
+                    value={brandProfile.tagline || ''}
+                    onChange={(e) => updateBrandField('tagline', e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 text-slate-900"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Tone from SoMe banner */}
+            {toneProfile && (
+              <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 mb-6 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-purple-800">Tone fra SoMe-analyse inkludert</p>
+                  <p className="text-xs text-purple-600 mt-1">
+                    Do&apos;s, don&apos;ts og tone-nøkkelord er merget fra {socialPosts.filter(p => p.text).length} analyserte poster.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Section 3: Tone & Voice */}
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
