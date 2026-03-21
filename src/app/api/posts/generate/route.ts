@@ -345,25 +345,38 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
 
           if (imageResponse.ok) {
             const imageData = await imageResponse.json()
-            const content = imageData.choices?.[0]?.message?.content
-
-            if (Array.isArray(content)) {
-              for (const part of content) {
-                if (part.type === 'image_url' && part.image_url?.url) {
-                  if (part.image_url.url.startsWith('data:')) {
-                    const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
-                    if (match) { mimeType = match[1]; b64 = match[2] }
-                  } else {
-                    imageUrl = part.image_url.url
-                  }
-                } else if (part.inline_data) {
-                  b64 = part.inline_data.data
-                  mimeType = part.inline_data.mime_type || 'image/png'
-                }
+            const message = imageData.choices?.[0]?.message
+            
+            // OpenRouter returns images in message.images array (separate from content)
+            const images = message?.images || []
+            if (images.length > 0) {
+              const imgUrl = images[0]?.image_url?.url
+              if (imgUrl?.startsWith('data:')) {
+                const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/)
+                if (match) { mimeType = match[1]; b64 = match[2] }
+              } else if (imgUrl) {
+                imageUrl = imgUrl
               }
-            } else if (typeof content === 'string') {
-              const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
-              if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
+            }
+
+            // Fallback: check content for inline images
+            if (!b64 && !imageUrl) {
+              const content = message?.content
+              if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'image_url' && part.image_url?.url) {
+                    if (part.image_url.url.startsWith('data:')) {
+                      const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+                      if (match) { mimeType = match[1]; b64 = match[2] }
+                    } else {
+                      imageUrl = part.image_url.url
+                    }
+                  }
+                }
+              } else if (typeof content === 'string') {
+                const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
+                if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
+              }
             }
           } else {
             console.error('Nano Banana error:', imageResponse.status, await imageResponse.text())
