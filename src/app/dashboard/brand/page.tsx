@@ -6,10 +6,15 @@ import { useRouter } from 'next/navigation'
 import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
+type BrandColor = {
+  hex: string
+  role: string
+}
+
 type BrandProfile = {
   id: string
   org_id: string
-  colors: string[]
+  colors: (string | BrandColor)[]
   fonts: string[]
   tone: string | null
   voice_description: string | null
@@ -323,15 +328,31 @@ export default function BrandPage() {
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-2">Farger</p>
                 <div className="flex flex-wrap gap-2">
-                  {brand.colors.map((color, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
-                      <div
-                        className="w-5 h-5 rounded-md border border-slate-200"
-                        style={{ backgroundColor: color }}
-                      />
-                      <span className="text-xs font-mono text-slate-700">{color}</span>
-                    </div>
-                  ))}
+                  {brand.colors.map((color, i) => {
+                    const hex = typeof color === 'string' ? color : color.hex
+                    const role = typeof color === 'string' ? null : color.role
+                    const roleLabels: Record<string, string> = {
+                      primary: 'Primær',
+                      secondary: 'Sekundær',
+                      accent: 'Aksent',
+                      neutral_dark: 'Tekst mørk',
+                      neutral_light: 'Tekst lys',
+                    }
+                    return (
+                      <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <div
+                          className="w-5 h-5 rounded-md border border-slate-200"
+                          style={{ backgroundColor: hex }}
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-mono text-slate-700">{hex}</span>
+                          {role && roleLabels[role] && (
+                            <span className="text-[10px] text-indigo-600 font-medium">{roleLabels[role]}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

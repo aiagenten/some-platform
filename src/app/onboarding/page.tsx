@@ -5,8 +5,15 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown, Upload, Image as ImageIcon } from 'lucide-react'
 
+type ColorRole = 'primary' | 'secondary' | 'accent' | 'neutral_dark' | 'neutral_light' | ''
+
+type BrandColor = {
+  hex: string
+  role: ColorRole
+}
+
 type BrandProfile = {
-  colors: string[]
+  colors: string[] | BrandColor[]
   fonts: string[]
   logo_url: string | null
   tone: string
@@ -19,6 +26,33 @@ type BrandProfile = {
   dont_list: string[]
   key_messages: string[]
   industry: string
+}
+
+const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = [
+  { value: 'primary', label: 'Primær', description: 'Hovedmerkefargen' },
+  { value: 'secondary', label: 'Sekundær', description: 'Støttefarge' },
+  { value: 'accent', label: 'Aksent', description: 'CTA og highlights' },
+  { value: 'neutral_dark', label: 'Tekst mørk', description: 'Tekst på lys bakgrunn' },
+  { value: 'neutral_light', label: 'Tekst lys', description: 'Tekst på mørk bakgrunn' },
+  { value: '', label: 'Ingen rolle', description: 'Ekstra farge' },
+]
+
+// Helper: normalize colors array to BrandColor[] format
+function normalizeColors(colors: string[] | BrandColor[]): BrandColor[] {
+  if (!colors || colors.length === 0) return []
+  if (typeof colors[0] === 'string') {
+    return (colors as string[]).map((hex, i) => ({
+      hex,
+      role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'accent' : '') as ColorRole,
+    }))
+  }
+  return colors as BrandColor[]
+}
+
+// Helper: get flat hex array for backward compat (used by content generator)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getColorHexArray(colors: BrandColor[]): string[] {
+  return colors.map(c => c.hex)
 }
 
 type ToneProfile = {
@@ -391,26 +425,30 @@ function OnboardingPage() {
         ).slice(0, 8)
       }
 
-      // Merge colors from post images if available and confidence is medium+
-      if (postImageColors.length > 0 && (postColorConfidence === 'high' || postColorConfidence === 'medium')) {
-        // Post image colors take priority — put them first, then add unique scraped colors
-        const mergedColors = [...postImageColors]
-        for (const c of (data.colors || [])) {
-          if (!mergedColors.some(mc => mc.toLowerCase() === c.toLowerCase())) {
-            mergedColors.push(c)
+      // Merge colors from post images if available
+      let allColors: string[] = [...(data.colors || [])]
+      if (postImageColors.length > 0) {
+        if (postColorConfidence === 'high' || postColorConfidence === 'medium') {
+          // Post image colors take priority
+          const merged = [...postImageColors]
+          for (const c of allColors) {
+            if (!merged.some(mc => mc.toLowerCase() === c.toLowerCase())) {
+              merged.push(c)
+            }
+          }
+          allColors = merged
+        } else {
+          // Low confidence — append after scraped colors
+          for (const c of postImageColors) {
+            if (!allColors.some(mc => mc.toLowerCase() === c.toLowerCase())) {
+              allColors.push(c)
+            }
           }
         }
-        data.colors = mergedColors.slice(0, 6)
-      } else if (postImageColors.length > 0) {
-        // Low confidence — append post image colors after scraped ones for reference
-        const mergedColors = [...(data.colors || [])]
-        for (const c of postImageColors) {
-          if (!mergedColors.some(mc => mc.toLowerCase() === c.toLowerCase())) {
-            mergedColors.push(c)
-          }
-        }
-        data.colors = mergedColors.slice(0, 6)
       }
+
+      // Normalize to BrandColor[] with auto-assigned roles
+      data.colors = normalizeColors(allColors.slice(0, 8))
 
       setBrandProfile(data)
       setStep(4)
@@ -423,10 +461,12 @@ function OnboardingPage() {
   const handleFinish = async () => {
     if (!orgId || !brandProfile) return
     setSaving(true)
+    // Save colors as BrandColor[] objects with roles
+    const colorsToSave = normalizeColors(brandProfile.colors)
     await supabase.from('brand_profiles').upsert({
       org_id: orgId,
       source_url: websiteUrl,
-      colors: brandProfile.colors,
+      colors: colorsToSave,
       fonts: brandProfile.fonts,
       logo_url: brandProfile.logo_url,
       tagline: brandProfile.tagline,
@@ -463,23 +503,60 @@ function OnboardingPage() {
     setBrandProfile({ ...brandProfile, [field]: value })
   }
 
-  const updateListItem = (field: 'do_list' | 'dont_list' | 'colors' | 'fonts' | 'tone_keywords' | 'key_messages', index: number, value: string) => {
+  const updateListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages', index: number, value: string) => {
     if (!brandProfile) return
     const list = [...(brandProfile[field] as string[])]
     list[index] = value
     setBrandProfile({ ...brandProfile, [field]: list })
   }
 
-  const addListItem = (field: 'do_list' | 'dont_list' | 'colors' | 'fonts' | 'tone_keywords' | 'key_messages') => {
+  const addListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages') => {
     if (!brandProfile) return
     setBrandProfile({ ...brandProfile, [field]: [...(brandProfile[field] as string[]), ''] })
   }
 
-  const removeListItem = (field: 'do_list' | 'dont_list' | 'colors' | 'fonts' | 'tone_keywords' | 'key_messages', index: number) => {
+  const removeListItem = (field: 'do_list' | 'dont_list' | 'fonts' | 'tone_keywords' | 'key_messages', index: number) => {
     if (!brandProfile) return
     const list = [...(brandProfile[field] as string[])]
     list.splice(index, 1)
     setBrandProfile({ ...brandProfile, [field]: list })
+  }
+
+  // Color-specific helpers (BrandColor objects)
+  const getColors = (): BrandColor[] => {
+    if (!brandProfile) return []
+    return normalizeColors(brandProfile.colors)
+  }
+
+  const updateColor = (index: number, hex: string) => {
+    if (!brandProfile) return
+    const colors = getColors()
+    colors[index] = { ...colors[index], hex }
+    setBrandProfile({ ...brandProfile, colors })
+  }
+
+  const updateColorRole = (index: number, role: ColorRole) => {
+    if (!brandProfile) return
+    const colors = getColors()
+    // If assigning primary/secondary/accent, remove that role from other colors first
+    if (role && role !== 'neutral_dark' && role !== 'neutral_light') {
+      colors.forEach((c, i) => { if (i !== index && c.role === role) c.role = '' })
+    }
+    colors[index] = { ...colors[index], role }
+    setBrandProfile({ ...brandProfile, colors })
+  }
+
+  const addColor = () => {
+    if (!brandProfile) return
+    const colors = getColors()
+    setBrandProfile({ ...brandProfile, colors: [...colors, { hex: '#000000', role: '' as ColorRole }] })
+  }
+
+  const removeColor = (index: number) => {
+    if (!brandProfile) return
+    const colors = getColors()
+    colors.splice(index, 1)
+    setBrandProfile({ ...brandProfile, colors: [...colors] })
   }
 
   const progressPercent = ((step - 1) / (STEPS.length - 1)) * 100
@@ -1256,19 +1333,25 @@ function OnboardingPage() {
                 </div>
                 {/* Colors & Fonts */}
                 <div className="flex-1 space-y-3">
-                  {/* Color swatches */}
+                  {/* Color swatches with roles */}
                   <div>
                     <p className="text-xs font-medium text-slate-500 mb-1.5">Farger</p>
                     <div className="flex flex-wrap gap-2">
-                      {brandProfile.colors.map((c, i) => (
-                        <div key={i} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                          <div
-                            className="w-6 h-6 rounded-md border border-slate-200 shadow-inner"
-                            style={{ backgroundColor: c.startsWith('#') ? c : '#ccc' }}
-                          />
-                          <span className="text-xs font-mono text-slate-600">{c}</span>
-                        </div>
-                      ))}
+                      {getColors().map((c, i) => {
+                        const roleLabel = COLOR_ROLES.find(r => r.value === c.role)?.label
+                        return (
+                          <div key={i} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                            <div
+                              className="w-6 h-6 rounded-md border border-slate-200 shadow-inner"
+                              style={{ backgroundColor: c.hex.startsWith('#') ? c.hex : '#ccc' }}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-xs font-mono text-slate-600">{c.hex}</span>
+                              {c.role && <span className="text-[10px] text-indigo-600 font-medium">{roleLabel}</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                   {/* Fonts */}
@@ -1367,28 +1450,47 @@ function OnboardingPage() {
                   <h3 className="font-semibold text-slate-900">Farger</h3>
                 </div>
                 <p className="text-xs text-slate-500 mb-4">
-                  Hentet fra {postImageColors.length > 0 ? 'nettsiden og SoMe-bildene dine' : 'nettsiden din'}. Klikk for å justere dersom de ikke stemmer med ønsket profil.
+                  Hentet fra {postImageColors.length > 0 ? 'nettsiden og SoMe-bildene dine' : 'nettsiden din'}. Velg rolle for hver farge slik at AI-en vet hvordan de skal brukes.
                 </p>
-                <div className="space-y-2">
-                  {brandProfile.colors.map((c, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={c.startsWith('#') ? c : '#000000'}
-                        onChange={(e) => updateListItem('colors', i, e.target.value)}
-                        className="w-10 h-10 rounded-xl border border-slate-200 cursor-pointer p-1"
-                      />
-                      <input
-                        value={c}
-                        onChange={(e) => updateListItem('colors', i, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                      <button onClick={() => removeListItem('colors', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  <button onClick={() => addListItem('colors')} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
+                <div className="space-y-3">
+                  {getColors().map((c, i) => {
+                    return (
+                      <div key={i} className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <input
+                          type="color"
+                          value={c.hex.startsWith('#') ? c.hex : '#000000'}
+                          onChange={(e) => updateColor(i, e.target.value)}
+                          className="w-10 h-10 rounded-xl border border-slate-200 cursor-pointer p-1 shrink-0"
+                        />
+                        <input
+                          value={c.hex}
+                          onChange={(e) => updateColor(i, e.target.value)}
+                          className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        />
+                        <select
+                          value={c.role}
+                          onChange={(e) => updateColorRole(i, e.target.value as ColorRole)}
+                          className={`flex-1 min-w-[140px] px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                            c.role === 'primary' ? 'border-indigo-300 bg-indigo-50 text-indigo-800 font-medium' :
+                            c.role === 'secondary' ? 'border-purple-300 bg-purple-50 text-purple-800 font-medium' :
+                            c.role === 'accent' ? 'border-amber-300 bg-amber-50 text-amber-800 font-medium' :
+                            c.role === 'neutral_dark' || c.role === 'neutral_light' ? 'border-slate-300 bg-slate-50 text-slate-800 font-medium' :
+                            'border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {COLOR_ROLES.map(r => (
+                            <option key={r.value} value={r.value}>
+                              {r.label}{r.description ? ` — ${r.description}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <button onClick={() => removeColor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-1 shrink-0">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                  <button onClick={addColor} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
                     <Plus className="w-3.5 h-3.5" /> Farge
                   </button>
                 </div>
