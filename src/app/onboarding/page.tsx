@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown, Upload, Image as ImageIcon } from 'lucide-react'
+import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown, Upload, Image as ImageIcon, AlertTriangle } from 'lucide-react'
 
 type ColorRole = 'primary' | 'secondary' | 'accent' | 'neutral_dark' | 'neutral_light' | ''
 
 type BrandColor = {
   hex: string
   role: ColorRole
+  suspicious?: boolean // flagged as possible framework/utility color
 }
 
 type FontRole = 'heading' | 'body' | ''
@@ -45,22 +46,44 @@ const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = 
   { value: '', label: 'Ingen rolle', description: 'Ekstra farge' },
 ]
 
-// Check if a color is pure white or pure black (only filter these extremes)
+// Common framework/utility colors (Tailwind, Bootstrap, etc.)
+const FRAMEWORK_COLORS = new Set([
+  // Tailwind blues
+  '#3b82f6', '#2563eb', '#1d4ed8', '#60a5fa', '#93c5fd',
+  // Tailwind reds
+  '#ef4444', '#dc2626', '#b91c1c', '#f87171',
+  // Tailwind greens
+  '#22c55e', '#16a34a', '#15803d', '#4ade80',
+  // Tailwind oranges
+  '#f97316', '#ea580c', '#c2410c', '#fb923c',
+  // Tailwind yellows
+  '#eab308', '#ca8a04', '#facc15',
+  // Tailwind purples
+  '#a855f7', '#9333ea', '#7c3aed', '#8b5cf6',
+  // Bootstrap
+  '#0d6efd', '#198754', '#dc3545', '#ffc107', '#0dcaf0',
+  // Generic
+  '#007bff', '#28a745', '#17a2b8',
+])
+
+function isSuspiciousColor(hex: string): boolean {
+  return FRAMEWORK_COLORS.has(hex.toLowerCase())
+}
+
 function isPureWhiteOrBlack(hex: string): boolean {
   const h = hex.toLowerCase().replace('#', '')
-  if (h.length !== 6) return false
-  return h === 'ffffff' || h === '000000' || h === 'fff' || h === '000'
+  return h === 'ffffff' || h === '000000'
 }
 
 // Convert flat hex strings to BrandColor[] with smart role assignment
 function hexArrayToColors(hexArray: string[]): BrandColor[] {
-  // Only filter out pure #000000 and #ffffff — trust the AI's color selection
   const filtered = hexArray.filter(hex => !isPureWhiteOrBlack(hex))
 
-  // Keep all brand colors AI returned (max 5), auto-assign first two roles
+  // Keep all brand colors, flag suspicious ones
   const brandColors: BrandColor[] = filtered.slice(0, 5).map((hex, i) => ({
     hex,
     role: (i === 0 ? 'primary' : i === 1 ? 'secondary' : '') as ColorRole,
+    suspicious: isSuspiciousColor(hex),
   }))
 
   // Add text dark and text light if not already present
@@ -1648,7 +1671,8 @@ function OnboardingPage() {
                 <div className="space-y-3">
                   {getColors().map((c, i) => {
                     return (
-                      <div key={i} className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      <div key={i}>
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                         <input
                           type="color"
                           value={c.hex.startsWith('#') ? c.hex : '#000000'}
@@ -1677,10 +1701,17 @@ function OnboardingPage() {
                             </option>
                           ))}
                         </select>
-                        <button onClick={() => removeColor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-1 shrink-0">
+                        <button onClick={() => removeColor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-1 shrink-0" title="Fjern farge">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
+                      {c.suspicious && (
+                        <div className="flex items-center gap-1.5 mt-1 ml-12 text-amber-600">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[11px]">Denne kan være en standard rammeverk-farge — fjern den hvis den ikke er del av merkevaren din</span>
+                        </div>
+                      )}
+                    </div>
                     )
                   })}
                   <button onClick={addColor} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
