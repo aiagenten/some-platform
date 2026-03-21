@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tokenData = await tokenRes.json()
+    console.log('LinkedIn token response - scope:', tokenData.scope, 'expires_in:', tokenData.expires_in)
     const accessToken = tokenData.access_token
     const expiresIn = tokenData.expires_in || 5184000
     const refreshToken = tokenData.refresh_token || null
@@ -128,8 +129,10 @@ export async function GET(request: NextRequest) {
         }
       )
 
+      console.log('LinkedIn organizationAcls response:', orgsRes.status)
       if (orgsRes.ok) {
         const orgsData = await orgsRes.json()
+        console.log('LinkedIn orgs found:', JSON.stringify(orgsData).substring(0, 500))
         const elements = orgsData.elements || []
 
         for (const org of elements) {
