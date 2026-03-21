@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 // Map format names to prompt-bibliotek keys
 const FORMAT_TO_PROMPT_KEY: Record<string, string> = {
@@ -34,7 +33,8 @@ const PLATFORM_FORMAT_MAP: Record<string, Record<string, string>> = {
 
 // Load content templates
 import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bibliotek.json'
-import imagePrompts from '../../../../../content-templates/s4-image-prompts.json'
+// Image prompts template (reserved for custom style presets)
+// import imagePrompts from '../../../../../content-templates/s4-image-prompts.json'
 
 export async function POST(request: NextRequest) {
   try {
@@ -228,7 +228,9 @@ Returner dette JSON-formatet:
           }
 
           if (parsed.text) {
-            generatedText = (parsed.text as string).replace(/\\n/g, '\n')
+            generatedText = (parsed.text as string)
+              .replace(/\\n/g, '\n')
+              .split('\n').map(line => line.trimStart()).join('\n') // Remove leading spaces/indentation
             generatedCaption = generatedText
             generatedHashtags = (parsed.hashtags as string[]) || []
             bestTime = (parsed.best_time as string) || null
@@ -250,70 +252,105 @@ Returner dette JSON-formatet:
       }
     }
 
-    // Generate image via OpenAI Images API
+    // Generate image via OpenRouter (Nano Banana / GPT Image)
     let imageUrl = null
 
     if (!regenerate_text) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const imagePromptData = (imagePrompts as Record<string, any>)
-      const sceneKeys = Object.keys(imagePromptData.scene_variants)
-      // Pick a relevant scene based on content or random
-      const sceneKey = sceneKeys[Math.floor(Math.random() * sceneKeys.length)]
-      const scene = imagePromptData.scene_variants[sceneKey]
-      const variants = scene.variants
-      const variant = variants[Math.floor(Math.random() * variants.length)]
+      // Build image prompt from the generated text context
+      const brandColorDesc = brandProfile?.colors?.length
+        ? brandProfile.colors
+            .filter((c: { hex: string; role: string }) => c.role && c.role !== 'neutral_dark' && c.role !== 'neutral_light')
+            .map((c: { hex: string; role: string }) => `${c.role}: ${c.hex}`)
+            .join(', ')
+        : 'professional, clean colors'
 
-      // Build image prompt
-      const brandColors = brandProfile?.colors?.length
-        ? brandProfile.colors.join(' and ')
-        : 'muted earthy tones'
-      const industry = brandProfile?.description || 'technology'
+      // Default image style — photorealistic Scandinavian
+      const imageStyle = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
 
-      let imageGenPrompt = scene.base_prompt
-        .replace(/\{brand_colors\}/g, brandColors)
-        .replace(/\{industry\}/g, industry)
+      const imageContext = imageSuggestion || generatedText?.substring(0, 200) || topic || 'professional business scene'
 
-      if (variant?.addition) {
-        imageGenPrompt += ' ' + variant.addition
-      }
+      const imageGenPrompt = `${imageStyle}
 
-      // Add global rules
-      imageGenPrompt += '\n\nIMPORTANT: ' + imagePromptData.global_rules.always.join('. ') + '.'
-      imageGenPrompt += '\n\nNEVER: ' + imagePromptData.global_rules.never.join('. ') + '.'
+Scene: ${imageContext}
 
-      // Determine aspect ratio based on platform
-      const size = platform === 'linkedin' ? '1536x1024' : '1024x1024'
+Brand colors for subtle accent/props: ${brandColorDesc}
+Industry: ${brandProfile?.description || 'technology and business'}
+
+IMPORTANT: No text overlays, no UI elements, no logos. Pure photograph.`
+
+      // Use Nano Banana (Gemini) via OpenRouter — generates images via chat completion
+      const imageModel = 'google/gemini-2.5-flash-image'
 
       try {
-        const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+        const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://some.aiagenten.no',
           },
           body: JSON.stringify({
-            model: 'gpt-image-1',
-            prompt: imageGenPrompt,
-            n: 1,
-            size: size,
-            quality: 'medium',
+            model: imageModel,
+            messages: [
+              {
+                role: 'user',
+                content: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${imageGenPrompt}`
+              }
+            ],
+            // Nano Banana needs these for image output
+            provider: {
+              require_parameters: true,
+            },
           }),
         })
 
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
-          // gpt-image-1 returns base64
-          const b64 = imageData.data?.[0]?.b64_json
-          if (b64) {
+          const content = imageData.choices?.[0]?.message?.content
+
+          // Nano Banana returns inline_data with base64 image
+          let b64: string | null = null
+          let mimeType = 'image/png'
+
+          if (Array.isArray(content)) {
+            // Structured content with parts
+            for (const part of content) {
+              if (part.type === 'image_url' && part.image_url?.url) {
+                // Could be data URL or regular URL
+                if (part.image_url.url.startsWith('data:')) {
+                  const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+                  if (match) {
+                    mimeType = match[1]
+                    b64 = match[2]
+                  }
+                } else {
+                  imageUrl = part.image_url.url
+                }
+              } else if (part.inline_data) {
+                b64 = part.inline_data.data
+                mimeType = part.inline_data.mime_type || 'image/png'
+              }
+            }
+          } else if (typeof content === 'string') {
+            // Check if it contains a base64 image
+            const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
+            if (b64Match) {
+              mimeType = `image/${b64Match[1]}`
+              b64 = b64Match[2]
+            }
+          }
+
+          if (b64 && !imageUrl) {
             // Upload to Supabase Storage
-            const fileName = `generated/${org_id}/${Date.now()}.png`
+            const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
+            const fileName = `generated/${org_id}/${Date.now()}.${ext}`
             const buffer = Buffer.from(b64, 'base64')
 
             const { data: uploadData, error: uploadError } = await supabase
               .storage
               .from('post-images')
               .upload(fileName, buffer, {
-                contentType: 'image/png',
+                contentType: mimeType,
                 upsert: false,
               })
 
@@ -322,19 +359,14 @@ const imagePromptData = (imagePrompts as Record<string, any>)
                 .storage
                 .from('post-images')
                 .getPublicUrl(fileName)
-
               imageUrl = urlData.publicUrl
             } else {
-              console.error('Upload error:', uploadError)
-              // Fallback: use data URL (not ideal for production)
-              imageUrl = `data:image/png;base64,${b64.substring(0, 100)}...`
+              console.error('Image upload error:', uploadError)
             }
-          } else if (imageData.data?.[0]?.url) {
-            imageUrl = imageData.data[0].url
           }
         } else {
           const errText = await imageResponse.text()
-          console.error('OpenAI Images error:', errText)
+          console.error('Image generation error:', imageResponse.status, errText)
         }
       } catch (imgErr) {
         console.error('Image generation error:', imgErr)
