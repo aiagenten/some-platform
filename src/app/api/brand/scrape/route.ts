@@ -10,8 +10,14 @@ const BRAND_EXTRACTION_PROMPT = `Du er en merkevareanalytiker. Analyser følgend
 
 VIKTIG: Skriv ALT på norsk (bokmål). Alle beskrivelser, dos/donts, nøkkelmeldinger — alt skal være på norsk.
 
+VIKTIG OM FARGER OG FONTER:
+- Bruk CSS-variabelfarger og font-family-navn som er oppgitt i dataene. Dette er de FAKTISKE merkevare-fargene/-fontene, ikke gjett.
+- Hvis fontnavn er oppgitt i dataene, bruk de eksakte navnene. Ikke gjett.
+- Utvid korte hex-koder: #f90 → #ff9900 før du vurderer om det er en merkevarefarge.
+- Ignorer standard rammeverk-farger og nøytrale farger som #fff, #000, #333, #666, #999, #ccc, #eee, #f5f5f5.
+
 Returner et JSON-objekt med disse feltene:
-- colors: array med 3-5 HEX-fargekoder som representerer merkevarens faktiske BRAND-farger (e.g. ["#7c3aed", "#1a1a2e", "#f5f5f5"]). 
+- colors: array med 3-5 HEX-fargekoder som representerer merkevarens faktiske BRAND-farger (e.g. ["#7c3aed", "#1a1a2e", "#f5f5f5"]).
   REGLER FOR FARGEVALG:
   * Prioriter CSS-variabler (--primary, --brand, --accent, --color-primary osv.)
   * Prioriter farger fra logo og fremtredende UI-elementer (knapper, overskrifter, bakgrunner)
@@ -19,7 +25,8 @@ Returner et JSON-objekt med disse feltene:
   * IGNORER Tailwind standard-farger som #2563eb (blue-600), #3b82f6 (blue-500) hvis de ikke er tydelig merkevarefarger
   * Velg de mest DISTINKTE og KARAKTERISTISKE fargene for merkevaren
   * Maks 5 farger — fokuser på kvalitet, ikke kvantitet
-- fonts: array med fontnavn brukt (e.g. ["Inter", "Georgia"])
+  * Alle fargekoder MÅ være fulle 6-tegns hex (#ff9900, IKKE #f90)
+- fonts: array med fontnavn brukt (e.g. ["Inter", "Georgia"]). Bruk fontnavn fra CSS font-family og Google Fonts som er oppgitt i dataene.
 - logo_url: URL til logoen hvis funnet, eller null
 - tone: ett norsk ord for tonen (f.eks. "profesjonell", "leken", "autoritativ", "vennlig")
 - voice_description: 1-2 setninger på norsk som beskriver merkevarens stemme
@@ -33,6 +40,131 @@ Returner et JSON-objekt med disse feltene:
 - industry: bransjen/sektoren (på norsk)
 
 Svar KUN med gyldig JSON, ingen markdown, ingen forklaring.`
+
+// Common framework/utility colors to filter out
+const FRAMEWORK_COLORS = new Set([
+  '#fff', '#ffffff', '#000', '#000000',
+  '#333', '#333333', '#666', '#666666', '#999', '#999999',
+  '#ccc', '#cccccc', '#eee', '#eeeeee',
+  '#f5f5f5', '#e5e7eb', '#d1d5db', '#9ca3af', '#6b7280', '#4b5563', '#374151', '#1f2937', '#111827',
+])
+
+function expandHex(hex: string): string {
+  const h = hex.toLowerCase()
+  if (/^#[0-9a-f]{3}$/.test(h)) {
+    return `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`
+  }
+  return h
+}
+
+function isFrameworkColor(hex: string): boolean {
+  const expanded = expandHex(hex.toLowerCase())
+  return FRAMEWORK_COLORS.has(expanded) || FRAMEWORK_COLORS.has(hex.toLowerCase())
+}
+
+function extractFontsFromCSS(cssText: string): string[] {
+  const fonts = new Set<string>()
+  // Match font-family declarations
+  const fontFamilyMatches = cssText.match(/font-family\s*:\s*([^;}]+)/gi) || []
+  for (const match of fontFamilyMatches) {
+    const value = match.replace(/font-family\s*:\s*/i, '').trim()
+    // Split by comma and clean each font name
+    for (const font of value.split(',')) {
+      const cleaned = font.trim().replace(/^["']|["']$/g, '').trim()
+      // Skip generic families and system fonts
+      if (cleaned && !/^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|-apple-system|BlinkMacSystemFont|Segoe UI|inherit|initial|unset)$/i.test(cleaned)) {
+        fonts.add(cleaned)
+      }
+    }
+  }
+  return Array.from(fonts)
+}
+
+function extractGoogleFonts($: cheerio.CheerioAPI): string[] {
+  const fonts = new Set<string>()
+  // Google Fonts <link> tags
+  $('link[href*="fonts.googleapis.com"]').each((_, el) => {
+    const href = $(el).attr('href') || ''
+    // Handle both /css?family= and /css2?family= formats
+    const familyMatches = href.match(/family=([^&]+)/g) || []
+    for (const fm of familyMatches) {
+      const families = fm.replace('family=', '').split('|')
+      for (const f of families) {
+        const name = decodeURIComponent(f.split(':')[0].split('@')[0]).replace(/\+/g, ' ').trim()
+        if (name) fonts.add(name)
+      }
+    }
+  })
+  return Array.from(fonts)
+}
+
+function extractFontsFromImports(cssText: string): string[] {
+  const fonts = new Set<string>()
+  const importMatches = cssText.match(/@import\s+url\s*\(\s*['"]?([^'")]+)['"]?\s*\)/gi) || []
+  for (const imp of importMatches) {
+    const urlMatch = imp.match(/url\s*\(\s*['"]?([^'")]+)['"]?\s*\)/i)
+    if (urlMatch && urlMatch[1].includes('fonts.googleapis.com')) {
+      const familyMatches = urlMatch[1].match(/family=([^&]+)/g) || []
+      for (const fm of familyMatches) {
+        const families = fm.replace('family=', '').split('|')
+        for (const f of families) {
+          const name = decodeURIComponent(f.split(':')[0].split('@')[0]).replace(/\+/g, ' ').trim()
+          if (name) fonts.add(name)
+        }
+      }
+    }
+  }
+  return Array.from(fonts)
+}
+
+function extractBrandColors(cssText: string): { priority: string[]; contextual: string[]; all: string[] } {
+  // CSS custom properties (highest priority)
+  const cssVarMatches = cssText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+  const cssVarColors = cssVarMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
+
+  // Colors from brand-relevant CSS selectors (buttons, headings, links, .btn, .primary)
+  const contextualColors: string[] = []
+  const brandContextRegex = /(?:^|\}|\{|;)\s*(?:[^{}]*(?:button|\.btn|\.primary|\.accent|\.brand|h[1-6]|\.hero|\.cta|nav|header|a(?:\s|:|\.|,|\{))[^{}]*\{[^}]*(?:(?:background-)?color|border-color)\s*:\s*(#[0-9a-fA-F]{3,8}))/gi
+  let match
+  while ((match = brandContextRegex.exec(cssText)) !== null) {
+    if (match[1]) contextualColors.push(match[1])
+  }
+
+  // Also extract color/background-color/border-color property values directly
+  const colorPropMatches = cssText.match(/(?:^|[{;])\s*(?:color|background-color|border-color)\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
+  const propColors = colorPropMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
+
+  // All hex colors as fallback
+  const allColorMatches = cssText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+
+  // Filter and expand
+  const filterAndExpand = (colors: string[]) =>
+    Array.from(new Set(colors.map(expandHex).filter(c => !isFrameworkColor(c))))
+
+  return {
+    priority: filterAndExpand(cssVarColors),
+    contextual: filterAndExpand([...contextualColors, ...propColors]),
+    all: filterAndExpand(allColorMatches),
+  }
+}
+
+function extractInlineStyleColors($: cheerio.CheerioAPI, selectors: string): string[] {
+  const colors: string[] = []
+  $(selectors).each((_, el) => {
+    const style = $(el).attr('style') || ''
+    const matches = style.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+    colors.push(...matches)
+  })
+  return Array.from(new Set(colors.map(expandHex).filter(c => !isFrameworkColor(c))))
+}
+
+function buildColorSummary(priority: string[], contextual: string[], all: string[]): string {
+  const parts: string[] = []
+  if (priority.length) parts.push(`CSS variable brand colors (highest priority): ${priority.join(', ')}`)
+  if (contextual.length) parts.push(`Colors from buttons/headings/links/brand classes: ${contextual.slice(0, 15).join(', ')}`)
+  if (all.length) parts.push(`All other colors found: ${all.slice(0, 20).join(', ')}`)
+  return parts.join('\n') || 'No colors found'
+}
 
 async function scrapeWithFirecrawl(url: string): Promise<{ content: string; html: string | null } | null> {
   if (!FIRECRAWL_API_KEY) return null
@@ -72,7 +204,42 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
     const html = await response.text()
     const $ = cheerio.load(html)
 
-    // Remove scripts, styles, nav, footer
+    // Extract fonts and colors BEFORE removing style elements
+    const embeddedStyleText = $('style').text()
+    const googleFonts = extractGoogleFonts($)
+    const importFonts = extractFontsFromImports(embeddedStyleText)
+
+    // Extract inline style colors from prominent elements
+    const prominentInlineColors = extractInlineStyleColors($, 'header, nav, [class*="hero"], [class*="btn"], [class*="primary"], button, h1, h2, h3, h4, h5, h6, a')
+
+    // Collect all CSS text for color/font extraction
+    const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
+    let allStyleText = embeddedStyleText + ' ' + inlineStyleText
+
+    // Fetch external stylesheets for more color and font data
+    const cssLinks = $('link[rel="stylesheet"]').map((_, el) => $(el).attr('href')).get().slice(0, 3)
+    for (const href of cssLinks) {
+      try {
+        const cssUrl = href.startsWith('http') ? href : new URL(href, url).toString()
+        const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(5000) })
+        if (cssRes.ok) {
+          const cssText = await cssRes.text()
+          allStyleText += ' ' + cssText
+        }
+      } catch { /* ignore failed CSS fetches */ }
+    }
+
+    // Extract fonts from all CSS
+    const cssFonts = extractFontsFromCSS(allStyleText)
+    const allFonts = Array.from(new Set([...googleFonts, ...importFonts, ...cssFonts]))
+
+    // Extract colors using improved logic
+    const { priority, contextual, all: allColors } = extractBrandColors(allStyleText)
+    // Add prominent inline colors to contextual
+    const mergedContextual = Array.from(new Set([...contextual, ...prominentInlineColors]))
+    const colorSummary = buildColorSummary(priority, mergedContextual, allColors)
+
+    // Remove scripts, styles, nav, footer for content extraction
     $('script, style, nav, footer, header, iframe, noscript').remove()
 
     const title = $('title').text().trim()
@@ -85,47 +252,6 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
     // Try to find logo
     const logoUrl = $('img[alt*="logo" i], img[class*="logo" i], img[id*="logo" i]').first().attr('src') || null
 
-    // Extract colors from inline styles and CSS
-    const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
-    const embeddedStyleText = $('style').text()
-    const allStyleText = embeddedStyleText + ' ' + inlineStyleText
-
-    // Extract CSS custom properties (brand variables like --primary, --brand-color etc.)
-    const cssVarMatches = allStyleText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
-    const cssVarColors = cssVarMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
-
-    // Extract all hex colors
-    const allColorMatches = allStyleText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
-
-    // Fetch external stylesheets for more color data
-    const externalCssColors: string[] = []
-    const cssLinks = $('link[rel="stylesheet"]').map((_, el) => $(el).attr('href')).get().slice(0, 3)
-    for (const href of cssLinks) {
-      try {
-        const cssUrl = href.startsWith('http') ? href : new URL(href, url).toString()
-        const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(5000) })
-        if (cssRes.ok) {
-          const cssText = await cssRes.text()
-          // Extract CSS variable colors first
-          const varMatches = cssText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
-          varMatches.forEach(m => {
-            const hex = m.match(/#[0-9a-fA-F]{3,8}/)?.[0]
-            if (hex) externalCssColors.push(hex)
-          })
-          // Also grab all hex colors from CSS
-          const hexMatches = cssText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
-          externalCssColors.push(...hexMatches.slice(0, 30))
-        }
-      } catch { /* ignore failed CSS fetches */ }
-    }
-
-    // Combine: prioritize CSS variable colors, then all collected colors
-    const priorityColors = Array.from(new Set(cssVarColors))
-    const allColors = Array.from(new Set([...allColorMatches, ...externalCssColors]))
-    const colorSummary = priorityColors.length
-      ? `CSS variable brand colors (highest priority): ${priorityColors.join(', ')}\nAll colors found: ${allColors.slice(0, 20).join(', ')}`
-      : `Colors found in stylesheets: ${allColors.slice(0, 20).join(', ')}`
-
     const content = [
       `Title: ${title}`,
       `Description: ${metaDesc || ogDesc}`,
@@ -133,6 +259,7 @@ async function scrapeWithCheerio(url: string): Promise<string | null> {
       `Subheadlines: ${h2s}`,
       `Content:\n${paragraphs}`,
       logoUrl ? `Logo: ${logoUrl}` : '',
+      allFonts.length ? `Fonts found: ${allFonts.join(', ')}` : '',
       colorSummary,
     ].filter(Boolean).join('\n\n')
 
@@ -222,50 +349,47 @@ export async function POST(request: NextRequest) {
       scrapeMethod = 'url-only'
     }
 
-    // If Firecrawl returned HTML, extract colors from it and append to content
+    // If Firecrawl returned HTML, extract colors and fonts from it and append to content
     if (scrapedHtml) {
       try {
         const $ = cheerio.load(scrapedHtml)
-        const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
+
+        // Extract fonts
+        const googleFonts = extractGoogleFonts($)
         const embeddedStyleText = $('style').text()
-        const allStyleText = embeddedStyleText + ' ' + inlineStyleText
+        const importFonts = extractFontsFromImports(embeddedStyleText)
 
-        // CSS custom properties (highest priority)
-        const cssVarMatches = allStyleText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
-        const cssVarColors = cssVarMatches.map(m => m.match(/#[0-9a-fA-F]{3,8}/)?.[0]).filter(Boolean) as string[]
-
-        // All hex colors
-        const allColorMatches = allStyleText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
+        // Collect all CSS text
+        const inlineStyleText = $('[style]').map((_, el) => $(el).attr('style')).get().join(' ')
+        let allStyleText = embeddedStyleText + ' ' + inlineStyleText
 
         // Fetch external stylesheets
-        const externalCssColors: string[] = []
         const cssLinks = $('link[rel="stylesheet"]').map((_, el) => $(el).attr('href')).get().slice(0, 3)
         for (const href of cssLinks) {
           try {
             const cssUrl = href.startsWith('http') ? href : new URL(href, url).toString()
             const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(5000) })
             if (cssRes.ok) {
-              const cssText = await cssRes.text()
-              const varMatches = cssText.match(/--[\w-]*(?:color|primary|secondary|accent|brand|main)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})/gi) || []
-              varMatches.forEach(m => {
-                const hex = m.match(/#[0-9a-fA-F]{3,8}/)?.[0]
-                if (hex) externalCssColors.push(hex)
-              })
-              const hexMatches = cssText.match(/#[0-9a-fA-F]{3,8}\b/g) || []
-              externalCssColors.push(...hexMatches.slice(0, 30))
+              allStyleText += ' ' + await cssRes.text()
             }
           } catch { /* ignore failed CSS fetches */ }
         }
 
-        const priorityColors = Array.from(new Set(cssVarColors))
-        const allColors = Array.from(new Set([...allColorMatches, ...externalCssColors]))
-        const colorSummary = priorityColors.length
-          ? `CSS variable brand colors (highest priority): ${priorityColors.join(', ')}\nAll colors found: ${allColors.slice(0, 20).join(', ')}`
-          : `Colors found in stylesheets: ${allColors.slice(0, 20).join(', ')}`
+        // Extract fonts from all CSS
+        const cssFonts = extractFontsFromCSS(allStyleText)
+        const allFonts = Array.from(new Set([...googleFonts, ...importFonts, ...cssFonts]))
 
-        scrapedContent += `\n\n${colorSummary}`
+        // Extract colors with improved logic
+        const { priority, contextual, all: allColors } = extractBrandColors(allStyleText)
+        const prominentInlineColors = extractInlineStyleColors($, 'header, nav, [class*="hero"], [class*="btn"], [class*="primary"], button, h1, h2, h3, h4, h5, h6, a')
+        const mergedContextual = Array.from(new Set([...contextual, ...prominentInlineColors]))
+
+        const colorSummary = buildColorSummary(priority, mergedContextual, allColors)
+        const fontSummary = allFonts.length ? `Fonts found: ${allFonts.join(', ')}` : ''
+
+        scrapedContent += `\n\n${[fontSummary, colorSummary].filter(Boolean).join('\n')}`
       } catch (e) {
-        console.warn('Color extraction from Firecrawl HTML failed:', e)
+        console.warn('Color/font extraction from Firecrawl HTML failed:', e)
       }
     }
 
