@@ -4,7 +4,9 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout } from 'lucide-react'
+import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
+import type { OverlayOptions } from '@/lib/overlay-templates'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -81,6 +83,7 @@ export default function GeneratePage() {
   const [orgName, setOrgName] = useState('')
   const [imageStyles, setImageStyles] = useState<ImageStyleOption[]>(DEFAULT_IMAGE_STYLES)
   const [selectedStyle, setSelectedStyle] = useState('scandinavian-photo')
+  const [selectedOverlay, setSelectedOverlay] = useState('modern-dark')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -135,25 +138,7 @@ export default function GeneratePage() {
     return generated?.subtitle || ''
   }, [generated?.subtitle])
 
-  // Helper: wrap text on canvas and return lines
-  const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
-    const words = text.split(' ')
-    const lines: string[] = []
-    let currentLine = ''
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word
-      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
-        lines.push(currentLine)
-        currentLine = word
-      } else {
-        currentLine = testLine
-      }
-    }
-    if (currentLine) lines.push(currentLine)
-    return lines
-  }
-
-  // Render branded overlay on canvas
+  // Render branded overlay on canvas using selected template
   const renderOverlay = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas || !generated?.image_url || !brand) return
@@ -176,125 +161,43 @@ export default function GeneratePage() {
     }
 
     try {
-      const img = await loadImage(generated.image_url)
+      const baseImage = await loadImage(generated.image_url)
+      let logo: HTMLImageElement | null = null
+      if (brand.logo_url) {
+        try { logo = await loadImage(brand.logo_url) } catch { /* skip */ }
+      }
 
-      // Draw base image (cover crop)
-      const imgRatio = img.width / img.height
-      let sx = 0, sy = 0, sw = img.width, sh = img.height
-      if (imgRatio > 1) { sx = (img.width - img.height) / 2; sw = img.height }
-      else if (imgRatio < 1) { sy = (img.height - img.width) / 2; sh = img.width }
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size)
-
-      // Dark overlay for text readability
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
-      ctx.fillRect(0, 0, size, size)
-
-      // Colors
       const primaryColor = brand.colors.find(c => c.role === 'primary')?.hex || '#9933ff'
       const accentColor = brand.colors.find(c => c.role === 'accent')?.hex || primaryColor
+      const headingFont = brand.fonts.find(f => f.role === 'heading')?.family || 'Inter'
+      const bodyFont = brand.fonts.find(f => f.role === 'body')?.family || headingFont
 
-      // Fonts
-      const headingFontFamily = brand.fonts.find(f => f.role === 'heading')?.family || 'Inter'
-      const bodyFontFamily = brand.fonts.find(f => f.role === 'body')?.family || headingFontFamily
-
-      const pad = 60
-
-      // === TOP: Logo + brand name ===
-      let logoBottom = pad + 30
-      if (brand.logo_url) {
-        try {
-          const logo = await loadImage(brand.logo_url)
-          const maxLogoH = 50
-          const logoRatio = logo.width / logo.height
-          const logoH = maxLogoH
-          const logoW = logoH * logoRatio
-          ctx.drawImage(logo, pad, pad, logoW, logoH)
-
-          // Brand name next to logo
-          ctx.font = `600 24px '${headingFontFamily}', sans-serif`
-          ctx.fillStyle = 'rgba(255,255,255,0.9)'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(orgName, pad + logoW + 16, pad + logoH / 2)
-          logoBottom = pad + logoH + 20
-        } catch {
-          // Logo failed, just show name
-          ctx.font = `600 28px '${headingFontFamily}', sans-serif`
-          ctx.fillStyle = '#ffffff'
-          ctx.textBaseline = 'top'
-          ctx.fillText(orgName, pad, pad)
-          logoBottom = pad + 40
-        }
-      } else {
-        ctx.font = `600 28px '${headingFontFamily}', sans-serif`
-        ctx.fillStyle = '#ffffff'
-        ctx.textBaseline = 'top'
-        ctx.fillText(orgName, pad, pad)
-        logoBottom = pad + 40
+      const options: OverlayOptions = {
+        size,
+        baseImage,
+        logo,
+        headline: getHeadline(),
+        subtitle: getSubtitle(),
+        brandName: orgName,
+        primaryColor,
+        accentColor,
+        headingFont,
+        bodyFont,
       }
 
-      // === MIDDLE: Big headline ===
-      const headline = getHeadline()
-      if (headline) {
-        ctx.font = `bold 72px '${headingFontFamily}', sans-serif`
-        ctx.fillStyle = '#ffffff'
-        ctx.textBaseline = 'top'
-
-        const headlineLines = wrapText(ctx, headline, size - pad * 2)
-        const headlineY = logoBottom + 40
-        headlineLines.forEach((line, i) => {
-          ctx.fillText(line, pad, headlineY + i * 86)
-        })
-
-        // Accent line under headline
-        const accentY = headlineY + headlineLines.length * 86 + 16
-        ctx.fillStyle = accentColor
-        ctx.fillRect(pad, accentY, 80, 5)
-
-        // Subtitle
-        const subtitle = getSubtitle()
-        if (subtitle) {
-          ctx.font = `400 28px '${bodyFontFamily}', sans-serif`
-          ctx.fillStyle = 'rgba(255,255,255,0.75)'
-          const subLines = wrapText(ctx, subtitle, size - pad * 2)
-          subLines.slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, pad, accentY + 30 + i * 36)
-          })
-        }
-      }
-
-      // === BOTTOM: CTA bar + website ===
-      // CTA button
-      const ctaY = size - pad - 70
-      const ctaText = 'Les mer på ' + (orgName.toLowerCase().replace(/\s+/g, '') + '.no')
-      ctx.font = `600 22px '${bodyFontFamily}', sans-serif`
-      const ctaWidth = ctx.measureText(ctaText).width + 48
-      
-      // CTA background
-      ctx.fillStyle = accentColor
-      ctx.beginPath()
-      ctx.roundRect(pad, ctaY, ctaWidth, 48, 12)
-      ctx.fill()
-
-      // CTA text
-      ctx.fillStyle = '#ffffff'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(ctaText, pad + 24, ctaY + 24)
-
-      // Primary color accent line at very bottom
-      ctx.fillStyle = primaryColor
-      ctx.fillRect(0, size - 5, size, 5)
-
+      const template = getOverlayTemplate(selectedOverlay)
+      await template.render(ctx, options)
     } catch (err) {
       console.error('Overlay render error:', err)
     }
-  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle])
+  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle, selectedOverlay])
 
-  // Re-render overlay when image or brand changes
+  // Re-render overlay when image, brand, or template changes
   useEffect(() => {
     if (generated?.image_url && brand) {
       renderOverlay()
     }
-  }, [generated?.image_url, brand, renderOverlay])
+  }, [generated?.image_url, brand, renderOverlay, selectedOverlay])
 
   const handleDownloadOverlay = () => {
     const canvas = canvasRef.current
@@ -594,6 +497,31 @@ export default function GeneratePage() {
                       className="w-full rounded-xl shadow-sm border border-slate-200"
                       style={{ aspectRatio: '1/1' }}
                     />
+
+                    {/* Overlay template selector */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Layout className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-xs font-medium text-slate-600">Velg overlay</span>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        {OVERLAY_TEMPLATES.map((tmpl) => (
+                          <button
+                            key={tmpl.id}
+                            onClick={() => setSelectedOverlay(tmpl.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                              selectedOverlay === tmpl.id
+                                ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                                : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'
+                            }`}
+                            title={tmpl.description}
+                          >
+                            {tmpl.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Raw image toggle */}
                     <details className="text-xs">
                       <summary className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors">
