@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 // Map format names to prompt-bibliotek keys
 const FORMAT_TO_PROMPT_KEY: Record<string, string> = {
@@ -39,7 +40,7 @@ import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id } = body
+    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model } = body
 
     if (!org_id || !platform || !format) {
       return NextResponse.json(
@@ -278,95 +279,104 @@ Industry: ${brandProfile?.description || 'technology and business'}
 
 IMPORTANT: No text overlays, no UI elements, no logos. Pure photograph.`
 
-      // Use Nano Banana (Gemini) via OpenRouter — generates images via chat completion
-      const imageModel = 'google/gemini-2.5-flash-image'
+      // Choose image model: 'gpt-image' or 'nano-banana' (default)
+      const selectedImageModel = image_model || 'nano-banana'
 
       try {
-        const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://some.aiagenten.no',
-          },
-          body: JSON.stringify({
-            model: imageModel,
-            messages: [
-              {
-                role: 'user',
-                content: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${imageGenPrompt}`
-              }
-            ],
-            // Nano Banana needs these for image output
-            provider: {
-              require_parameters: true,
+        let b64: string | null = null
+        let mimeType = 'image/png'
+
+        if (selectedImageModel === 'gpt-image' && OPENAI_API_KEY) {
+          // GPT Image 1.5 via OpenAI API
+          const size = platform === 'linkedin' ? '1536x1024' : '1024x1024'
+          const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
             },
-          }),
-        })
+            body: JSON.stringify({
+              model: 'gpt-image-1',
+              prompt: `${imageGenPrompt}\n\nDO NOT include any text, watermarks, or logos in the image.`,
+              n: 1,
+              size,
+              quality: 'medium',
+            }),
+          })
 
-        if (imageResponse.ok) {
-          const imageData = await imageResponse.json()
-          const content = imageData.choices?.[0]?.message?.content
-
-          // Nano Banana returns inline_data with base64 image
-          let b64: string | null = null
-          let mimeType = 'image/png'
-
-          if (Array.isArray(content)) {
-            // Structured content with parts
-            for (const part of content) {
-              if (part.type === 'image_url' && part.image_url?.url) {
-                // Could be data URL or regular URL
-                if (part.image_url.url.startsWith('data:')) {
-                  const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
-                  if (match) {
-                    mimeType = match[1]
-                    b64 = match[2]
-                  }
-                } else {
-                  imageUrl = part.image_url.url
-                }
-              } else if (part.inline_data) {
-                b64 = part.inline_data.data
-                mimeType = part.inline_data.mime_type || 'image/png'
-              }
+          if (imageResponse.ok) {
+            const imageData = await imageResponse.json()
+            b64 = imageData.data?.[0]?.b64_json || null
+            if (!b64 && imageData.data?.[0]?.url) {
+              imageUrl = imageData.data[0].url
             }
-          } else if (typeof content === 'string') {
-            // Check if it contains a base64 image
-            const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
-            if (b64Match) {
-              mimeType = `image/${b64Match[1]}`
-              b64 = b64Match[2]
-            }
-          }
-
-          if (b64 && !imageUrl) {
-            // Upload to Supabase Storage
-            const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
-            const fileName = `generated/${org_id}/${Date.now()}.${ext}`
-            const buffer = Buffer.from(b64, 'base64')
-
-            const { data: uploadData, error: uploadError } = await supabase
-              .storage
-              .from('post-images')
-              .upload(fileName, buffer, {
-                contentType: mimeType,
-                upsert: false,
-              })
-
-            if (!uploadError && uploadData) {
-              const { data: urlData } = supabase
-                .storage
-                .from('post-images')
-                .getPublicUrl(fileName)
-              imageUrl = urlData.publicUrl
-            } else {
-              console.error('Image upload error:', uploadError)
-            }
+          } else {
+            console.error('GPT Image error:', imageResponse.status, await imageResponse.text())
           }
         } else {
-          const errText = await imageResponse.text()
-          console.error('Image generation error:', imageResponse.status, errText)
+          // Nano Banana (Gemini) via OpenRouter
+          const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://some.aiagenten.no',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-image',
+              messages: [
+                {
+                  role: 'user',
+                  content: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${imageGenPrompt}`
+                }
+              ],
+            }),
+          })
+
+          if (imageResponse.ok) {
+            const imageData = await imageResponse.json()
+            const content = imageData.choices?.[0]?.message?.content
+
+            if (Array.isArray(content)) {
+              for (const part of content) {
+                if (part.type === 'image_url' && part.image_url?.url) {
+                  if (part.image_url.url.startsWith('data:')) {
+                    const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+                    if (match) { mimeType = match[1]; b64 = match[2] }
+                  } else {
+                    imageUrl = part.image_url.url
+                  }
+                } else if (part.inline_data) {
+                  b64 = part.inline_data.data
+                  mimeType = part.inline_data.mime_type || 'image/png'
+                }
+              }
+            } else if (typeof content === 'string') {
+              const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
+              if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
+            }
+          } else {
+            console.error('Nano Banana error:', imageResponse.status, await imageResponse.text())
+          }
+        }
+
+        // Upload base64 image to Supabase
+        if (b64 && !imageUrl) {
+          const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
+          const fileName = `generated/${org_id}/${Date.now()}.${ext}`
+          const buffer = Buffer.from(b64, 'base64')
+
+          const { data: uploadData, error: uploadError } = await supabase
+            .storage
+            .from('post-images')
+            .upload(fileName, buffer, { contentType: mimeType, upsert: false })
+
+          if (!uploadError && uploadData) {
+            const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(fileName)
+            imageUrl = urlData.publicUrl
+          } else {
+            console.error('Image upload error:', uploadError)
+          }
         }
       } catch (imgErr) {
         console.error('Image generation error:', imgErr)
