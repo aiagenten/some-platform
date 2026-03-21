@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     const pages = pagesData.data || []
     const tokenSecret = process.env.TOKEN_ENCRYPTION_SECRET || 'default-encryption-key'
 
-    const connectedAccounts: { platform: string; account_id: string; name: string; access_token: string }[] = []
+    const connectedAccounts: { platform: string; account_id: string; name: string; access_token: string; facebook_page_id?: string }[] = []
 
     for (const page of pages) {
       // Store Facebook Page
