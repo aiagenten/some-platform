@@ -33,11 +33,28 @@ const FORMATS: Record<string, { value: string; label: string }[]> = {
 type GeneratedContent = {
   text: string | null
   caption: string | null
+  headline: string | null
+  subtitle: string | null
   hashtags: string[]
   image_url: string | null
   best_time: string | null
   image_suggestion: string | null
 }
+
+type ImageStyleOption = {
+  id: string
+  name: string
+  prompt: string
+  is_default: boolean
+}
+
+const DEFAULT_IMAGE_STYLES: ImageStyleOption[] = [
+  { id: 'scandinavian-photo', name: 'Fotorealistisk skandinavisk', prompt: '', is_default: true },
+  { id: 'office-professional', name: 'Profesjonelt kontormiljø', prompt: '', is_default: true },
+  { id: 'flat-illustration', name: 'Flat design illustrasjon', prompt: '', is_default: true },
+  { id: 'product-minimal', name: 'Minimalistisk produktfoto', prompt: '', is_default: true },
+  { id: 'nordic-outdoor', name: 'Utendørs nordisk natur', prompt: '', is_default: true },
+]
 
 type BrandColor = { hex: string; role: string }
 type BrandFont = { family: string; role: string; weight: number }
@@ -62,6 +79,8 @@ export default function GeneratePage() {
   const [error, setError] = useState<string | null>(null)
   const [brand, setBrand] = useState<BrandProfile | null>(null)
   const [orgName, setOrgName] = useState('')
+  const [imageStyles, setImageStyles] = useState<ImageStyleOption[]>(DEFAULT_IMAGE_STYLES)
+  const [selectedStyle, setSelectedStyle] = useState('scandinavian-photo')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -86,29 +105,35 @@ export default function GeneratePage() {
           .limit(1)
           .single()
         if (bp) setBrand(bp)
-        // Load org name
+        // Load org name + settings
         const { data: org } = await supabase
           .from('organizations')
-          .select('name')
+          .select('name, settings')
           .eq('id', profile.org_id)
           .single()
-        if (org) setOrgName(org.name || '')
+        if (org) {
+          setOrgName(org.name || '')
+          const settings = (org.settings as Record<string, unknown>) || {}
+          const styles = (settings.image_styles as ImageStyleOption[])
+          if (styles?.length) {
+            setImageStyles(styles)
+            setSelectedStyle((settings.active_image_style as string) || styles[0].id)
+          }
+        }
       }
     }
     loadOrg()
   }, [])
 
-  // Generate a short headline from the post text
+  // Get the AI-generated headline
   const getHeadline = useCallback(() => {
-    if (!generated?.text) return topic || ''
-    // Take first sentence or first line, max ~60 chars
-    const firstLine = generated.text.split('\n')[0].replace(/^[""'']|[""'']$/g, '').trim()
-    if (firstLine.length <= 60) return firstLine
-    // Try to cut at a word boundary
-    const cut = firstLine.substring(0, 57)
-    const lastSpace = cut.lastIndexOf(' ')
-    return (lastSpace > 30 ? cut.substring(0, lastSpace) : cut) + '...'
-  }, [generated?.text, topic])
+    return generated?.headline || topic || ''
+  }, [generated?.headline, topic])
+
+  // Get the AI-generated subtitle
+  const getSubtitle = useCallback(() => {
+    return generated?.subtitle || ''
+  }, [generated?.subtitle])
 
   // Helper: wrap text on canvas and return lines
   const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
@@ -225,11 +250,12 @@ export default function GeneratePage() {
         ctx.fillStyle = accentColor
         ctx.fillRect(pad, accentY, 80, 5)
 
-        // Subtitle / image suggestion
-        if (generated.image_suggestion) {
+        // Subtitle
+        const subtitle = getSubtitle()
+        if (subtitle) {
           ctx.font = `400 28px '${bodyFontFamily}', sans-serif`
           ctx.fillStyle = 'rgba(255,255,255,0.75)'
-          const subLines = wrapText(ctx, generated.image_suggestion, size - pad * 2)
+          const subLines = wrapText(ctx, subtitle, size - pad * 2)
           subLines.slice(0, 2).forEach((line, i) => {
             ctx.fillText(line, pad, accentY + 30 + i * 36)
           })
@@ -261,7 +287,7 @@ export default function GeneratePage() {
     } catch (err) {
       console.error('Overlay render error:', err)
     }
-  }, [generated?.image_url, generated?.image_suggestion, brand, orgName, getHeadline])
+  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle])
 
   // Re-render overlay when image or brand changes
   useEffect(() => {
@@ -304,6 +330,7 @@ export default function GeneratePage() {
           regenerate_text: regenerateText,
           regenerate_image: regenerateImage,
           post_id: isRegenerate ? postId : undefined,
+          image_style_id: selectedStyle,
         }),
       })
       const data = await res.json()
@@ -316,6 +343,8 @@ export default function GeneratePage() {
         setGenerated(prev => ({
           text: regenerateText ? data.generated.text : (prev?.text || null),
           caption: regenerateText ? data.generated.caption : (prev?.caption || null),
+          headline: regenerateText ? data.generated.headline : (prev?.headline || null),
+          subtitle: regenerateText ? data.generated.subtitle : (prev?.subtitle || null),
           hashtags: regenerateText ? data.generated.hashtags : (prev?.hashtags || []),
           image_url: regenerateImage ? data.generated.image_url : (prev?.image_url || null),
           best_time: regenerateText ? (data.generated.best_time || null) : (prev?.best_time || null),
@@ -386,6 +415,26 @@ export default function GeneratePage() {
                     }`}
                   >
                     {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Image Style */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-700 mb-2">Bildestil</label>
+              <div className="flex flex-wrap gap-2">
+                {imageStyles.map((style) => (
+                  <button
+                    key={style.id}
+                    onClick={() => setSelectedStyle(style.id)}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+                      selectedStyle === style.id
+                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {style.name}
                   </button>
                 ))}
               </div>

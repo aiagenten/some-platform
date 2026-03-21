@@ -40,7 +40,7 @@ import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model } = body
+    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id } = body
 
     if (!org_id || !platform || !format) {
       return NextResponse.json(
@@ -128,6 +128,8 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
     let generatedHashtags: string[] = []
     let bestTime: string | null = null
     let imageSuggestion: string | null = null
+    let generatedHeadline: string | null = null
+    let generatedSubtitle: string | null = null
 
     if (!regenerate_image) {
       const platformRules: Record<string, string> = {
@@ -166,6 +168,8 @@ ABSOLUTTE REGLER:
 Returner dette JSON-formatet:
 {
   "text": "Selve post-teksten klar til posting. Ingen hashtags her.",
+  "headline": "Kort, fengende overskrift for bildet (maks 6-8 ord). Skal oppsummere kjernebudskapet.",
+  "subtitle": "Én kort setning som utdyper overskriften (maks 15 ord).",
   "hashtags": ["#hashtag1", "#hashtag2"],
   "best_time": "Tirsdag-torsdag kl 08-10 eller 17-19",
   "image_suggestion": "Kort beskrivelse av hvilket bilde som vil fungere godt"
@@ -237,11 +241,13 @@ Returner dette JSON-formatet:
           if (parsed.text) {
             generatedText = (parsed.text as string)
               .replace(/\\n/g, '\n')
-              .split('\n').map(line => line.trimStart()).join('\n') // Remove leading spaces/indentation
+              .split('\n').map(line => line.trimStart()).join('\n')
             generatedCaption = generatedText
             generatedHashtags = (parsed.hashtags as string[]) || []
             bestTime = (parsed.best_time as string) || null
             imageSuggestion = (parsed.image_suggestion as string) || null
+            generatedHeadline = (parsed.headline as string) || null
+            generatedSubtitle = (parsed.subtitle as string) || null
           } else {
             generatedText = extractCaption(fullText)
             generatedCaption = generatedText
@@ -274,7 +280,9 @@ Returner dette JSON-formatet:
       // Get the active image style from org settings, or use default
       const defaultStylePrompt = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. {situation}. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
       
-      const activeStyle = imageStyles.find(s => s.id === activeStyleId)
+      // Use request style if provided, otherwise fall back to org default
+      const styleToUse = image_style_id || activeStyleId
+      const activeStyle = imageStyles.find(s => s.id === styleToUse)
       const stylePrompt = activeStyle?.prompt || defaultStylePrompt
 
       const imageContext = imageSuggestion || generatedText?.substring(0, 200) || topic || 'professional business scene'
@@ -464,6 +472,8 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       generated: {
         text: generatedText,
         caption: generatedCaption,
+        headline: generatedHeadline,
+        subtitle: generatedSubtitle,
         hashtags: generatedHashtags,
         image_url: imageUrl,
         best_time: bestTime,
