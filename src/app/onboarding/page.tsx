@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square } from 'lucide-react'
+import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown } from 'lucide-react'
 
 type BrandProfile = {
   colors: string[]
@@ -101,6 +101,12 @@ function OnboardingPage() {
   const [importedPostSelections, setImportedPostSelections] = useState<Record<string, boolean>>({})
   const [savingSelections, setSavingSelections] = useState(false)
 
+  // LinkedIn company page selection state
+  const [selectedLinkedInAccount, setSelectedLinkedInAccount] = useState<string | null>(null)
+  const [publishToPersonal, setPublishToPersonal] = useState(false)
+  const [manualCompanyId, setManualCompanyId] = useState('')
+  const [addingManualCompany, setAddingManualCompany] = useState(false)
+
   useEffect(() => {
     async function getOrg() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -110,6 +116,15 @@ function OnboardingPage() {
     }
     getOrg()
   }, [])
+
+  // Auto-select first LinkedIn organization account when accounts change
+  useEffect(() => {
+    const linkedInAccounts = connectedAccounts.filter(a => a.platform === 'linkedin')
+    const firstOrg = linkedInAccounts.find(a => a.account_id.startsWith('organization:'))
+    if (firstOrg && !selectedLinkedInAccount) {
+      setSelectedLinkedInAccount(firstOrg.account_id)
+    }
+  }, [connectedAccounts, selectedLinkedInAccount])
 
   // Handle Facebook OAuth callback
   const handleFacebookCallback = useCallback(async (accounts: ConnectedAccount[]) => {
@@ -466,20 +481,150 @@ function OnboardingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-900">LinkedIn</h3>
-                      <p className="text-sm text-slate-500">Koble til for personlig profil og bedriftssider</p>
+                      <p className="text-sm text-slate-500">Velg bedriftsside for publisering</p>
                     </div>
                   </div>
 
                   {connectedAccounts.some(a => a.platform === 'linkedin') ? (
-                    <div className="space-y-2 mb-4">
-                      {connectedAccounts.filter(a => a.platform === 'linkedin').map((acc) => (
-                        <div key={`${acc.platform}-${acc.account_id}`} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
-                          <Check className="w-4 h-4 text-emerald-600" />
-                          <span className="text-sm text-emerald-700 font-medium">LinkedIn</span>
-                          <span className="text-sm text-emerald-600">— {acc.name}</span>
+                    <>
+                      {/* Account selection */}
+                      <div className="space-y-2 mb-4">
+                        {connectedAccounts.filter(a => a.platform === 'linkedin').map((acc) => {
+                          const isOrg = acc.account_id.startsWith('organization:')
+                          const isSelected = selectedLinkedInAccount === acc.account_id
+                          return (
+                            <button
+                              key={`${acc.platform}-${acc.account_id}`}
+                              onClick={() => setSelectedLinkedInAccount(acc.account_id)}
+                              className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 border-2 transition-all text-left ${
+                                isSelected
+                                  ? 'border-sky-400 bg-sky-50'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                isSelected ? 'border-sky-500' : 'border-slate-300'
+                              }`}>
+                                {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-sky-500" />}
+                              </div>
+                              <span className="text-base">{isOrg ? '\uD83C\uDFE2' : '\uD83D\uDC64'}</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-slate-900">
+                                  {isOrg ? 'Bedriftsside' : 'Personlig'}: {acc.name}
+                                </span>
+                                <span className="block text-xs text-slate-500">
+                                  {isOrg ? 'Anbefalt for bedriftspublisering' : 'Personlig LinkedIn-profil'}
+                                </span>
+                              </div>
+                              {isOrg && (
+                                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full border border-sky-200 font-medium shrink-0">
+                                  Bedrift
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Personal posting toggle */}
+                      {selectedLinkedInAccount?.startsWith('organization:') && connectedAccounts.some(a => a.platform === 'linkedin' && a.account_id.startsWith('person:')) && (
+                        <label className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-4 cursor-pointer">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={publishToPersonal}
+                            onClick={() => setPublishToPersonal(!publishToPersonal)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 ${
+                              publishToPersonal ? 'bg-sky-500' : 'bg-slate-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                              publishToPersonal ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                            }`} />
+                          </button>
+                          <span className="text-sm text-slate-700">Publiser også til personlig profil</span>
+                        </label>
+                      )}
+
+                      {/* No org pages found — manual input */}
+                      {!connectedAccounts.some(a => a.platform === 'linkedin' && a.account_id.startsWith('organization:')) && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                          <p className="text-sm text-amber-800 mb-3">
+                            Vi fant ingen bedriftssider du administrerer på LinkedIn.
+                          </p>
+                          <div className="flex gap-2 mb-3">
+                            <input
+                              type="text"
+                              value={manualCompanyId}
+                              onChange={(e) => setManualCompanyId(e.target.value.replace(/\D/g, ''))}
+                              placeholder="Bedriftsside-ID (tall)"
+                              className="flex-1 px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none bg-white text-slate-900 placeholder:text-slate-400"
+                            />
+                            <button
+                              onClick={async () => {
+                                if (!manualCompanyId || !orgId) return
+                                setAddingManualCompany(true)
+                                const newAccount: ConnectedAccount = {
+                                  platform: 'linkedin',
+                                  account_id: `organization:${manualCompanyId}`,
+                                  name: `Bedrift #${manualCompanyId}`,
+                                  access_token: connectedAccounts.find(a => a.platform === 'linkedin')?.access_token || '',
+                                }
+                                setConnectedAccounts(prev => [...prev, newAccount])
+                                setSelectedLinkedInAccount(newAccount.account_id)
+
+                                // Save to database
+                                const existingLinkedin = connectedAccounts.find(a => a.platform === 'linkedin')
+                                if (existingLinkedin) {
+                                  await fetch('/api/social/save-account', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      org_id: orgId,
+                                      platform: 'linkedin',
+                                      account_id: `organization:${manualCompanyId}`,
+                                      account_name: `Bedrift #${manualCompanyId}`,
+                                      access_token: existingLinkedin.access_token,
+                                      metadata: {
+                                        account_type: 'organization',
+                                        organization_id: manualCompanyId,
+                                        manually_added: true,
+                                      },
+                                    }),
+                                  }).catch(() => {})
+                                }
+                                setManualCompanyId('')
+                                setAddingManualCompany(false)
+                              }}
+                              disabled={!manualCompanyId || addingManualCompany}
+                              className="px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {addingManualCompany ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Legg til'}
+                            </button>
+                          </div>
+                          <details className="text-sm">
+                            <summary className="text-amber-700 cursor-pointer hover:text-amber-800 font-medium flex items-center gap-1">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                              Hvordan finner jeg bedriftsside-ID?
+                            </summary>
+                            <ol className="mt-2 space-y-1 text-amber-700 list-decimal list-inside text-xs">
+                              <li>Gå til bedriftssiden din på LinkedIn</li>
+                              <li>Klikk på «Admin» i toppmenyen</li>
+                              <li>Se i URL-en: linkedin.com/company/<strong>XXXX</strong> — tallet er din bedrifts-ID</li>
+                              <li>Alternativt: Gå til linkedin.com/company/[firmanavn]/admin → se URL</li>
+                            </ol>
+                          </details>
                         </div>
-                      ))}
-                    </div>
+                      )}
+
+                      <button
+                        onClick={startLinkedInOAuth}
+                        className="w-full flex items-center justify-center gap-2 text-sky-600 border border-sky-200 py-2 rounded-xl text-sm font-medium hover:bg-sky-50 transition-all duration-200"
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        Koble til på nytt
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={startLinkedInOAuth}
@@ -624,6 +769,15 @@ function OnboardingPage() {
                 </div>
               )}
 
+              {/* LinkedIn company page requirement message */}
+              {selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:') && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-4">
+                  <p className="text-sm text-slate-600">
+                    Velg eller legg til en bedriftsside for å fortsette
+                  </p>
+                </div>
+              )}
+
               {/* Navigation */}
               <div className="flex gap-3 mt-6">
                 <button
@@ -634,6 +788,41 @@ function OnboardingPage() {
                 </button>
                 <button
                   onClick={async () => {
+                    // Save LinkedIn account selection metadata
+                    if (orgId && selectedPlatforms.includes('linkedin') && selectedLinkedInAccount) {
+                      const selectedAcc = connectedAccounts.find(a => a.platform === 'linkedin' && a.account_id === selectedLinkedInAccount)
+                      if (selectedAcc) {
+                        await supabase
+                          .from('social_accounts')
+                          .update({
+                            metadata: {
+                              is_primary: true,
+                              publish_to_personal: publishToPersonal,
+                            },
+                          } as Record<string, unknown>)
+                          .eq('org_id', orgId)
+                          .eq('platform', 'linkedin')
+                          .eq('account_id', selectedLinkedInAccount)
+                      }
+                      // Mark non-selected LinkedIn accounts as non-primary
+                      const otherLinkedIn = connectedAccounts.filter(
+                        a => a.platform === 'linkedin' && a.account_id !== selectedLinkedInAccount
+                      )
+                      for (const acc of otherLinkedIn) {
+                        await supabase
+                          .from('social_accounts')
+                          .update({
+                            metadata: {
+                              is_primary: false,
+                              publish_to_personal: acc.account_id.startsWith('person:') ? publishToPersonal : false,
+                            },
+                          } as Record<string, unknown>)
+                          .eq('org_id', orgId)
+                          .eq('platform', 'linkedin')
+                          .eq('account_id', acc.account_id)
+                      }
+                    }
+
                     // Save learning material selections before proceeding
                     if (orgId && socialPosts.length > 0) {
                       setSavingSelections(true)
@@ -662,7 +851,10 @@ function OnboardingPage() {
                     }
                     setStep(3)
                   }}
-                  disabled={fetchingPosts || analyzingTone || savingSelections}
+                  disabled={
+                    fetchingPosts || analyzingTone || savingSelections ||
+                    (selectedPlatforms.includes('linkedin') && connectedAccounts.some(a => a.platform === 'linkedin') && !selectedLinkedInAccount?.startsWith('organization:'))
+                  }
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
                 >
                   {savingSelections ? 'Lagrer...' : connectedAccounts.length === 0 && hasFacebookOrInstagram
