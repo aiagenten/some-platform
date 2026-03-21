@@ -1186,12 +1186,13 @@ function OnboardingPage() {
                             selected ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white opacity-60'
                           }`}
                         >
-                          {/* Post thumbnail */}
+                          {/* Post thumbnail — proxied to avoid CORS */}
                           {post.image_url ? (
                             <img
-                              src={post.image_url}
+                              src={`/api/proxy-image?url=${encodeURIComponent(post.image_url)}`}
                               alt=""
                               className="w-12 h-12 rounded-lg object-cover shrink-0"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
                           ) : (
                             <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
