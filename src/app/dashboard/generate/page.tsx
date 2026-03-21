@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download } from 'lucide-react'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -39,6 +39,16 @@ type GeneratedContent = {
   image_suggestion: string | null
 }
 
+type BrandColor = { hex: string; role: string }
+type BrandFont = { family: string; role: string; weight: number }
+type BrandProfile = {
+  logo_url: string | null
+  colors: BrandColor[]
+  fonts: BrandFont[]
+  name?: string
+  tagline?: string
+}
+
 export default function GeneratePage() {
   const [orgId, setOrgId] = useState<string | null>(null)
   const [platform, setPlatform] = useState('instagram')
@@ -50,6 +60,9 @@ export default function GeneratePage() {
   const [generated, setGenerated] = useState<GeneratedContent | null>(null)
   const [postId, setPostId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [brand, setBrand] = useState<BrandProfile | null>(null)
+  const [orgName, setOrgName] = useState('')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -62,10 +75,131 @@ export default function GeneratePage() {
         .select('org_id')
         .eq('id', user.id)
         .single()
-      if (profile) setOrgId(profile.org_id)
+      if (profile) {
+        setOrgId(profile.org_id)
+        // Load brand profile
+        const { data: bp } = await supabase
+          .from('brand_profiles')
+          .select('logo_url, colors, fonts, tagline')
+          .eq('org_id', profile.org_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (bp) setBrand(bp)
+        // Load org name
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', profile.org_id)
+          .single()
+        if (org) setOrgName(org.name || '')
+      }
     }
     loadOrg()
   }, [])
+
+  // Render branded overlay on canvas
+  const renderOverlay = useCallback(async () => {
+    const canvas = canvasRef.current
+    if (!canvas || !generated?.image_url || !brand) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const size = 1080 // Instagram standard
+    canvas.width = size
+    canvas.height = size
+
+    // Load the AI-generated image
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = async () => {
+      // Draw the base image
+      const imgRatio = img.width / img.height
+      let sx = 0, sy = 0, sw = img.width, sh = img.height
+      if (imgRatio > 1) {
+        sx = (img.width - img.height) / 2
+        sw = img.height
+      } else if (imgRatio < 1) {
+        sy = (img.height - img.width) / 2
+        sh = img.width
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size)
+
+      // Semi-transparent gradient overlay at bottom for text readability
+      const gradient = ctx.createLinearGradient(0, size * 0.65, 0, size)
+      gradient.addColorStop(0, 'rgba(0,0,0,0)')
+      gradient.addColorStop(0.5, 'rgba(0,0,0,0.3)')
+      gradient.addColorStop(1, 'rgba(0,0,0,0.7)')
+      ctx.fillStyle = gradient
+      ctx.fillRect(0, 0, size, size)
+
+      // Brand color accent bar at bottom
+      const primaryColor = brand.colors.find(c => c.role === 'primary')?.hex || '#6366f1'
+      ctx.fillStyle = primaryColor
+      ctx.fillRect(0, size - 6, size, 6)
+
+      // Brand name text at bottom-left
+      const headingFont = brand.fonts.find(f => f.role === 'heading')
+      const fontFamily = headingFont?.family || 'Inter'
+      ctx.font = `bold 32px '${fontFamily}', sans-serif`
+      ctx.fillStyle = '#ffffff'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(orgName || '', 40, size - 30)
+
+      // Tagline below brand name
+      if (brand.tagline) {
+        const bodyFont = brand.fonts.find(f => f.role === 'body')
+        ctx.font = `400 20px '${bodyFont?.family || fontFamily}', sans-serif`
+        ctx.fillStyle = 'rgba(255,255,255,0.8)'
+        ctx.fillText(brand.tagline, 40, size - 30 + 28)
+      }
+
+      // Logo in top-right corner
+      if (brand.logo_url) {
+        try {
+          const logo = new Image()
+          logo.crossOrigin = 'anonymous'
+          logo.onload = () => {
+            const maxLogoH = 80
+            const logoRatio = logo.width / logo.height
+            const logoH = maxLogoH
+            const logoW = logoH * logoRatio
+            // White background circle/rect behind logo for visibility
+            ctx.save()
+            ctx.globalAlpha = 0.9
+            ctx.fillStyle = '#ffffff'
+            const padding = 12
+            ctx.beginPath()
+            ctx.roundRect(size - logoW - 30 - padding, 20 - padding, logoW + padding * 2, logoH + padding * 2, 16)
+            ctx.fill()
+            ctx.restore()
+            ctx.drawImage(logo, size - logoW - 30, 20, logoW, logoH)
+          }
+          logo.src = brand.logo_url
+        } catch {
+          // Logo load failed, skip
+        }
+      }
+    }
+    img.src = generated.image_url
+  }, [generated?.image_url, brand, orgName])
+
+  // Re-render overlay when image or brand changes
+  useEffect(() => {
+    if (generated?.image_url && brand) {
+      renderOverlay()
+    }
+  }, [generated?.image_url, brand, renderOverlay])
+
+  const handleDownloadOverlay = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const link = document.createElement('a')
+    link.download = `post-${Date.now()}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
 
   useEffect(() => {
     const first = FORMATS[platform]?.[0]?.value
@@ -294,18 +428,29 @@ export default function GeneratePage() {
                 )}
               </div>
 
-              {/* Image result */}
+              {/* Image result with brand overlay */}
               <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-slate-900">Bilde</h3>
-                  <button
-                    onClick={() => handleGenerate(false, true)}
-                    disabled={loadingImage}
-                    className="text-sm px-4 py-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-all duration-200 disabled:opacity-50 flex items-center gap-1.5 border border-purple-100"
-                  >
-                    {loadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    {loadingImage ? 'Regenererer...' : 'Regenerer bilde'}
-                  </button>
+                  <h3 className="font-semibold text-slate-900">Bilde med merkevare</h3>
+                  <div className="flex gap-2">
+                    {generated.image_url && (
+                      <button
+                        onClick={handleDownloadOverlay}
+                        className="text-sm px-3 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all duration-200 flex items-center gap-1.5 border border-emerald-100"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Last ned
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleGenerate(false, true)}
+                      disabled={loadingImage}
+                      className="text-sm px-3 py-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-all duration-200 disabled:opacity-50 flex items-center gap-1.5 border border-purple-100"
+                    >
+                      {loadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      {loadingImage ? 'Regenererer...' : 'Regenerer bilde'}
+                    </button>
+                  </div>
                 </div>
                 {loadingImage ? (
                   <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
@@ -315,11 +460,25 @@ export default function GeneratePage() {
                     </div>
                   </div>
                 ) : generated.image_url ? (
-                  <img
-                    src={generated.image_url}
-                    alt="Generert bilde"
-                    className="w-full rounded-xl object-cover"
-                  />
+                  <div className="space-y-3">
+                    {/* Branded overlay canvas */}
+                    <canvas
+                      ref={canvasRef}
+                      className="w-full rounded-xl shadow-sm border border-slate-200"
+                      style={{ aspectRatio: '1/1' }}
+                    />
+                    {/* Raw image toggle */}
+                    <details className="text-xs">
+                      <summary className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors">
+                        Vis originalbilde (uten overlay)
+                      </summary>
+                      <img
+                        src={generated.image_url}
+                        alt="Originalt AI-bilde"
+                        className="w-full rounded-xl object-cover mt-2"
+                      />
+                    </details>
+                  </div>
                 ) : (
                   <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
                     <p className="text-sm text-slate-400">Ingen bilde generert</p>
