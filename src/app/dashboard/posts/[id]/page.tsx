@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import PlatformPreview from '@/components/PlatformPreview'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar } from 'lucide-react'
+import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
+import type { OverlayOptions } from '@/lib/overlay-templates'
 
 type Post = {
   id: string
@@ -81,6 +83,14 @@ export default function PostDetailPage() {
   const [publishLoading, setPublishLoading] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgLogo, setOrgLogo] = useState<string | null>(null)
+  const [selectedOverlay, setSelectedOverlay] = useState('modern-dark')
+  const [brandColors, setBrandColors] = useState<Array<{hex: string; role: string}>>([])
+  const [brandFonts, setBrandFonts] = useState<Array<{family: string; role: string}>>([])
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('09:00')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     async function load() {
@@ -93,6 +103,14 @@ export default function PostDetailPage() {
         setOrgId(profile.org_id)
         const { data: org } = await supabase.from('organizations').select('name, logo_url').eq('id', profile.org_id).single()
         if (org) { setOrgName(org.name); setOrgLogo(org.logo_url) }
+        // Load brand profile for overlay
+        const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts')
+          .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(1).single()
+        if (bp) {
+          setBrandColors(bp.colors || [])
+          setBrandFonts(bp.fonts || [])
+          setBrandLogoUrl(bp.logo_url)
+        }
       }
 
       const { data: postData } = await supabase.from('social_posts').select('*').eq('id', postId).single()
@@ -109,18 +127,71 @@ export default function PostDetailPage() {
     load()
   }, [postId])
 
-  const handleApprove = async () => {
+  // Overlay rendering for post image
+  const renderPostOverlay = useCallback(async () => {
+    const canvas = canvasRef.current
+    if (!canvas || !post?.content_image_url || brandColors.length === 0) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const size = 1080
+    canvas.width = size
+    canvas.height = size
+
+    const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
+    })
+
+    try {
+      const baseImage = await loadImage(post.content_image_url!)
+      let logo: HTMLImageElement | null = null
+      if (brandLogoUrl) { try { logo = await loadImage(brandLogoUrl) } catch { /* skip */ } }
+
+      const primaryColor = brandColors.find(c => c.role === 'primary')?.hex || '#9933ff'
+      const accentColor = brandColors.find(c => c.role === 'accent')?.hex || primaryColor
+      const headingFont = brandFonts.find(f => f.role === 'heading')?.family || 'Inter'
+      const bodyFont = brandFonts.find(f => f.role === 'body')?.family || headingFont
+
+      // Extract headline from post text (first line, short)
+      const firstLine = (post.content_text || post.caption || '').split('\n')[0].trim()
+      const headline = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
+
+      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle: '', brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+      await getOverlayTemplate(selectedOverlay).render(ctx, options)
+    } catch (err) { console.error('Overlay error:', err) }
+  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption])
+
+  useEffect(() => { renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
+
+  const handleDownloadOverlay = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const link = document.createElement('a')
+    link.download = `post-${post?.id || 'image'}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
+
+  const handleApprove = async (withSchedule = false) => {
     if (!post || !userId || !orgId) return
     setActionLoading(true)
-    await supabase.from('social_posts').update({
-      status: 'approved',
+
+    const updates: Record<string, unknown> = {
+      status: withSchedule && scheduleDate ? 'scheduled' : 'approved',
       approved_by: userId,
       approved_at: new Date().toISOString(),
-    }).eq('id', post.id)
+    }
+
+    if (withSchedule && scheduleDate) {
+      updates.scheduled_for = new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
+    }
+
+    await supabase.from('social_posts').update(updates).eq('id', post.id)
     await supabase.from('content_feedback').insert({
-      post_id: post.id, org_id: orgId, given_by: userId, action: 'approved', comment: 'Godkjent',
+      post_id: post.id, org_id: orgId, given_by: userId, action: 'approved',
+      comment: withSchedule && scheduleDate ? `Planlagt til ${scheduleDate} kl ${scheduleTime}` : 'Godkjent',
     })
-    setPost({ ...post, status: 'approved', approved_by: userId, approved_at: new Date().toISOString() })
+    setPost({ ...post, ...updates } as Post)
+    setShowSchedule(false)
     setActionLoading(false)
   }
 
@@ -245,11 +316,45 @@ export default function PostDetailPage() {
 
           {(post.content_image_url || (post.media_urls && post.media_urls.length > 0)) && (
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
-              <h3 className="text-sm font-medium text-slate-500 mb-3">Bilde</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {post.content_image_url && <img src={post.content_image_url} alt="" className="w-full rounded-xl object-cover" />}
-                {post.media_urls?.map((url, i) => <img key={i} src={url} alt={`Media ${i + 1}`} className="w-full rounded-xl object-cover" />)}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-500">Bilde med merkevare</h3>
+                {post.content_image_url && (
+                  <button onClick={handleDownloadOverlay} className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 border border-emerald-100">
+                    <Download className="w-3 h-3" /> Last ned
+                  </button>
+                )}
               </div>
+
+              {/* Overlay canvas */}
+              {post.content_image_url && (
+                <div className="space-y-3">
+                  <canvas ref={canvasRef} className="w-full rounded-xl shadow-sm border border-slate-200" style={{ aspectRatio: '1/1' }} />
+
+                  {/* Overlay selector */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Layout className="w-3.5 h-3.5 text-slate-400" />
+                    {OVERLAY_TEMPLATES.map((tmpl) => (
+                      <button key={tmpl.id} onClick={() => setSelectedOverlay(tmpl.id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === tmpl.id ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                        {tmpl.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Original image */}
+                  <details className="text-xs">
+                    <summary className="text-slate-400 cursor-pointer hover:text-slate-600">Vis originalbilde</summary>
+                    <img src={post.content_image_url} alt="" className="w-full rounded-xl object-cover mt-2" />
+                  </details>
+                </div>
+              )}
+
+              {/* Additional media */}
+              {post.media_urls?.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  {post.media_urls.map((url, i) => <img key={i} src={url} alt={`Media ${i + 1}`} className="w-full rounded-xl object-cover" />)}
+                </div>
+              )}
             </div>
           )}
 
@@ -272,10 +377,31 @@ export default function PostDetailPage() {
             <div className="space-y-2">
               {(post.status === 'pending_approval' || post.status === 'draft') && (
                 <>
-                  <button onClick={handleApprove} disabled={actionLoading}
+                  <button onClick={() => handleApprove(false)} disabled={actionLoading}
                     className="w-full bg-emerald-600 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-700 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
-                    <Check className="w-4 h-4" /> Godkjenn
+                    <Check className="w-4 h-4" /> Godkjenn nå
                   </button>
+                  <button onClick={() => setShowSchedule(!showSchedule)} disabled={actionLoading}
+                    className="w-full bg-indigo-50 text-indigo-600 py-2.5 rounded-xl font-medium hover:bg-indigo-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-indigo-100">
+                    <Calendar className="w-4 h-4" /> Planlegg publisering
+                  </button>
+
+                  {showSchedule && (
+                    <div className="mt-2 space-y-2 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                      <div className="flex gap-2">
+                        <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
+                          className="w-28 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      </div>
+                      <button onClick={() => handleApprove(true)} disabled={!scheduleDate || actionLoading}
+                        className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" /> Godkjenn og planlegg
+                      </button>
+                    </div>
+                  )}
+
                   <button onClick={() => setShowRejectForm(!showRejectForm)} disabled={actionLoading}
                     className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl font-medium hover:bg-red-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-red-100">
                     <XIcon className="w-4 h-4" /> Avvis med kommentar
