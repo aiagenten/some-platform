@@ -119,7 +119,8 @@ export async function GET(request: NextRequest) {
 
     // Fetch organizations the user administers
     try {
-      const orgsRes = await fetch(
+      // Try REST API first, fall back to v2 API
+      let orgsRes = await fetch(
         'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee',
         {
           headers: {
@@ -129,7 +130,21 @@ export async function GET(request: NextRequest) {
         }
       )
 
-      console.log('LinkedIn organizationAcls response:', orgsRes.status)
+      console.log('LinkedIn organizationAcls REST response:', orgsRes.status)
+      
+      // If REST fails, try v2 endpoint
+      if (!orgsRes.ok) {
+        console.log('REST failed, trying v2 endpoint...')
+        orgsRes = await fetch(
+          'https://api.linkedin.com/v2/organizationAcls?q=roleAssignee',
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        )
+        console.log('LinkedIn organizationAcls v2 response:', orgsRes.status)
+      }
       if (orgsRes.ok) {
         const orgsData = await orgsRes.json()
         console.log('LinkedIn orgs found:', JSON.stringify(orgsData).substring(0, 500))
