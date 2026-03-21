@@ -86,7 +86,15 @@ export default function OnboardingPageWrapper() {
 
 function OnboardingPage() {
   const [step, setStep] = useState(1)
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('onboarding_platforms')
+        if (saved) return JSON.parse(saved)
+      } catch {}
+    }
+    return []
+  })
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [scraping, setScraping] = useState(false)
   const [scrapeError, setScrapeError] = useState('')
@@ -251,9 +259,11 @@ function OnboardingPage() {
   }
 
   const togglePlatform = (id: string) => {
-    setSelectedPlatforms((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    )
+    setSelectedPlatforms((prev) => {
+      const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+      try { localStorage.setItem('onboarding_platforms', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   const handleScrape = async () => {
@@ -326,6 +336,7 @@ function OnboardingPage() {
     }
 
     setSaving(false)
+    try { localStorage.removeItem('onboarding_platforms') } catch {}
     router.push('/dashboard')
   }
 
