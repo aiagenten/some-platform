@@ -396,13 +396,57 @@ export async function POST(request: NextRequest) {
     // Extract brand profile via AI
     const brandProfile = await extractBrandProfile(scrapedContent)
 
+    // Download logo and store in Supabase storage to avoid CORS issues
+    let storedLogoUrl: string | null = null
+    if (brandProfile.logo_url && org_id) {
+      try {
+        // Resolve relative logo URLs
+        let logoSrc = brandProfile.logo_url as string
+        if (logoSrc.startsWith('/')) {
+          logoSrc = new URL(logoSrc, url).toString()
+        } else if (!logoSrc.startsWith('http')) {
+          logoSrc = new URL(logoSrc, url).toString()
+        }
+
+        const logoRes = await fetch(logoSrc, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SoMeBot/1.0)' },
+          signal: AbortSignal.timeout(10000),
+        })
+
+        if (logoRes.ok) {
+          const contentType = logoRes.headers.get('content-type') || 'image/png'
+          const logoBuffer = Buffer.from(await logoRes.arrayBuffer())
+          const ext = contentType.includes('svg') ? 'svg' : contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+          const logoPath = `${org_id}/logo.${ext}`
+
+          const { error: uploadError } = await adminSupabase.storage
+            .from('brand-assets')
+            .upload(logoPath, logoBuffer, {
+              contentType,
+              upsert: true,
+            })
+
+          if (!uploadError) {
+            const { data: publicUrl } = adminSupabase.storage
+              .from('brand-assets')
+              .getPublicUrl(logoPath)
+            storedLogoUrl = publicUrl.publicUrl
+          } else {
+            console.warn('Logo upload error:', uploadError.message)
+          }
+        }
+      } catch (e) {
+        console.warn('Logo download failed:', e)
+      }
+    }
+
     const result = {
       source_url: url,
       scrape_method: scrapeMethod,
       scraped_data: { raw_length: scrapedContent.length, method: scrapeMethod },
       colors: brandProfile.colors || [],
       fonts: brandProfile.fonts || [],
-      logo_url: brandProfile.logo_url || null,
+      logo_url: storedLogoUrl || brandProfile.logo_url || null,
       tagline: brandProfile.tagline || null,
       description: brandProfile.description || null,
       tone: brandProfile.tone || null,

@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     'licdn.com',
     'linkedin',
     'media.licdn.com',
+    'aiagenten.no',
+    'supabase.co',
   ]
 
   try {
