@@ -82,9 +82,10 @@ function isSuspiciousColor(hex: string): boolean {
   // Exact match
   if (FRAMEWORK_COLORS.has(h)) return true
   // Close match (distance < 30 = very similar)
-  for (const fw of FRAMEWORK_COLORS) {
+  const fwArray = Array.from(FRAMEWORK_COLORS)
+  for (let i = 0; i < fwArray.length; i++) {
     try {
-      if (colorDistance(h, fw) < 30) return true
+      if (colorDistance(h, fwArray[i]) < 30) return true
     } catch { continue }
   }
   return false
