@@ -3,17 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Instagram, Facebook, Linkedin, Music, Link2, Bell, Brain, BookOpen, X, Pencil, TrendingUp, User, FileText, CheckCircle2, XCircle, HardDrive, Cloud } from 'lucide-react'
-
-type BrandLearning = {
-  id: string
-  learning_type: string
-  rule: string
-  source: string
-  confidence: number
-  active: boolean
-  created_at: string
-}
+import { Instagram, Facebook, Linkedin, Music, Link2, CheckCircle2, XCircle } from 'lucide-react'
 
 type SocialAccount = {
   id: string
@@ -33,27 +23,19 @@ const PLATFORM_INFO: Record<string, { icon: React.ComponentType<{ className?: st
   tiktok: { icon: Music, label: 'TikTok', color: 'bg-slate-50 text-slate-700 border-slate-200' },
 }
 
-export default function SettingsPage() {
+export default function AccountsSettingsPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Laster innstillinger...</div>}>
-      <SettingsContent />
+    <Suspense fallback={<div className="p-8 text-center text-slate-400">Laster...</div>}>
+      <AccountsContent />
     </Suspense>
   )
 }
 
-function SettingsContent() {
+function AccountsContent() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [orgId, setOrgId] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
-  const [learnings, setLearnings] = useState<BrandLearning[]>([])
-  const [learningsLoading, setLearningsLoading] = useState(true)
-  const [togglingLearning, setTogglingLearning] = useState<string | null>(null)
-  const [notifPrefs, setNotifPrefs] = useState({ email_on_approval: true, email_on_publish: true })
-  const [notifLoading, setNotifLoading] = useState(true)
-  const [savingNotif, setSavingNotif] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -66,18 +48,15 @@ function SettingsContent() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      setUserId(user.id)
 
       const { data: profile } = await supabase
         .from('users')
-        .select('org_id, organizations(name)')
+        .select('org_id')
         .eq('id', user.id)
         .single()
 
       if (!profile) return
       setOrgId(profile.org_id)
-      // @ts-expect-error - joined query
-      setOrgName(profile.organizations?.name || '')
 
       const { data: accountsData } = await supabase
         .from('social_accounts')
@@ -90,20 +69,6 @@ function SettingsContent() {
       )
       setAccounts(visibleAccounts)
       setLoading(false)
-
-      const learningsRes = await fetch(`/api/posts/learn?org_id=${profile.org_id}`)
-      if (learningsRes.ok) {
-        const learningsJson = await learningsRes.json()
-        setLearnings(learningsJson.learnings || [])
-      }
-      setLearningsLoading(false)
-
-      const notifRes = await fetch('/api/notifications/preferences')
-      if (notifRes.ok) {
-        const notifJson = await notifRes.json()
-        setNotifPrefs(notifJson.preferences || { email_on_approval: true, email_on_publish: true })
-      }
-      setNotifLoading(false)
     }
     load()
   }, [])
@@ -118,53 +83,11 @@ function SettingsContent() {
     window.location.href = `/api/auth/linkedin?org_id=${orgId}`
   }
 
-  const handleConnectGoogleDrive = () => {
-    if (!userId) return
-    window.location.href = `/api/auth/google-drive?user_id=${userId}`
-  }
-
-  const handleConnectOneDrive = () => {
-    if (!userId) return
-    window.location.href = `/api/auth/onedrive?user_id=${userId}`
-  }
-
-  const handleNotifToggle = async (key: 'email_on_approval' | 'email_on_publish') => {
-    setSavingNotif(true)
-    const newPrefs = { ...notifPrefs, [key]: !notifPrefs[key] }
-    setNotifPrefs(newPrefs)
-    await fetch('/api/notifications/preferences', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newPrefs),
-    })
-    setSavingNotif(false)
-  }
-
-  const handleToggleLearning = async (learningId: string, currentActive: boolean) => {
-    setTogglingLearning(learningId)
-    const res = await fetch('/api/posts/learn', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ learning_id: learningId, active: !currentActive }),
-    })
-    if (res.ok) {
-      setLearnings(prev =>
-        prev.map(l => l.id === learningId ? { ...l, active: !currentActive } : l)
-      )
-    }
-    setTogglingLearning(null)
-  }
-
   const handleDisconnect = async (accountId: string) => {
     if (!confirm('Er du sikker på at du vil koble fra denne kontoen?')) return
     setDisconnecting(accountId)
-    const { error } = await supabase
-      .from('social_accounts')
-      .delete()
-      .eq('id', accountId)
-    if (!error) {
-      setAccounts(prev => prev.filter(a => a.id !== accountId))
-    }
+    const { error } = await supabase.from('social_accounts').delete().eq('id', accountId)
+    if (!error) setAccounts(prev => prev.filter(a => a.id !== accountId))
     setDisconnecting(null)
   }
 
@@ -180,10 +103,7 @@ function SettingsContent() {
   }
 
   return (
-    <div className="animate-fade-in-up">
-      <h1 className="text-2xl font-bold text-slate-900 mb-1">Innstillinger</h1>
-      <p className="text-slate-500 mb-8">{orgName}</p>
-
+    <>
       {/* Status messages */}
       {success === 'connected' && (
         <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-sm flex items-center gap-2">
@@ -201,7 +121,6 @@ function SettingsContent() {
       {/* Connected accounts */}
       <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
         <h2 className="font-semibold text-slate-900 mb-4">Tilkoblede kontoer</h2>
-
         {loading ? (
           <p className="text-slate-400 text-sm">Laster...</p>
         ) : accounts.length === 0 ? (
@@ -216,21 +135,15 @@ function SettingsContent() {
               const tokenStatus = getTokenStatus(account.token_expires_at)
               const meta = account.metadata as Record<string, string>
               const Icon = info.icon
-
               return (
-                <div
-                  key={account.id}
-                  className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 hover:shadow-sm ${info.color}`}
-                >
+                <div key={account.id} className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 hover:shadow-sm ${info.color}`}>
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/60">
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-slate-900">
                       {account.account_name}
-                      {meta?.ig_username && (
-                        <span className="text-slate-500 font-normal ml-1">@{meta.ig_username}</span>
-                      )}
+                      {meta?.ig_username && <span className="text-slate-500 font-normal ml-1">@{meta.ig_username}</span>}
                       {account.platform === 'linkedin' && meta?.account_type === 'organization' && (
                         <span className="ml-2 text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full border border-sky-200 font-medium">Bedrift</span>
                       )}
@@ -261,11 +174,7 @@ function SettingsContent() {
       <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
         <h2 className="font-semibold text-slate-900 mb-4">Koble til plattformer</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            onClick={handleConnectFacebook}
-            disabled={!orgId}
-            className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
-          >
+          <button onClick={handleConnectFacebook} disabled={!orgId} className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
               <Facebook className="w-5 h-5 text-blue-700" />
             </div>
@@ -274,12 +183,7 @@ function SettingsContent() {
               <p className="text-xs text-blue-600">Koble til sider og IG Business-kontoer</p>
             </div>
           </button>
-
-          <button
-            onClick={handleConnectLinkedIn}
-            disabled={!orgId}
-            className="flex items-center gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm"
-          >
+          <button onClick={handleConnectLinkedIn} disabled={!orgId} className="flex items-center gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center">
               <Linkedin className="w-5 h-5 text-sky-700" />
             </div>
@@ -290,177 +194,6 @@ function SettingsContent() {
           </button>
         </div>
       </div>
-
-      {/* Cloud Storage */}
-      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm mt-6">
-        <h2 className="font-semibold text-slate-900 mb-1">Bildegalleri</h2>
-        <p className="text-sm text-slate-500 mb-4">Koble til skylagring for enkel tilgang til bilder ved publisering.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button onClick={handleConnectGoogleDrive} disabled={!userId} className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-              <HardDrive className="w-5 h-5 text-green-700" />
-            </div>
-            <div>
-              <p className="font-medium text-green-800">Google Drive</p>
-              <p className="text-xs text-green-600">Koble til for tilgang til bilder</p>
-            </div>
-          </button>
-          <button onClick={handleConnectOneDrive} disabled={!userId} className="flex items-center gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 transition-all duration-200 text-left disabled:opacity-50 hover:shadow-sm">
-            <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center">
-              <Cloud className="w-5 h-5 text-sky-700" />
-            </div>
-            <div>
-              <p className="font-medium text-sky-800">Microsoft OneDrive</p>
-              <p className="text-xs text-sky-600">Koble til for tilgang til bilder</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Notification Preferences */}
-      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mt-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Bell className="w-5 h-5 text-slate-600" />
-          <h2 className="font-semibold text-slate-900">Varslinger</h2>
-        </div>
-        {notifLoading ? (
-          <p className="text-slate-400 text-sm">Laster...</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-900">E-post ved godkjenning</p>
-                <p className="text-xs text-slate-500">Få varsel når innhold venter på godkjenning</p>
-              </div>
-              <button
-                onClick={() => handleNotifToggle('email_on_approval')}
-                disabled={savingNotif}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  notifPrefs.email_on_approval ? 'bg-indigo-600' : 'bg-slate-200'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
-                    notifPrefs.email_on_approval ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-900">E-post ved publisering</p>
-                <p className="text-xs text-slate-500">Få varsel når ditt innlegg blir publisert</p>
-              </div>
-              <button
-                onClick={() => handleNotifToggle('email_on_publish')}
-                disabled={savingNotif}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  notifPrefs.email_on_publish ? 'bg-indigo-600' : 'bg-slate-200'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
-                    notifPrefs.email_on_publish ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Brand Learnings */}
-      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mt-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-slate-600" />
-            <div>
-              <h2 className="font-semibold text-slate-900">Hva vi har lært</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                AI-genererte regler basert på avvisninger, redigeringer og engasjement
-              </p>
-            </div>
-          </div>
-          <span className="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full font-medium border border-indigo-100">
-            {learnings.filter(l => l.active).length} aktive
-          </span>
-        </div>
-
-        {learningsLoading ? (
-          <p className="text-slate-400 text-sm py-4">Laster learnings...</p>
-        ) : learnings.length === 0 ? (
-          <div className="text-center py-8">
-            <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-slate-500 text-sm">Ingen learnings enda</p>
-            <p className="text-slate-400 text-xs mt-1">
-              Learnings genereres automatisk når innlegg avvises, redigeres eller presterer bra
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {learnings.map((learning) => {
-              const sourceIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-                rejection: X,
-                edit: Pencil,
-                analytics: TrendingUp,
-                manual: User,
-              }
-              const typeColors: Record<string, string> = {
-                style: 'bg-purple-50 text-purple-700 border-purple-100',
-                tone: 'bg-blue-50 text-blue-700 border-blue-100',
-                topic: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-                format: 'bg-orange-50 text-orange-700 border-orange-100',
-                timing: 'bg-amber-50 text-amber-700 border-amber-100',
-              }
-              const SourceIcon = sourceIcons[learning.source] || FileText
-
-              return (
-                <div
-                  key={learning.id}
-                  className={`flex items-center gap-3 p-4 rounded-xl border transition-all duration-200 ${
-                    learning.active
-                      ? 'border-slate-200 bg-white hover:shadow-sm'
-                      : 'border-slate-100 bg-slate-50 opacity-60'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <SourceIcon className="w-4 h-4 text-slate-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${learning.active ? 'text-slate-900' : 'text-slate-500 line-through'}`}>
-                      {learning.rule}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-lg border ${typeColors[learning.learning_type] || 'bg-slate-50 text-slate-600 border-slate-100'}`}>
-                        {learning.learning_type}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {Math.round(learning.confidence * 100)}% sikkerhet
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        · {new Date(learning.created_at).toLocaleDateString('nb-NO')}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleToggleLearning(learning.id, learning.active)}
-                    disabled={togglingLearning === learning.id}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      learning.active ? 'bg-indigo-600' : 'bg-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
-                        learning.active ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   )
 }
