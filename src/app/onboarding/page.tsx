@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles } from 'lucide-react'
+import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square } from 'lucide-react'
 
 type BrandProfile = {
   colors: string[]
@@ -98,6 +98,8 @@ function OnboardingPage() {
   const [analyzingTone, setAnalyzingTone] = useState(false)
   const [toneProfile, setToneProfile] = useState<ToneProfile | null>(null)
   const [someError, setSomeError] = useState('')
+  const [importedPostSelections, setImportedPostSelections] = useState<Record<string, boolean>>({})
+  const [savingSelections, setSavingSelections] = useState(false)
 
   useEffect(() => {
     async function getOrg() {
@@ -127,6 +129,7 @@ function OnboardingPage() {
               platform: account.platform,
               access_token: account.access_token,
               account_id: account.account_id,
+              org_id: orgId,
             }),
           })
           const data = await res.json()
@@ -139,6 +142,11 @@ function OnboardingPage() {
       }
 
       setSocialPosts(allPosts)
+
+      // Default all imported posts to selected as learning material
+      const selections: Record<string, boolean> = {}
+      allPosts.forEach(p => { selections[p.id] = true })
+      setImportedPostSelections(selections)
 
       // Auto-analyze tone if we have posts with text
       const postsWithText = allPosts.filter(p => p.text && p.text.trim().length > 0)
@@ -546,6 +554,70 @@ function OnboardingPage() {
                 </div>
               )}
 
+              {/* Imported posts review */}
+              {socialPosts.length > 0 && !fetchingPosts && !analyzingTone && (
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Velg læringsmateriale</h3>
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        Velg hvilke poster AI-en skal lære av. {Object.values(importedPostSelections).filter(Boolean).length} av {socialPosts.length} valgt.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const all: Record<string, boolean> = {}
+                          socialPosts.forEach(p => { all[p.id] = true })
+                          setImportedPostSelections(all)
+                        }}
+                        className="text-xs px-2.5 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-all"
+                      >
+                        Velg alle
+                      </button>
+                      <button
+                        onClick={() => {
+                          const none: Record<string, boolean> = {}
+                          socialPosts.forEach(p => { none[p.id] = false })
+                          setImportedPostSelections(none)
+                        }}
+                        className="text-xs px-2.5 py-1.5 bg-slate-50 text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-100 transition-all"
+                      >
+                        Fjern alle
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                    {socialPosts.map((post) => {
+                      const selected = importedPostSelections[post.id] ?? true
+                      return (
+                        <button
+                          key={post.id}
+                          onClick={() => setImportedPostSelections(prev => ({ ...prev, [post.id]: !selected }))}
+                          className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                            selected ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white opacity-60'
+                          }`}
+                        >
+                          {selected ? (
+                            <CheckSquare className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-xs font-medium text-slate-500 uppercase">{post.platform}</span>
+                              {post.likes > 0 && <span className="text-xs text-slate-400">{post.likes} likes</span>}
+                            </div>
+                            <p className="text-sm text-slate-700 line-clamp-2">{post.text || 'Ingen tekst'}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {someError && (
                 <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl border border-red-100 mb-4">
                   {someError}
@@ -561,11 +633,39 @@ function OnboardingPage() {
                   Tilbake
                 </button>
                 <button
-                  onClick={() => setStep(3)}
-                  disabled={fetchingPosts || analyzingTone}
+                  onClick={async () => {
+                    // Save learning material selections before proceeding
+                    if (orgId && socialPosts.length > 0) {
+                      setSavingSelections(true)
+                      const selectedIds = Object.entries(importedPostSelections)
+                        .filter(([, v]) => v)
+                        .map(([k]) => k)
+                      const deselectedIds = Object.entries(importedPostSelections)
+                        .filter(([, v]) => !v)
+                        .map(([k]) => k)
+
+                      if (selectedIds.length > 0) {
+                        await supabase
+                          .from('imported_social_posts')
+                          .update({ is_learning_material: true })
+                          .eq('org_id', orgId)
+                          .in('external_id', selectedIds)
+                      }
+                      if (deselectedIds.length > 0) {
+                        await supabase
+                          .from('imported_social_posts')
+                          .update({ is_learning_material: false })
+                          .eq('org_id', orgId)
+                          .in('external_id', deselectedIds)
+                      }
+                      setSavingSelections(false)
+                    }
+                    setStep(3)
+                  }}
+                  disabled={fetchingPosts || analyzingTone || savingSelections}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
                 >
-                  {connectedAccounts.length === 0 && hasFacebookOrInstagram
+                  {savingSelections ? 'Lagrer...' : connectedAccounts.length === 0 && hasFacebookOrInstagram
                     ? 'Hopp over'
                     : 'Neste'}
                 </button>

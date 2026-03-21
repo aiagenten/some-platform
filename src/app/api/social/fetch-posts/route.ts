@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const GRAPH_API_VERSION = 'v19.0'
 
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { platform, access_token, account_id } = body
+    const { platform, access_token, account_id, org_id } = body
 
     if (!platform || !access_token || !account_id) {
       return NextResponse.json(
@@ -177,6 +178,31 @@ export async function POST(request: NextRequest) {
         break
       default:
         return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
+    }
+
+    // Save imported posts to database if org_id is provided
+    if (org_id && posts.length > 0) {
+      const adminClient = createAdminClient()
+      const rows = posts.map((post) => ({
+        org_id,
+        platform: post.platform as string,
+        external_id: post.id as string,
+        text_content: (post.text as string) || null,
+        image_urls: (post.image_url as string) ? [post.image_url as string] : [],
+        permalink: (post.permalink as string) || null,
+        likes: (post.likes as number) || 0,
+        comments: (post.comments as number) || 0,
+        shares: (post.shares as number) || 0,
+        posted_at: (post.created_at as string) || null,
+      }))
+
+      const { error: upsertError } = await adminClient
+        .from('imported_social_posts')
+        .upsert(rows, { onConflict: 'org_id,platform,external_id' })
+
+      if (upsertError) {
+        console.error('Error saving imported posts:', upsertError)
+      }
     }
 
     return NextResponse.json({
