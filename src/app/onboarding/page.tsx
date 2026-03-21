@@ -129,6 +129,7 @@ function OnboardingPage() {
 
   // Meta page selection state
   const [selectedMetaPageId, setSelectedMetaPageId] = useState<string | null>(null)
+  const [brandTag, setBrandTag] = useState('')
 
   useEffect(() => {
     async function getOrg() {
@@ -156,6 +157,20 @@ function OnboardingPage() {
       setSelectedMetaPageId(facebookAccounts[0].account_id)
     }
   }, [connectedAccounts, selectedMetaPageId])
+
+  // Auto-fill brand tag from first connected account name (if empty)
+  useEffect(() => {
+    if (brandTag) return
+    const orgAccount = connectedAccounts.find(a => a.platform === 'linkedin' && a.account_id.startsWith('organization:'))
+    if (orgAccount && orgAccount.name && !orgAccount.name.startsWith('Bedrift #')) {
+      setBrandTag(orgAccount.name)
+      return
+    }
+    const fbAccount = connectedAccounts.find(a => a.platform === 'facebook')
+    if (fbAccount && fbAccount.name) {
+      setBrandTag(fbAccount.name)
+    }
+  }, [connectedAccounts, brandTag])
 
   // Fetch posts from all connected accounts (filtered by selected Meta page)
   const fetchAllPosts = useCallback(async () => {
@@ -749,6 +764,26 @@ function OnboardingPage() {
                 </div>
               )}
 
+              {/* Brand tag — shown when at least one account is connected */}
+              {connectedAccounts.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Target className="w-5 h-5 text-indigo-600" />
+                    <h3 className="font-semibold text-slate-900">Merkevarenavn</h3>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-3">
+                    Gi merkevaren et navn — dette kobler kontoene dine sammen under én profil.
+                  </p>
+                  <input
+                    type="text"
+                    value={brandTag}
+                    onChange={(e) => setBrandTag(e.target.value)}
+                    placeholder="F.eks. AI Agenten AS"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+              )}
+
               {/* Fetch posts button — shown when accounts are connected but posts haven't been fetched yet */}
               {connectedAccounts.length > 0 && !postsFetched && !fetchingPosts && (
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-4 shadow-sm">
@@ -955,6 +990,14 @@ function OnboardingPage() {
                 </button>
                 <button
                   onClick={async () => {
+                    // Save brand tag to all connected accounts
+                    if (orgId && brandTag.trim()) {
+                      await supabase
+                        .from('social_accounts')
+                        .update({ brand_tag: brandTag.trim() })
+                        .eq('org_id', orgId)
+                    }
+
                     // Save LinkedIn account selection metadata
                     if (orgId && selectedPlatforms.includes('linkedin') && selectedLinkedInAccount) {
                       const selectedAcc = connectedAccounts.find(a => a.platform === 'linkedin' && a.account_id === selectedLinkedInAccount)
