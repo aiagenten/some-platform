@@ -185,8 +185,12 @@ export default function PostDetailPage() {
         // Pre-fill headline/subtitle for inline editing
         if (postData.headline) setHeadlineValue(postData.headline)
         if (postData.subtitle) setSubtitleValue(postData.subtitle)
-        // Pre-fill schedule with suggested_time
-        if (postData.suggested_time && !postData.scheduled_for) {
+        // Pre-fill schedule from scheduled_for or suggested_time
+        if (postData.scheduled_for) {
+          const d = new Date(postData.scheduled_for)
+          setScheduleDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+          setScheduleTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`)
+        } else if (postData.suggested_time) {
           const parsed = parseSuggestedTime(postData.suggested_time)
           if (parsed) {
             setScheduleDate(parsed.date)
@@ -657,10 +661,12 @@ export default function PostDetailPage() {
                 </div>
               )}
 
-              <button onClick={handleRegenerate} disabled={actionLoading}
-                className="w-full bg-purple-50 text-purple-600 py-2.5 rounded-xl font-medium hover:bg-purple-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-purple-100">
-                <RefreshCw className="w-4 h-4" /> Regenerer
-              </button>
+              {(post.status === 'draft' || post.status === 'pending_approval' || post.status === 'rejected') && (
+                <button onClick={handleRegenerate} disabled={actionLoading}
+                  className="w-full bg-purple-50 text-purple-600 py-2.5 rounded-xl font-medium hover:bg-purple-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-purple-100">
+                  <RefreshCw className="w-4 h-4" /> Regenerer
+                </button>
+              )}
 
               {(post.status === 'draft' || post.status === 'rejected') && (
                 <>
@@ -696,10 +702,68 @@ export default function PostDetailPage() {
               )}
 
               {(post.status === 'approved' || post.status === 'scheduled') && (
-                <button onClick={handlePublish} disabled={publishLoading}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2.5 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 mt-2 flex items-center justify-center gap-2 shadow-sm">
-                  {publishLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Publiserer...</> : <><Send className="w-4 h-4" /> Publiser nå</>}
-                </button>
+                <>
+                  {/* Show current scheduled date */}
+                  {post.scheduled_for && (
+                    <div className="w-full bg-indigo-50 text-indigo-700 py-2.5 px-3 rounded-xl text-sm font-medium flex items-center gap-2 border border-indigo-100">
+                      <Calendar className="w-4 h-4" />
+                      Planlagt: {new Date(post.scheduled_for).toLocaleString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+
+                  {/* Schedule picker as primary action */}
+                  <button onClick={() => setShowSchedule(!showSchedule)} disabled={actionLoading}
+                    className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                    <Calendar className="w-4 h-4" /> {post.scheduled_for ? 'Endre tidspunkt' : 'Planlegg publisering'}
+                  </button>
+
+                  {showSchedule && (
+                    <div className="mt-2 space-y-2 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                      {post.suggested_time && (
+                        <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-amber-700">AI anbefaler: <strong>{post.suggested_time}</strong></p>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
+                          className="w-28 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      </div>
+                      <button onClick={async () => {
+                        if (!scheduleDate) return
+                        setActionLoading(true)
+                        const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
+                        await supabase.from('social_posts').update({ scheduled_for: scheduledFor, status: 'scheduled' }).eq('id', post.id)
+                        setPost({ ...post, scheduled_for: scheduledFor, status: 'scheduled' })
+                        setShowSchedule(false)
+                        setActionLoading(false)
+                      }} disabled={!scheduleDate || actionLoading}
+                        className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" /> Lagre tidspunkt
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Publish now as secondary action */}
+                  <button onClick={handlePublish} disabled={publishLoading}
+                    className="w-full bg-slate-100 text-slate-700 py-2.5 rounded-xl font-medium hover:bg-slate-200 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-slate-200">
+                    {publishLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Publiserer...</> : <><Send className="w-4 h-4" /> Publiser nå</>}
+                  </button>
+
+                  {/* Revert to draft */}
+                  <button onClick={async () => {
+                    setActionLoading(true)
+                    await supabase.from('social_posts').update({ status: 'draft', approved_by: null, approved_at: null }).eq('id', post.id)
+                    setPost({ ...post, status: 'draft', approved_by: null, approved_at: null })
+                    setActionLoading(false)
+                  }} disabled={actionLoading}
+                    className="w-full bg-amber-50 text-amber-700 py-2.5 rounded-xl font-medium hover:bg-amber-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-amber-100">
+                    <RefreshCw className="w-4 h-4" /> Tilbake til utkast
+                  </button>
+                </>
               )}
 
               {post.status === 'published' && post.published_at && (

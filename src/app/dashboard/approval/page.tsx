@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Clock } from 'lucide-react'
+import { getOverlayTemplate } from '@/lib/overlay-templates'
+import type { OverlayOptions } from '@/lib/overlay-templates'
+import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
+import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 
 type Post = {
   id: string
@@ -14,6 +18,11 @@ type Post = {
   status: string
   content_image_url: string | null
   created_at: string
+  selected_overlay: string | null
+  suggested_time: string | null
+  scheduled_for: string | null
+  headline: string | null
+  subtitle: string | null
 }
 
 const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -30,11 +39,120 @@ const PLATFORM_COLORS: Record<string, string> = {
   tiktok: 'from-slate-700 to-slate-800',
 }
 
+// Parse suggested_time for scheduled_for auto-fill at approval time
+function parseScheduledFromSuggested(timeStr: string): string | null {
+  const explicitMatch = timeStr.match(/\((\d{4}-\d{2}-\d{2})\)/)
+  const timeMatch = timeStr.match(/kl\s*(\d{1,2}):?(\d{2})?/)
+  if (explicitMatch) {
+    const hour = timeMatch ? timeMatch[1].padStart(2, '0') : '09'
+    const min = timeMatch?.[2] || '00'
+    return `${explicitMatch[1]}T${hour}:${min}:00.000Z`
+  }
+  const dayMap: Record<string, number> = { søndag: 0, mandag: 1, tirsdag: 2, onsdag: 3, torsdag: 4, fredag: 5, lørdag: 6 }
+  const dayMatch = timeStr.match(/(mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag)/i)
+  const hourRangeMatch = timeStr.match(/kl\s*(\d{1,2})/)
+  if (dayMatch && hourRangeMatch) {
+    const targetDay = dayMap[dayMatch[1].toLowerCase()]
+    const hour = hourRangeMatch[1].padStart(2, '0')
+    if (targetDay !== undefined) {
+      const now = new Date()
+      const currentDay = now.getDay()
+      let daysAhead = targetDay - currentDay
+      if (daysAhead <= 0) daysAhead += 7
+      const target = new Date(now)
+      target.setDate(now.getDate() + daysAhead)
+      const dateStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
+      return `${dateStr}T${hour}:00:00.000Z`
+    }
+  }
+  return null
+}
+
+// Component to render overlay preview on a small canvas
+function OverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates }: {
+  post: Post
+  brandColors: Array<{ hex: string; role: string }>
+  brandFonts: Array<{ family: string; role: string }>
+  brandLogoUrl: string | null
+  orgName: string
+  customTemplates: CustomOverlayTemplate[]
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [rendered, setRendered] = useState(false)
+
+  const render = useCallback(async () => {
+    const canvas = canvasRef.current
+    if (!canvas || !post.content_image_url || brandColors.length === 0) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const size = 540
+    canvas.width = size
+    canvas.height = size
+
+    const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
+    })
+
+    try {
+      const baseImage = await loadImage(post.content_image_url!)
+      let logo: HTMLImageElement | null = null
+      if (brandLogoUrl) { try { logo = await loadImage(brandLogoUrl) } catch { /* skip */ } }
+
+      const primaryColor = brandColors.find(c => c.role === 'primary')?.hex || '#9933ff'
+      const accentColor = brandColors.find(c => c.role === 'accent')?.hex || primaryColor
+      const headingFont = brandFonts.find(f => f.role === 'heading')?.family || 'Inter'
+      const bodyFont = brandFonts.find(f => f.role === 'body')?.family || headingFont
+
+      const headline = post.headline || (() => {
+        const firstLine = (post.content_text || post.caption || '').split('\n')[0].trim()
+        return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
+      })()
+      const subtitle = post.subtitle || ''
+
+      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+
+      const overlayId = post.selected_overlay || 'modern-dark'
+      const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
+      if (customTmpl) {
+        await renderCustomOverlay(ctx, customTmpl, options)
+      } else {
+        await getOverlayTemplate(overlayId).render(ctx, options)
+      }
+      setRendered(true)
+    } catch (err) {
+      console.error('Overlay preview error:', err)
+      setRendered(false)
+    }
+  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates])
+
+  useEffect(() => { render() }, [render])
+
+  if (!post.content_image_url) return null
+
+  return (
+    <div className="relative h-48 overflow-hidden">
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full object-cover ${rendered ? '' : 'hidden'}`}
+        style={{ aspectRatio: '1/1' }}
+      />
+      {!rendered && (
+        <img src={post.content_image_url} alt="" className="w-full h-full object-cover" />
+      )}
+    </div>
+  )
+}
+
 export default function ApprovalPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [brandColors, setBrandColors] = useState<Array<{ hex: string; role: string }>>([])
+  const [brandFonts, setBrandFonts] = useState<Array<{ family: string; role: string }>>([])
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
+  const [orgName, setOrgName] = useState('')
+  const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -53,9 +171,30 @@ export default function ApprovalPage() {
 
     if (!profile) return
 
+    // Load brand data for overlay rendering
+    const { data: org } = await supabase.from('organizations').select('name, logo_url').eq('id', profile.org_id).single()
+    if (org) setOrgName(org.name)
+
+    const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts')
+      .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(1).single()
+    if (bp) {
+      setBrandColors(bp.colors || [])
+      setBrandFonts(bp.fonts || [])
+      setBrandLogoUrl(bp.logo_url)
+    }
+
+    // Load custom overlay templates
+    try {
+      const res = await fetch('/api/overlay-templates')
+      if (res.ok) {
+        const customData = await res.json()
+        setCustomTemplates(customData)
+      }
+    } catch { /* ignore */ }
+
     const { data } = await supabase
       .from('social_posts')
-      .select('id, content_text, caption, platform, format, status, content_image_url, created_at')
+      .select('id, content_text, caption, platform, format, status, content_image_url, created_at, selected_overlay, suggested_time, scheduled_for, headline, subtitle')
       .eq('org_id', profile.org_id)
       .in('status', ['pending_approval', 'draft'])
       .order('created_at', { ascending: false })
@@ -69,13 +208,25 @@ export default function ApprovalPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    // Auto-set scheduled_for from suggested_time if not already set
+    const post = posts.find(p => p.id === postId)
+    let scheduledFor: string | null = null
+    if (post?.suggested_time && !post?.scheduled_for) {
+      scheduledFor = parseScheduledFromSuggested(post.suggested_time)
+    }
+
+    const updates: Record<string, unknown> = {
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      approved_by: user.id,
+    }
+    if (scheduledFor) {
+      updates.scheduled_for = scheduledFor
+    }
+
     await supabase
       .from('social_posts')
-      .update({
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-        approved_by: user.id,
-      })
+      .update(updates)
       .eq('id', postId)
 
     setPosts(prev => prev.filter(p => p.id !== postId))
@@ -134,13 +285,16 @@ export default function ApprovalPage() {
                 key={post.id}
                 className="bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col"
               >
-                {/* Image or platform header */}
+                {/* Image with overlay preview or platform header */}
                 {post.content_image_url ? (
-                  <div className="relative h-48 overflow-hidden">
-                    <img
-                      src={post.content_image_url}
-                      alt=""
-                      className="w-full h-full object-cover"
+                  <div className="relative">
+                    <OverlayPreview
+                      post={post}
+                      brandColors={brandColors}
+                      brandFonts={brandFonts}
+                      brandLogoUrl={brandLogoUrl}
+                      orgName={orgName}
+                      customTemplates={customTemplates}
                     />
                     <div className="absolute top-3 left-3">
                       <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${platformGradient} flex items-center justify-center shadow-lg`}>
@@ -180,6 +334,17 @@ export default function ApprovalPage() {
                     <span>·</span>
                     <span>{new Date(post.created_at).toLocaleDateString('nb-NO')}</span>
                   </div>
+                  {/* Show scheduled/suggested time */}
+                  {(post.scheduled_for || post.suggested_time) && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100">
+                      <Clock className="w-3 h-3 flex-shrink-0" />
+                      <span>
+                        {post.scheduled_for
+                          ? `Planlagt: ${new Date(post.scheduled_for).toLocaleString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                          : post.suggested_time}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

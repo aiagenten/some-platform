@@ -473,10 +473,15 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
 
     // Auto-schedule: compute suggested_time based on weekly goals + best practices
     let suggestedTime = bestTime
+    let scheduledFor: string | null = null
     if (!regenerate_text && !regenerate_image) {
       try {
         const computedTime = await computeSuggestedTime(supabase, org_id, platform, bestTime)
-        if (computedTime) suggestedTime = computedTime
+        if (computedTime) {
+          suggestedTime = computedTime
+          // Parse ISO date from suggested time string like "Tirsdag kl 09:00 (2026-03-25)"
+          scheduledFor = parseScheduledFromSuggested(computedTime)
+        }
       } catch (err) {
         console.error('Auto-schedule error:', err)
       }
@@ -494,6 +499,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         updates.headline = generatedHeadline
         updates.subtitle = generatedSubtitle
         updates.suggested_time = suggestedTime
+        if (scheduledFor) updates.scheduled_for = scheduledFor
       }
       if (imageUrl) {
         updates.content_image_url = imageUrl
@@ -529,6 +535,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           headline: generatedHeadline,
           subtitle: generatedSubtitle,
           suggested_time: suggestedTime,
+          scheduled_for: scheduledFor,
           selected_overlay: selected_overlay || null,
           status: 'draft',
           ai_generated: true,
@@ -706,4 +713,37 @@ async function computeSuggestedTime(supabase: any, orgId: string, platform: stri
   }
 
   return aiBestTime || null
+}
+
+// Helper: parse ISO timestamp from suggested time strings
+// Handles "Tirsdag kl 09:00 (2026-03-25)" → "2026-03-25T09:00:00.000Z"
+// Also handles day-range format "Tirsdag-torsdag kl 08-10" by computing next matching date
+function parseScheduledFromSuggested(timeStr: string): string | null {
+  // Try explicit date format: "Dag kl HH:MM (YYYY-MM-DD)"
+  const explicitMatch = timeStr.match(/\((\d{4}-\d{2}-\d{2})\)/)
+  const timeMatch = timeStr.match(/kl\s*(\d{1,2}):?(\d{2})?/)
+  if (explicitMatch) {
+    const hour = timeMatch ? timeMatch[1].padStart(2, '0') : '09'
+    const min = timeMatch?.[2] || '00'
+    return `${explicitMatch[1]}T${hour}:${min}:00.000Z`
+  }
+  // Parse day name: "Tirsdag kl 08" or "Tirsdag-torsdag kl 08-10"
+  const dayMap: Record<string, number> = { søndag: 0, mandag: 1, tirsdag: 2, onsdag: 3, torsdag: 4, fredag: 5, lørdag: 6 }
+  const dayMatch = timeStr.match(/(mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag)/i)
+  const hourRangeMatch = timeStr.match(/kl\s*(\d{1,2})/)
+  if (dayMatch && hourRangeMatch) {
+    const targetDay = dayMap[dayMatch[1].toLowerCase()]
+    const hour = hourRangeMatch[1].padStart(2, '0')
+    if (targetDay !== undefined) {
+      const now = new Date()
+      const currentDay = now.getDay()
+      let daysAhead = targetDay - currentDay
+      if (daysAhead <= 0) daysAhead += 7
+      const target = new Date(now)
+      target.setDate(now.getDate() + daysAhead)
+      const dateStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
+      return `${dateStr}T${hour}:00:00.000Z`
+    }
+  }
+  return null
 }
