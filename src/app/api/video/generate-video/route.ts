@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fal } from '@fal-ai/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-fal.config({ credentials: process.env.FAL_KEY })
-
 export async function POST(request: NextRequest) {
+  if (!process.env.FAL_KEY) {
+    return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
+  }
+  fal.config({ credentials: process.env.FAL_KEY })
   try {
     const { start_image_url, end_image_url, motion_prompt, duration, aspect_ratio, video_id, org_id } = await request.json()
 
