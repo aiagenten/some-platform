@@ -1,13 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Clock } from 'lucide-react'
-import { getOverlayTemplate } from '@/lib/overlay-templates'
-import type { OverlayOptions } from '@/lib/overlay-templates'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
-import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 
 type Post = {
   id: string
@@ -68,76 +65,35 @@ function parseScheduledFromSuggested(timeStr: string): string | null {
   return null
 }
 
-// Component to render overlay preview on a small canvas
-function OverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates }: {
+// Simple image preview with overlay name badge
+function OverlayPreview({ post }: {
   post: Post
-  brandColors: Array<{ hex: string; role: string }>
-  brandFonts: Array<{ family: string; role: string }>
-  brandLogoUrl: string | null
-  orgName: string
-  customTemplates: CustomOverlayTemplate[]
+  brandColors?: Array<{ hex: string; role: string }>
+  brandFonts?: Array<{ family: string; role: string }>
+  brandLogoUrl?: string | null
+  orgName?: string
+  customTemplates?: CustomOverlayTemplate[]
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [rendered, setRendered] = useState(false)
-
-  const render = useCallback(async () => {
-    const canvas = canvasRef.current
-    if (!canvas || !post.content_image_url || brandColors.length === 0) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const size = 540
-    canvas.width = size
-    canvas.height = size
-
-    const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-      const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
-    })
-
-    try {
-      const baseImage = await loadImage(post.content_image_url!)
-      let logo: HTMLImageElement | null = null
-      if (brandLogoUrl) { try { logo = await loadImage(brandLogoUrl) } catch { /* skip */ } }
-
-      const primaryColor = brandColors.find(c => c.role === 'primary')?.hex || '#9933ff'
-      const accentColor = brandColors.find(c => c.role === 'accent')?.hex || primaryColor
-      const headingFont = brandFonts.find(f => f.role === 'heading')?.family || 'Inter'
-      const bodyFont = brandFonts.find(f => f.role === 'body')?.family || headingFont
-
-      const headline = post.headline || (() => {
-        const firstLine = (post.content_text || post.caption || '').split('\n')[0].trim()
-        return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
-      })()
-      const subtitle = post.subtitle || ''
-
-      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
-
-      const overlayId = post.selected_overlay || 'modern-dark'
-      const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
-      if (customTmpl) {
-        await renderCustomOverlay(ctx, customTmpl, options)
-      } else {
-        await getOverlayTemplate(overlayId).render(ctx, options)
-      }
-      setRendered(true)
-    } catch (err) {
-      console.error('Overlay preview error:', err)
-      setRendered(false)
-    }
-  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates])
-
-  useEffect(() => { render() }, [render])
-
   if (!post.content_image_url) return null
+
+  const OVERLAY_NAMES: Record<string, string> = {
+    'modern-dark': 'Moderne mørk',
+    'gradient-banner': 'Gradient',
+    'color-sidebar': 'Sidebar',
+    'minimalist': 'Minimalistisk',
+    'bold-block': 'Bold blokk',
+  }
+  const overlayName = post.selected_overlay
+    ? (post.selected_overlay.startsWith('custom-') ? 'Egendefinert' : OVERLAY_NAMES[post.selected_overlay] || post.selected_overlay)
+    : null
 
   return (
     <div className="relative h-48 overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        className={`w-full h-full object-cover ${rendered ? '' : 'hidden'}`}
-        style={{ aspectRatio: '1/1' }}
-      />
-      {!rendered && (
-        <img src={post.content_image_url} alt="" className="w-full h-full object-cover" />
+      <img src={post.content_image_url} alt="" className="w-full h-full object-cover" />
+      {overlayName && (
+        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm">
+          🎨 {overlayName}
+        </div>
       )}
     </div>
   )
