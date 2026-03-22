@@ -11,8 +11,8 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@fal-ai/client@^1.9.4",
         "npm:@mendable/firecrawl-js@^4.16.0",
-        "npm:@remotion/player@^4.0.435",
         "npm:@supabase/ssr@0.9",
         "npm:@supabase/supabase-js@^2.99.2",
         "npm:@types/node@20",
@@ -27,7 +27,6 @@
         "npm:postcss@8",
         "npm:react-dom@18",
         "npm:react@18",
-        "npm:remotion@^4.0.435",
         "npm:tailwindcss@^3.4.1",
         "npm:typescript@5"
       ]
