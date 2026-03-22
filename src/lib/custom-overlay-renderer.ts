@@ -9,7 +9,16 @@ export async function renderCustomOverlay(
   template: CustomOverlayTemplate,
   options: OverlayOptions
 ) {
-  const { size, baseImage, logo, headline, subtitle, brandName, primaryColor, headingFont, bodyFont } = options
+  const { size, baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = options
+
+  // Resolve brand tokens in element fills
+  const resolveFill = (fill: string | undefined): string => {
+    if (!fill) return 'rgba(0,0,0,0.5)'
+    return fill
+      .replace('{{primaryColor}}', primaryColor)
+      .replace('{{accentColor}}', accentColor)
+      .replace('{{brandName}}', brandName)
+  }
 
   // Draw base image first (covers full canvas)
   const imgRatio = baseImage.width / baseImage.height
@@ -43,10 +52,10 @@ export async function renderCustomOverlay(
         renderText(ctx, el, w, h, { headline, subtitle, brandName, headingFont, bodyFont, primaryColor })
         break
       case 'shape':
-        renderShape(ctx, el, w, h)
+        renderShape(ctx, el, w, h, resolveFill)
         break
       case 'color-block':
-        renderColorBlock(ctx, el, w, h)
+        renderColorBlock(ctx, el, w, h, resolveFill)
         break
       case 'logo':
         if (el.useBrandLogo === false && el.imageUrl) {
@@ -120,8 +129,8 @@ function renderText(
   })
 }
 
-function renderShape(ctx: CanvasRenderingContext2D, el: OverlayElement, w: number, h: number) {
-  ctx.fillStyle = el.fill || '#9933ff'
+function renderShape(ctx: CanvasRenderingContext2D, el: OverlayElement, w: number, h: number, resolveFill: (f: string | undefined) => string) {
+  ctx.fillStyle = resolveFill(el.fill)
   if (el.stroke) {
     ctx.strokeStyle = el.stroke
     ctx.lineWidth = el.strokeWidth || 1
@@ -155,8 +164,8 @@ function renderShape(ctx: CanvasRenderingContext2D, el: OverlayElement, w: numbe
   }
 }
 
-function renderColorBlock(ctx: CanvasRenderingContext2D, el: OverlayElement, w: number, h: number) {
-  ctx.fillStyle = el.fill || 'rgba(0,0,0,0.5)'
+function renderColorBlock(ctx: CanvasRenderingContext2D, el: OverlayElement, w: number, h: number, resolveFill: (f: string | undefined) => string) {
+  ctx.fillStyle = resolveFill(el.fill)
   const rx = el.rx || 0
   if (rx > 0) {
     roundRect(ctx, el.left, el.top, w, h, rx)

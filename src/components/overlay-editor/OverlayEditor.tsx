@@ -144,12 +144,19 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
 
       switch (el.type) {
         case 'text': {
+          // Resolve font from brand token if available
+          let resolvedFont = el.fontFamily || 'Inter'
+          if (el.brandToken === 'headingFont') {
+            resolvedFont = brand.fonts.find(f => f.role === 'heading')?.family || resolvedFont
+          } else if (el.brandToken === 'bodyFont') {
+            resolvedFont = brand.fonts.find(f => f.role === 'body')?.family || resolvedFont
+          }
           obj = new fabric.Textbox(el.text || 'Tekst', {
             left: el.left,
             top: el.top,
             width: el.width || 400,
             fontSize: el.fontSize || 48,
-            fontFamily: el.fontFamily || 'Inter',
+            fontFamily: resolvedFont,
             fontWeight: el.fontWeight || 'normal',
             fill: el.fill || '#ffffff',
             textAlign: el.textAlign || 'left',
