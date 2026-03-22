@@ -6,8 +6,15 @@ import { useRouter } from 'next/navigation'
 import {
   Video, Upload, Sparkles, ChevronRight, ChevronLeft, Play, Pause,
   RefreshCw, Music, Eye, Send, Save, Check, Loader2, Image as ImageIcon,
-  ArrowRight, Volume2, VolumeX
+  ArrowRight, Volume2, VolumeX, Film
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { VIDEO_OVERLAY_TEMPLATES, type VideoOverlayConfig } from '@/lib/video-overlay-templates'
+
+const RemotionPreview = dynamic(
+  () => import('@/remotion/RemotionPreview').then(m => ({ default: m.RemotionPreview })),
+  { ssr: false, loading: () => <div className="h-64 flex items-center justify-center text-sm text-slate-400">Laster preview...</div> }
+)
 
 type ImageStyle = {
   id: string
@@ -93,9 +100,18 @@ export default function VideoCreator() {
   const [noMusic, setNoMusic] = useState(false)
   const [isPlayingMusic, setIsPlayingMusic] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [overlayTemplates, setOverlayTemplates] = useState<Array<{ id: string; name: string }>>([])
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null)
-  const [overlayFadeIn, setOverlayFadeIn] = useState(1.0)
+  const [overlayFadeIn] = useState(1.0)
+  const [showOutro, setShowOutro] = useState(true)
+  const [brandConfig, setBrandConfig] = useState<VideoOverlayConfig>({
+    logoUrl: null,
+    brandName: '',
+    tagline: '',
+    primaryColor: '#4F46E5',
+    accentColor: '#06B6D4',
+    headingFont: 'sans-serif',
+    bodyFont: 'sans-serif',
+  })
 
   // Step 5: Caption
   const [caption, setCaption] = useState('')
@@ -131,11 +147,32 @@ export default function VideoCreator() {
       if (savedStyles) setStyles(savedStyles)
       setSelectedStyle((settings.active_image_style as string) || 'scandinavian-photo')
 
-      // Load overlay templates
-      const res = await fetch('/api/overlay-templates')
-      if (res.ok) {
-        const data = await res.json()
-        setOverlayTemplates(Array.isArray(data) ? data : data.templates || [])
+      // Load brand data for overlays/outro
+      const { data: brandProfile } = await supabase
+        .from('brand_profiles')
+        .select('logo_url, tagline, colors, fonts')
+        .eq('org_id', profile.org_id)
+        .single()
+
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('name, logo_url')
+        .eq('id', profile.org_id)
+        .single()
+
+      if (brandProfile || orgData) {
+        const colors = (brandProfile?.colors as Array<{ hex: string; role: string }>) || []
+        const primary = colors.find(c => c.role === 'primary')?.hex || '#4F46E5'
+        const accent = colors.find(c => c.role === 'accent')?.hex || '#06B6D4'
+        setBrandConfig({
+          logoUrl: brandProfile?.logo_url || orgData?.logo_url || null,
+          brandName: orgData?.name || '',
+          tagline: brandProfile?.tagline || '',
+          primaryColor: primary,
+          accentColor: accent,
+          headingFont: 'sans-serif',
+          bodyFont: 'sans-serif',
+        })
       }
     }
     init()
@@ -448,6 +485,7 @@ export default function VideoCreator() {
       caption,
       overlay_template_id: selectedOverlay,
       overlay_fade_in_sec: overlayFadeIn,
+      show_outro: showOutro,
       music_mood: selectedMood,
       status: 'ready',
     }).eq('id', videoId)
@@ -1043,7 +1081,7 @@ export default function VideoCreator() {
                   >
                     Ingen overlay
                   </button>
-                  {overlayTemplates.map(t => (
+                  {VIDEO_OVERLAY_TEMPLATES.map(t => (
                     <button
                       key={t.id}
                       onClick={() => setSelectedOverlay(t.id)}
@@ -1051,35 +1089,48 @@ export default function VideoCreator() {
                         selectedOverlay === t.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
-                      {t.name}
+                      <span className="font-medium">{t.name}</span>
+                      <span className="block text-xs text-slate-400 mt-0.5">{t.description}</span>
                     </button>
                   ))}
                 </div>
 
-                {selectedOverlay && (
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                      Fade inn etter: {overlayFadeIn.toFixed(1)}s
-                    </label>
+                {/* Outro toggle */}
+                <div className="pt-2 border-t border-slate-100">
+                  <h3 className="font-medium text-slate-900 flex items-center gap-2 mb-2">
+                    <Film className="w-4 h-4 text-indigo-600" /> Outro
+                  </h3>
+                  <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:border-slate-300 transition-all">
                     <input
-                      type="range"
-                      min={0}
-                      max={duration}
-                      step={0.5}
-                      value={overlayFadeIn}
-                      onChange={e => setOverlayFadeIn(parseFloat(e.target.value))}
-                      className="w-full"
+                      type="checkbox"
+                      checked={showOutro}
+                      onChange={e => setShowOutro(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600"
                     />
-                  </div>
-                )}
+                    <div>
+                      <span className="text-sm font-medium text-slate-700">Vis branded outro</span>
+                      <span className="block text-xs text-slate-400">2.5s avslutning med logo og merkenavn</span>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
 
-            {/* Video preview */}
+            {/* Remotion Player preview */}
             {videoUrl && (
               <div className="pt-4 border-t border-slate-200">
-                <p className="text-sm font-medium text-slate-700 mb-2">Video-preview</p>
-                <video src={videoUrl} controls className="rounded-xl border border-slate-200 max-h-64 mx-auto" />
+                <p className="text-sm font-medium text-slate-700 mb-3">
+                  Preview med overlay{showOutro ? ' og outro' : ''}
+                </p>
+                <RemotionPreview
+                  videoUrl={videoUrl}
+                  musicUrl={noMusic ? null : musicUrl}
+                  overlayType={(selectedOverlay as 'logo-watermark' | 'lower-third' | 'full-branded') || null}
+                  showOutro={showOutro}
+                  durationSec={duration}
+                  aspectRatio={aspectRatio}
+                  brand={brandConfig}
+                />
               </div>
             )}
           </div>
