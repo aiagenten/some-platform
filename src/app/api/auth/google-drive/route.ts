@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         INSERT INTO social_accounts (org_id, platform, account_name, account_id, access_token_enc, refresh_token_enc, token_expires_at, metadata)
         VALUES (
           '${user.org_id}',
-          'instagram',
+          'google_drive',
           '${(userInfo.email || 'Google Drive').replace("'", "''")}',
           'gdrive_${userInfo.id || 'unknown'}',
           pgp_sym_encrypt('${tokens.access_token}', current_setting('app.token_secret')),
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
       await supabase.from('social_accounts').upsert(
         {
           org_id: user.org_id,
-          platform: 'instagram', // Reusing platform enum — metadata.provider distinguishes
+          platform: 'google_drive',
           account_name: userInfo.email || 'Google Drive',
           account_id: `gdrive_${userInfo.id || Date.now()}`,
           metadata: {

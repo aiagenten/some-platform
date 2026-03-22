@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Instagram, Facebook, Linkedin, Music, Link2, CheckCircle2, XCircle } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Link2, CheckCircle2, XCircle, HardDrive, Cloud } from 'lucide-react'
 
 type SocialAccount = {
   id: string
@@ -21,6 +21,8 @@ const PLATFORM_INFO: Record<string, { icon: React.ComponentType<{ className?: st
   facebook: { icon: Facebook, label: 'Facebook', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   linkedin: { icon: Linkedin, label: 'LinkedIn', color: 'bg-sky-50 text-sky-700 border-sky-200' },
   tiktok: { icon: Music, label: 'TikTok', color: 'bg-slate-50 text-slate-700 border-slate-200' },
+  google_drive: { icon: HardDrive, label: 'Google Drive', color: 'bg-green-50 text-green-700 border-green-200' },
+  onedrive: { icon: Cloud, label: 'OneDrive', color: 'bg-blue-50 text-blue-700 border-blue-200' },
 }
 
 export default function AccountsSettingsPage() {
