@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  # Extend function timeout for LLM API calls (text gen + image gen = 15-30s)
+  external_node_modules = ["sharp"]
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# API routes need longer timeout for AI generation
+[functions."api-posts-generate-*"]
+  timeout = 60

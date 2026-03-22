@@ -39,6 +39,7 @@ type GeneratedContent = {
   subtitle: string | null
   hashtags: string[]
   image_url: string | null
+  image_error: string | null
   best_time: string | null
   image_suggestion: string | null
 }
@@ -535,8 +536,11 @@ export default function GeneratePage() {
                     </details>
                   </div>
                 ) : (
-                  <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                  <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl flex flex-col items-center justify-center border border-slate-200 gap-2">
                     <p className="text-sm text-slate-400">Ingen bilde generert</p>
+                    {generated?.image_error && (
+                      <p className="text-xs text-red-400 px-4 text-center">{generated.image_error}</p>
+                    )}
                   </div>
                 )}
               </div>

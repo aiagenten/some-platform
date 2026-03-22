@@ -267,6 +267,7 @@ Returner dette JSON-formatet:
 
     // Generate image via OpenRouter (Nano Banana / GPT Image)
     let imageUrl = null
+    let imageError: string | null = null
 
     if (!regenerate_text) {
       // Build image prompt from the generated text context
@@ -387,7 +388,9 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
               }
             }
           } else {
-            console.error('Nano Banana error:', imageResponse.status, await imageResponse.text())
+            const errText = await imageResponse.text()
+            console.error('Nano Banana error:', imageResponse.status, errText)
+            imageError = `Nano Banana ${imageResponse.status}: ${errText.substring(0, 200)}`
           }
         }
 
@@ -407,10 +410,12 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
             imageUrl = urlData.publicUrl
           } else {
             console.error('Image upload error:', uploadError)
+            imageError = `Upload error: ${uploadError.message}`
           }
         }
       } catch (imgErr) {
         console.error('Image generation error:', imgErr)
+        imageError = `Exception: ${imgErr instanceof Error ? imgErr.message : String(imgErr)}`
       }
     }
 
@@ -476,6 +481,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         subtitle: generatedSubtitle,
         hashtags: generatedHashtags,
         image_url: imageUrl,
+        image_error: imageError,
         best_time: bestTime,
         image_suggestion: imageSuggestion,
       },
