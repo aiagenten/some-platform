@@ -144,9 +144,10 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
 
       switch (el.type) {
         case 'text': {
-          obj = new fabric.IText(el.text || 'Tekst', {
+          obj = new fabric.Textbox(el.text || 'Tekst', {
             left: el.left,
             top: el.top,
+            width: el.width || 400,
             fontSize: el.fontSize || 48,
             fontFamily: el.fontFamily || 'Inter',
             fontWeight: el.fontWeight || 'normal',
@@ -312,9 +313,10 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
     const canvas = fabricRef.current
     if (!canvas) return
     const headingFont = brand.fonts.find(f => f.role === 'heading')?.family || 'Inter'
-    const text = new fabric.IText('Overskrift', {
-      left: 100,
+    const text = new fabric.Textbox('Overskrift', {
+      left: 60,
       top: 200,
+      width: 960,
       fontSize: 72,
       fontFamily: headingFont,
       fontWeight: 'bold',
@@ -331,9 +333,10 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
     const canvas = fabricRef.current
     if (!canvas) return
     const bodyFont = brand.fonts.find(f => f.role === 'body')?.family || 'Inter'
-    const text = new fabric.IText('Undertekst', {
-      left: 100,
+    const text = new fabric.Textbox('Undertekst', {
+      left: 60,
       top: 350,
+      width: 960,
       fontSize: 36,
       fontFamily: bodyFont,
       fontWeight: 'normal',
@@ -511,8 +514,8 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
         opacity: obj.opacity ?? 1,
       }
 
-      if (custom.customType === 'text' || obj instanceof fabric.IText) {
-        const t = obj as fabric.IText
+      if (custom.customType === 'text' || obj instanceof fabric.Textbox || obj instanceof fabric.IText) {
+        const t = obj as fabric.Textbox
         elements.push({
           ...base,
           type: 'text',
@@ -630,7 +633,7 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
         const canvas = fabricRef.current
         if (canvas) {
           const active = canvas.getActiveObject()
-          if (active && active instanceof fabric.IText && (active as fabric.IText).isEditing) return
+          if (active && (active instanceof fabric.IText || active instanceof fabric.Textbox) && (active as fabric.IText).isEditing) return
         }
         deleteSelected()
       }
