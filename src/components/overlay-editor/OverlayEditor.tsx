@@ -5,7 +5,7 @@ import * as fabric from 'fabric'
 import type { OverlayElement, CanvasBackground, CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { ElementToolbar } from './ElementToolbar'
 import { PropertyPanel } from './PropertyPanel'
-import { Save, Undo2, Redo2, Layers, Grid3x3 } from 'lucide-react'
+import { Save, Undo2, Redo2, Layers, Grid3x3, ImageIcon } from 'lucide-react'
 
 type BrandProfile = {
   colors: Array<{ hex: string; role: string }>
@@ -32,6 +32,7 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
     template?.canvas_background || { type: 'transparent' }
   )
   const [showGrid, setShowGrid] = useState(false)
+  const [showSampleBg, setShowSampleBg] = useState(true)
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const skipHistoryRef = useRef(false)
@@ -686,17 +687,34 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
 
         {/* Canvas area */}
         <div className="flex-1 flex items-center justify-center bg-slate-900 overflow-auto p-8 relative">
-          {/* Grid toggle */}
-          <button onClick={() => setShowGrid(!showGrid)} className={`absolute top-4 right-4 p-2 rounded-lg transition-colors ${showGrid ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`} title="Vis rutenett">
-            <Grid3x3 className="w-4 h-4" />
-          </button>
+          {/* Canvas toggles */}
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button onClick={() => setShowSampleBg(!showSampleBg)} className={`p-2 rounded-lg transition-colors ${showSampleBg ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`} title="Vis/skjul eksempelbakgrunn">
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`p-2 rounded-lg transition-colors ${showGrid ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`} title="Vis rutenett">
+              <Grid3x3 className="w-4 h-4" />
+            </button>
+          </div>
 
           <div className="relative" style={{ width: DISPLAY_SIZE, height: DISPLAY_SIZE }}>
-            {/* Checkerboard background for transparency */}
-            <div className="absolute inset-0 rounded-lg overflow-hidden" style={{
+            {/* Sample background or checkerboard for transparency */}
+            <div className="absolute inset-0 rounded-lg overflow-hidden" style={showSampleBg ? {
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+            } : {
               backgroundImage: 'repeating-conic-gradient(#e5e7eb 0% 25%, transparent 0% 50%)',
               backgroundSize: '20px 20px',
-            }} />
+            }}>
+              {showSampleBg && (
+                <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                  <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="10" y="30" width="100" height="60" rx="8" fill="white" />
+                    <circle cx="40" cy="50" r="12" fill="white" opacity="0.6" />
+                    <path d="M10 75 L45 55 L65 70 L85 45 L110 65 V82 C110 86.4183 106.418 90 102 90 H18 C13.5817 90 10 86.4183 10 82 V75Z" fill="white" opacity="0.4" />
+                  </svg>
+                </div>
+              )}
+            </div>
             {/* Grid overlay */}
             {showGrid && (
               <div className="absolute inset-0 pointer-events-none z-10" style={{

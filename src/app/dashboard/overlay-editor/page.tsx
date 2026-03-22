@@ -8,6 +8,7 @@ import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { OVERLAY_TEMPLATES } from '@/lib/overlay-templates'
 import { getStandardTemplateElements } from '@/lib/standard-template-elements'
 import { Plus, Pencil, Trash2, Layout, Loader2, Eye, EyeOff, Copy } from 'lucide-react'
+import { TemplatePreview } from '@/components/overlay-editor/TemplatePreview'
 
 type BrandProfile = {
   colors: Array<{ hex: string; role: string }>
@@ -63,6 +64,34 @@ function OverlayEditorContent() {
             }
           }
         }
+
+        // Also fetch logos from brand-assets storage bucket
+        try {
+          const { data: assetFiles } = await supabase.storage
+            .from('brand-assets')
+            .list(profile.org_id, { limit: 50 })
+
+          if (assetFiles && assetFiles.length > 0) {
+            const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
+            for (const f of assetFiles) {
+              const ext = f.name.split('.').pop()?.toLowerCase() || ''
+              if (imageExts.includes(ext)) {
+                const { data: urlData } = supabase.storage
+                  .from('brand-assets')
+                  .getPublicUrl(`${profile.org_id}/${f.name}`)
+                if (urlData?.publicUrl) {
+                  // Avoid duplicating the main logo_url
+                  if (!bp.logo_url || !urlData.publicUrl.includes(bp.logo_url.split('/').pop() || '___none___')) {
+                    extraLogos.push({ url: urlData.publicUrl, label: f.name.replace(/\.\w+$/, '') })
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // Storage bucket may not exist yet, ignore
+        }
+
         setBrand({
           colors: bp.colors || [],
           fonts: bp.fonts || [],
@@ -327,11 +356,11 @@ function OverlayEditorContent() {
             return (
               <div key={tmpl.id} className={`bg-white rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm hover:shadow-md transition-shadow group ${!isVisible ? 'opacity-60' : ''}`}>
                 <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 relative overflow-hidden flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <Layout className="w-16 h-16 text-indigo-200 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-600">{tmpl.name}</p>
-                    <p className="text-xs text-slate-400 mt-1">{tmpl.description}</p>
-                  </div>
+                  <TemplatePreview
+                    template={tmpl}
+                    primaryColor={brand?.colors.find(c => c.role === 'primary')?.hex}
+                    accentColor={brand?.colors.find(c => c.role === 'accent')?.hex}
+                  />
                   {/* Hover actions */}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button

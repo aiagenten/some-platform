@@ -21,6 +21,7 @@
         "npm:cheerio@^1.2.0",
         "npm:eslint-config-next@14.2.35",
         "npm:eslint@8",
+        "npm:fabric@^6.9.1",
         "npm:lucide-react@0.577",
         "npm:next@14.2.35",
         "npm:postcss@8",
