@@ -8,6 +8,8 @@ import PlatformPreview from '@/components/PlatformPreview'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
+import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 
 type Post = {
   id: string
@@ -90,6 +92,7 @@ export default function PostDetailPage() {
   const [showSchedule, setShowSchedule] = useState(false)
   const [scheduleDate, setScheduleDate] = useState('')
   const [scheduleTime, setScheduleTime] = useState('09:00')
+  const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -112,6 +115,15 @@ export default function PostDetailPage() {
           setBrandLogoUrl(bp.logo_url)
         }
       }
+
+      // Load custom overlay templates
+      try {
+        const res = await fetch('/api/overlay-templates')
+        if (res.ok) {
+          const customData = await res.json()
+          setCustomTemplates(customData)
+        }
+      } catch { /* ignore */ }
 
       const { data: postData } = await supabase.from('social_posts').select('*').eq('id', postId).single()
       if (postData) setPost(postData)
@@ -156,9 +168,16 @@ export default function PostDetailPage() {
       const headline = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
 
       const options: OverlayOptions = { size, baseImage, logo, headline, subtitle: '', brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
-      await getOverlayTemplate(selectedOverlay).render(ctx, options)
+
+      // Check if it's a custom template
+      const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
+      if (customTmpl) {
+        await renderCustomOverlay(ctx, customTmpl, options)
+      } else {
+        await getOverlayTemplate(selectedOverlay).render(ctx, options)
+      }
     } catch (err) { console.error('Overlay error:', err) }
-  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption])
+  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, customTemplates])
 
   useEffect(() => { renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
@@ -339,6 +358,17 @@ export default function PostDetailPage() {
                         {tmpl.name}
                       </button>
                     ))}
+                    {customTemplates.length > 0 && (
+                      <>
+                        <span className="text-slate-300 text-xs">|</span>
+                        {customTemplates.map((tmpl) => (
+                          <button key={tmpl.id} onClick={() => setSelectedOverlay(`custom-${tmpl.id}`)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
+                            ✨ {tmpl.name}
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
 
                   {/* Original image */}
