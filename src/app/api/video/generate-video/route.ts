@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
     }
 
-    const { start_image_url, end_image_url, motion_prompt, duration, aspect_ratio, video_id, org_id } = await request.json()
+    const { start_image_url, end_image_url, motion_prompt, duration, video_id, org_id } = await request.json()
 
     if (!start_image_url || !org_id) {
       return NextResponse.json({ error: 'start_image_url and org_id are required' }, { status: 400 })
