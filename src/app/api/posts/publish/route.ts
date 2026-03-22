@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logAudit } from '@/lib/audit'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -67,6 +68,20 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await res.json()
+
+      // Audit log for successful publish
+      await logAudit({
+        action: 'post.published',
+        resourceType: 'post',
+        resourceId: post_id,
+        resourceTitle: `${post.platform} post`,
+        metadata: {
+          platform: post.platform,
+          org_id: post.org_id,
+          publish_result: result,
+        },
+      }).catch((err) => console.error('Audit log failed:', err))
+
       return NextResponse.json({ success: true, result })
     } catch (fnErr) {
       console.error('Edge Function call error:', fnErr)
