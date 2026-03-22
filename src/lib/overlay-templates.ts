@@ -187,24 +187,22 @@ const gradientBanner: OverlayTemplate = {
 const colorSidebar: OverlayTemplate = {
   id: 'color-sidebar',
   name: 'Farge-sidebar',
-  description: 'Farget panel til venstre med tekst, bilde til høyre',
+  description: 'Bilde i full størrelse med farget semi-transparent sidebar til venstre',
   render: async (ctx, opts) => {
     const { size, baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = opts
     const panelW = Math.floor(size * 0.4)
     const pad = 40
 
-    // Draw image on right side
-    const imgRatio = baseImage.width / baseImage.height
-    let sx = 0, sy = 0, sw = baseImage.width, sh = baseImage.height
-    if (imgRatio > 1) { sx = (baseImage.width - baseImage.height) / 2; sw = baseImage.height }
-    else if (imgRatio < 1) { sy = (baseImage.height - baseImage.width) / 2; sh = baseImage.width }
-    ctx.drawImage(baseImage, sx, sy, sw, sh, panelW, 0, size - panelW, size)
+    // Draw base image full size (like all other overlay templates)
+    drawBaseImage(ctx, baseImage, size)
 
-    // Colored left panel
+    // Semi-transparent colored left panel overlay
     ctx.fillStyle = primaryColor
+    ctx.globalAlpha = 0.88
     ctx.fillRect(0, 0, panelW, size)
+    ctx.globalAlpha = 1
 
-    // Slight dark overlay for depth
+    // Slight dark overlay for depth on sidebar
     ctx.fillStyle = 'rgba(0,0,0,0.15)'
     ctx.fillRect(0, 0, panelW, size)
 

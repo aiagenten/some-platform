@@ -67,6 +67,7 @@ export type CustomOverlayTemplate = {
   width: number
   height: number
   is_default: boolean
+  is_visible?: boolean
   created_at: string
   updated_at: string
 }

@@ -93,6 +93,7 @@ export default function PostDetailPage() {
   const [scheduleDate, setScheduleDate] = useState('')
   const [scheduleTime, setScheduleTime] = useState('09:00')
   const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
+  const [standardVisibility, setStandardVisibility] = useState<Record<string, boolean>>({})
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -122,6 +123,15 @@ export default function PostDetailPage() {
         if (res.ok) {
           const customData = await res.json()
           setCustomTemplates(customData)
+        }
+      } catch { /* ignore */ }
+
+      // Load standard template visibility settings
+      try {
+        const visRes = await fetch('/api/overlay-templates/visibility')
+        if (visRes.ok) {
+          const visData = await visRes.json()
+          setStandardVisibility(visData)
         }
       } catch { /* ignore */ }
 
@@ -349,26 +359,24 @@ export default function PostDetailPage() {
                 <div className="space-y-3">
                   <canvas ref={canvasRef} className="w-full rounded-xl shadow-sm border border-slate-200" style={{ aspectRatio: '1/1' }} />
 
-                  {/* Overlay selector */}
+                  {/* Overlay selector — custom templates first, then standard */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <Layout className="w-3.5 h-3.5 text-slate-400" />
-                    {OVERLAY_TEMPLATES.map((tmpl) => (
+                    {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
+                      <button key={tmpl.id} onClick={() => setSelectedOverlay(`custom-${tmpl.id}`)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
+                        {tmpl.name}
+                      </button>
+                    ))}
+                    {customTemplates.filter(t => t.is_visible !== false).length > 0 && (
+                      <span className="text-slate-300 text-xs">|</span>
+                    )}
+                    {OVERLAY_TEMPLATES.filter(t => standardVisibility[t.id] !== false).map((tmpl) => (
                       <button key={tmpl.id} onClick={() => setSelectedOverlay(tmpl.id)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === tmpl.id ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
                         {tmpl.name}
                       </button>
                     ))}
-                    {customTemplates.length > 0 && (
-                      <>
-                        <span className="text-slate-300 text-xs">|</span>
-                        {customTemplates.map((tmpl) => (
-                          <button key={tmpl.id} onClick={() => setSelectedOverlay(`custom-${tmpl.id}`)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
-                            ✨ {tmpl.name}
-                          </button>
-                        ))}
-                      </>
-                    )}
                   </div>
 
                   {/* Original image */}

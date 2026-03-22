@@ -7,6 +7,7 @@ type BrandProfile = {
   colors: Array<{ hex: string; role: string }>
   fonts: Array<{ family: string; role: string }>
   logo_url: string | null
+  logos?: Array<{ url: string; label?: string }>
 }
 
 type Props = {
@@ -14,13 +15,14 @@ type Props = {
   onAddHeadline: () => void
   onAddSubtitle: () => void
   onAddLogo: () => void
+  onAddLogoFromUrl: (url: string) => void
   onAddShape: (type: 'rect' | 'circle' | 'triangle') => void
   onAddColorBlock: () => void
   canvasBackground: CanvasBackground
   onChangeBackground: (bg: CanvasBackground) => void
 }
 
-export function ElementToolbar({ brand, onAddHeadline, onAddSubtitle, onAddLogo, onAddShape, onAddColorBlock, canvasBackground, onChangeBackground }: Props) {
+export function ElementToolbar({ brand, onAddHeadline, onAddSubtitle, onAddLogo, onAddLogoFromUrl, onAddShape, onAddColorBlock, canvasBackground, onChangeBackground }: Props) {
   const primaryColor = brand.colors.find(c => c.role === 'primary')?.hex || '#9933ff'
   const accentColor = brand.colors.find(c => c.role === 'accent')?.hex || '#ff6633'
 
@@ -57,6 +59,36 @@ export function ElementToolbar({ brand, onAddHeadline, onAddSubtitle, onAddLogo,
           </button>
         </div>
       </div>
+
+      {/* Logo picker from brand assets */}
+      {(brand.logo_url || (brand.logos && brand.logos.length > 0)) && (
+        <div>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Logoer</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {brand.logo_url && (
+              <button
+                onClick={onAddLogo}
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors group"
+                title="Hovedlogo"
+              >
+                <img src={brand.logo_url} alt="Logo" className="w-10 h-10 object-contain rounded" />
+                <span className="text-[9px] text-slate-500 group-hover:text-slate-300">Hoved</span>
+              </button>
+            )}
+            {brand.logos?.map((logo, i) => (
+              <button
+                key={i}
+                onClick={() => onAddLogoFromUrl(logo.url)}
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors group"
+                title={logo.label || `Logo ${i + 1}`}
+              >
+                <img src={logo.url} alt={logo.label || `Logo ${i + 1}`} className="w-10 h-10 object-contain rounded" />
+                <span className="text-[9px] text-slate-500 group-hover:text-slate-300 truncate w-full text-center">{logo.label || `Logo ${i + 1}`}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Shapes */}
       <div>

@@ -11,6 +11,7 @@ type BrandProfile = {
   colors: Array<{ hex: string; role: string }>
   fonts: Array<{ family: string; role: string }>
   logo_url: string | null
+  logos?: Array<{ url: string; label?: string }>
 }
 
 type Props = {
@@ -357,6 +358,28 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
     })
   }
 
+  const addLogoFromUrl = (url: string) => {
+    const canvas = fabricRef.current
+    if (!canvas) return
+    fabric.FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then(img => {
+      const scale = Math.min(150 / img.width!, 150 / img.height!)
+      img.set({
+        left: 60,
+        top: 60,
+        scaleX: scale,
+        scaleY: scale,
+      })
+      ;(img as unknown as { customType: string; useBrandLogo: boolean }).customType = 'logo'
+      ;(img as unknown as { useBrandLogo: boolean }).useBrandLogo = false
+      ;(img as unknown as { imageUrl: string }).imageUrl = url
+      canvas.add(img)
+      canvas.setActiveObject(img)
+      canvas.renderAll()
+    }).catch(() => {
+      console.error('Failed to load logo from URL')
+    })
+  }
+
   const addShape = (shapeType: 'rect' | 'circle' | 'triangle') => {
     const canvas = fabricRef.current
     if (!canvas) return
@@ -653,6 +676,7 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
             onAddHeadline={addHeadline}
             onAddSubtitle={addSubtitle}
             onAddLogo={addLogo}
+            onAddLogoFromUrl={addLogoFromUrl}
             onAddShape={addShape}
             onAddColorBlock={addColorBlock}
             canvasBackground={canvasBackground}

@@ -63,20 +63,21 @@ export async function PUT(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { id, name, description, elements, canvas_background, thumbnail } = body
+  const { id, name, description, elements, canvas_background, thumbnail, is_visible } = body
 
   if (!id) return NextResponse.json({ error: 'Template ID required' }, { status: 400 })
 
+  const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (name !== undefined) updateData.name = name
+  if (description !== undefined) updateData.description = description
+  if (elements !== undefined) updateData.elements = elements
+  if (canvas_background !== undefined) updateData.canvas_background = canvas_background
+  if (thumbnail !== undefined) updateData.thumbnail = thumbnail
+  if (is_visible !== undefined) updateData.is_visible = is_visible
+
   const { data, error } = await supabase
     .from('custom_overlay_templates')
-    .update({
-      name,
-      description,
-      elements,
-      canvas_background,
-      thumbnail,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()
