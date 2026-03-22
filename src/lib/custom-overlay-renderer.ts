@@ -21,23 +21,26 @@ export async function renderCustomOverlay(
   // Apply canvas background (over image if not transparent)
   renderBackground(ctx, template.canvas_background, size)
 
-  // Render each element
+  // Render each element using Fabric.js left/top as top-left origin
   for (const el of template.elements) {
     ctx.save()
-
-    // Apply transform
-    const cx = el.left + (el.width * (el.scaleX || 1)) / 2
-    const cy = el.top + (el.height * (el.scaleY || 1)) / 2
-    ctx.translate(cx, cy)
-    ctx.rotate((el.angle || 0) * Math.PI / 180)
     ctx.globalAlpha = el.opacity ?? 1
 
     const w = el.width * (el.scaleX || 1)
     const h = el.height * (el.scaleY || 1)
 
+    // Apply rotation around center of scaled element if needed
+    if (el.angle) {
+      const cx = el.left + w / 2
+      const cy = el.top + h / 2
+      ctx.translate(cx, cy)
+      ctx.rotate(el.angle * Math.PI / 180)
+      ctx.translate(-cx, -cy)
+    }
+
     switch (el.type) {
       case 'text':
-        renderText(ctx, el, { headline, subtitle, brandName, headingFont, bodyFont, primaryColor })
+        renderText(ctx, el, w, h, { headline, subtitle, brandName, headingFont, bodyFont, primaryColor })
         break
       case 'shape':
         renderShape(ctx, el, w, h)
@@ -46,7 +49,7 @@ export async function renderCustomOverlay(
         renderColorBlock(ctx, el, w, h)
         break
       case 'logo':
-        if (logo) renderLogo(ctx, logo, w, h)
+        if (logo) renderLogo(ctx, el, logo, w, h)
         break
     }
 
@@ -77,6 +80,8 @@ function renderBackground(ctx: CanvasRenderingContext2D, bg: CanvasBackground, s
 function renderText(
   ctx: CanvasRenderingContext2D,
   el: OverlayElement,
+  w: number,
+  h: number,
   opts: { headline: string; subtitle: string; brandName: string; headingFont: string; bodyFont: string; primaryColor: string }
 ) {
   // Replace brand tokens in text
@@ -87,19 +92,26 @@ function renderText(
 
   const font = el.fontFamily || opts.headingFont
   const weight = el.fontWeight || 'normal'
-  const size = el.fontSize || 48
+  const fontSize = el.fontSize || 48
+  const scaledFontSize = fontSize * (el.scaleY || 1)
 
-  ctx.font = `${weight} ${size}px '${font}', sans-serif`
+  ctx.font = `${weight} ${scaledFontSize}px '${font}', sans-serif`
   ctx.fillStyle = el.fill || '#ffffff'
   ctx.textBaseline = 'top'
-  ctx.textAlign = (el.textAlign as CanvasTextAlign) || 'left'
 
-  const w = el.width * (el.scaleX || 1)
+  const align = (el.textAlign as CanvasTextAlign) || 'left'
+  ctx.textAlign = align
+
   const lines = wrapText(ctx, text, w)
-  const lineHeight = size * 1.2
+  const lineHeight = scaledFontSize * 1.2
+
+  // Calculate x position based on text alignment
+  let x = el.left
+  if (align === 'center') x = el.left + w / 2
+  else if (align === 'right') x = el.left + w
 
   lines.forEach((line, i) => {
-    ctx.fillText(line, -w / 2, -((el.height * (el.scaleY || 1)) / 2) + i * lineHeight)
+    ctx.fillText(line, x, el.top + i * lineHeight)
   })
 }
 
@@ -111,15 +123,16 @@ function renderShape(ctx: CanvasRenderingContext2D, el: OverlayElement, w: numbe
   }
 
   if (el.shapeType === 'circle') {
+    // Fabric circle: left/top is top-left of bounding box, draw ellipse at center
     ctx.beginPath()
-    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2)
+    ctx.ellipse(el.left + w / 2, el.top + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
     ctx.fill()
     if (el.stroke) ctx.stroke()
   } else if (el.shapeType === 'triangle') {
     ctx.beginPath()
-    ctx.moveTo(0, -h / 2)
-    ctx.lineTo(w / 2, h / 2)
-    ctx.lineTo(-w / 2, h / 2)
+    ctx.moveTo(el.left + w / 2, el.top)
+    ctx.lineTo(el.left + w, el.top + h)
+    ctx.lineTo(el.left, el.top + h)
     ctx.closePath()
     ctx.fill()
     if (el.stroke) ctx.stroke()
@@ -127,12 +140,12 @@ function renderShape(ctx: CanvasRenderingContext2D, el: OverlayElement, w: numbe
     // rect
     const rx = el.rx || 0
     if (rx > 0) {
-      roundRect(ctx, -w / 2, -h / 2, w, h, rx)
+      roundRect(ctx, el.left, el.top, w, h, rx)
       ctx.fill()
       if (el.stroke) ctx.stroke()
     } else {
-      ctx.fillRect(-w / 2, -h / 2, w, h)
-      if (el.stroke) ctx.strokeRect(-w / 2, -h / 2, w, h)
+      ctx.fillRect(el.left, el.top, w, h)
+      if (el.stroke) ctx.strokeRect(el.left, el.top, w, h)
     }
   }
 }
@@ -141,14 +154,14 @@ function renderColorBlock(ctx: CanvasRenderingContext2D, el: OverlayElement, w: 
   ctx.fillStyle = el.fill || 'rgba(0,0,0,0.5)'
   const rx = el.rx || 0
   if (rx > 0) {
-    roundRect(ctx, -w / 2, -h / 2, w, h, rx)
+    roundRect(ctx, el.left, el.top, w, h, rx)
     ctx.fill()
   } else {
-    ctx.fillRect(-w / 2, -h / 2, w, h)
+    ctx.fillRect(el.left, el.top, w, h)
   }
 }
 
-function renderLogo(ctx: CanvasRenderingContext2D, logo: HTMLImageElement, w: number, h: number) {
+function renderLogo(ctx: CanvasRenderingContext2D, el: OverlayElement, logo: HTMLImageElement, w: number, h: number) {
   const ratio = logo.width / logo.height
   let drawW = w
   let drawH = w / ratio
@@ -156,7 +169,7 @@ function renderLogo(ctx: CanvasRenderingContext2D, logo: HTMLImageElement, w: nu
     drawH = h
     drawW = h * ratio
   }
-  ctx.drawImage(logo, -drawW / 2, -drawH / 2, drawW, drawH)
+  ctx.drawImage(logo, el.left, el.top, drawW, drawH)
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

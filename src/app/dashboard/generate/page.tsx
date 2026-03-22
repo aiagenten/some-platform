@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
+import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -101,6 +103,8 @@ export default function GeneratePage() {
   const [imageStyles, setImageStyles] = useState<ImageStyleOption[]>(DEFAULT_IMAGE_STYLES)
   const [selectedStyle, setSelectedStyle] = useState('scandinavian-photo')
   const [selectedOverlay, setSelectedOverlay] = useState('modern-dark')
+  const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
+  const [standardVisibility, setStandardVisibility] = useState<Record<string, boolean>>({})
   // Reference image
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null)
   const [showMediaPicker, setShowMediaPicker] = useState(false)
@@ -137,6 +141,25 @@ export default function GeneratePage() {
           .limit(1)
           .single()
         if (bp) setBrand(bp)
+
+        // Load custom overlay templates
+        try {
+          const res = await fetch('/api/overlay-templates')
+          if (res.ok) {
+            const customData = await res.json()
+            setCustomTemplates(customData)
+          }
+        } catch { /* ignore */ }
+
+        // Load standard template visibility settings
+        try {
+          const visRes = await fetch('/api/overlay-templates/visibility')
+          if (visRes.ok) {
+            const visData = await visRes.json()
+            setStandardVisibility(visData)
+          }
+        } catch { /* ignore */ }
+
         // Load org name + settings
         const { data: org } = await supabase
           .from('organizations')
@@ -248,12 +271,18 @@ export default function GeneratePage() {
         bodyFont,
       }
 
-      const template = getOverlayTemplate(selectedOverlay)
-      await template.render(ctx, options)
+      // Check if it's a custom template
+      const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
+      if (customTmpl) {
+        await renderCustomOverlay(ctx, customTmpl, options)
+      } else {
+        const template = getOverlayTemplate(selectedOverlay)
+        await template.render(ctx, options)
+      }
     } catch (err) {
       console.error('Overlay render error:', err)
     }
-  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle, selectedOverlay])
+  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle, selectedOverlay, customTemplates])
 
   // Re-render overlay when image, brand, or template changes
   useEffect(() => {
@@ -730,7 +759,24 @@ export default function GeneratePage() {
                         <span className="text-xs font-medium text-slate-600">Velg overlay</span>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {OVERLAY_TEMPLATES.map((tmpl) => (
+                        {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
+                          <button
+                            key={tmpl.id}
+                            onClick={() => setSelectedOverlay(`custom-${tmpl.id}`)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                              selectedOverlay === `custom-${tmpl.id}`
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'
+                            }`}
+                            title={tmpl.description || tmpl.name}
+                          >
+                            {tmpl.name}
+                          </button>
+                        ))}
+                        {customTemplates.filter(t => t.is_visible !== false).length > 0 && (
+                          <span className="text-slate-300 text-xs self-center">|</span>
+                        )}
+                        {OVERLAY_TEMPLATES.filter(t => standardVisibility[t.id] !== false).map((tmpl) => (
                           <button
                             key={tmpl.id}
                             onClick={() => setSelectedOverlay(tmpl.id)}
