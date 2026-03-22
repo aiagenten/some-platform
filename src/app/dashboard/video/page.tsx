@@ -682,7 +682,7 @@ export default function VideoCreator() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file || !orgId) return
-                    setLoading(true)
+                    setGeneratingEnd(true)
                     setError(null)
                     try {
                       const fileName = `${orgId}/end-images/${Date.now()}-${file.name}`
@@ -695,7 +695,7 @@ export default function VideoCreator() {
                     } catch {
                       setError('Kunne ikke laste opp sluttbilde')
                     } finally {
-                      setLoading(false)
+                      setGeneratingEnd(false)
                     }
                   }}
                 />
