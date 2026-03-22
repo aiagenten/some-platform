@@ -23,12 +23,11 @@ export async function POST(request: NextRequest) {
 
     const input: Record<string, unknown> = {
       prompt: motion_prompt || 'Smooth cinematic camera movement',
-      image_url: start_image_url,
+      start_image_url: start_image_url,
       duration: String(duration || 5),
-      aspect_ratio: aspect_ratio || '9:16',
     }
     if (end_image_url) {
-      input.tail_image_url = end_image_url
+      input.end_image_url = end_image_url
     }
 
     // Submit to fal.ai queue (non-blocking)
