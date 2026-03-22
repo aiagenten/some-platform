@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fal } from '@fal-ai/client'
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+
+if (process.env.FAL_KEY) {
+  fal.config({ credentials: process.env.FAL_KEY })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,120 +27,161 @@ export async function POST(request: NextRequest) {
     const orgSettings = (orgData?.settings as Record<string, unknown>) || {}
     const imageModel = (orgSettings.image_model as string) || 'nano-banana'
 
-    const imageGenPrompt = `Same scene as the reference image, but ${angle_prompt}. Maintain identical lighting, colors, and subject. No text overlays, no UI elements, no logos.`
-
-    const sizeMap: Record<string, string> = {
-      '9:16': '1024x1536',
-      '1:1': '1024x1024',
-      '16:9': '1536x1024',
-    }
+    const editPrompt = `Same scene and subject as the reference image, but viewed from a different perspective: ${angle_prompt}. Maintain identical lighting, colors, subject appearance, clothing, and environment. Photorealistic. No text, no UI elements.`
 
     let imageUrl: string | null = null
-    let b64: string | null = null
-    let mimeType = 'image/png'
 
+    // Strategy 1: GPT Image with image editing (best for angle changes)
     if (imageModel === 'gpt-image' && OPENAI_API_KEY) {
+      const sizeMap: Record<string, string> = {
+        '9:16': '1024x1536',
+        '1:1': '1024x1024',
+        '16:9': '1536x1024',
+      }
       const size = sizeMap[aspect_ratio || '9:16'] || '1024x1536'
-      const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+
+      // Download reference image for GPT edit
+      const imgResp = await fetch(start_image_url)
+      const imgBuffer = Buffer.from(await imgResp.arrayBuffer())
+      const imgBlob = new Blob([imgBuffer], { type: 'image/png' })
+
+      const formData = new FormData()
+      formData.append('model', 'gpt-image-1')
+      formData.append('prompt', editPrompt)
+      formData.append('image[]', imgBlob, 'reference.png')
+      formData.append('size', size)
+      formData.append('quality', 'medium')
+      formData.append('n', '1')
+
+      const editResponse = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-image-1',
-          prompt: `${imageGenPrompt}\n\nReference: The scene should match the reference image exactly in style, subject, and mood.`,
-          n: 1,
-          size,
-          quality: 'medium',
-        }),
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+        body: formData,
       })
 
-      if (imageResponse.ok) {
-        const imageData = await imageResponse.json()
-        b64 = imageData.data?.[0]?.b64_json || null
-        if (!b64 && imageData.data?.[0]?.url) {
-          imageUrl = imageData.data[0].url
+      if (editResponse.ok) {
+        const editData = await editResponse.json()
+        const b64 = editData.data?.[0]?.b64_json
+        if (b64) {
+          const fileName = `${org_id}/end-images/${Date.now()}.png`
+          const buffer = Buffer.from(b64, 'base64')
+          const { error: uploadError } = await supabase
+            .storage.from('videos')
+            .upload(fileName, buffer, { contentType: 'image/png', upsert: false })
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+            imageUrl = urlData.publicUrl
+          }
+        } else if (editData.data?.[0]?.url) {
+          imageUrl = editData.data[0].url
         }
       } else {
-        console.error('GPT Image error:', await imageResponse.text())
-        return NextResponse.json({ error: 'End image generation failed' }, { status: 500 })
+        const errText = await editResponse.text()
+        console.error('GPT Image edit error:', editResponse.status, errText)
       }
-    } else {
-      // Nano Banana with reference image
-      const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://some.aiagenten.no',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: start_image_url } },
-              { type: 'text', text: `Generate an image based on this reference. ${imageGenPrompt}` },
-            ],
-          }],
-        }),
-      })
+    }
 
-      if (imageResponse.ok) {
-        const imageData = await imageResponse.json()
-        const message = imageData.choices?.[0]?.message
-        const images = message?.images || []
-        if (images.length > 0) {
-          const imgUrl = images[0]?.image_url?.url
-          if (imgUrl?.startsWith('data:')) {
-            const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/)
-            if (match) { mimeType = match[1]; b64 = match[2] }
-          } else if (imgUrl) {
-            imageUrl = imgUrl
+    // Strategy 2: Flux Kontext via fal.ai (image-to-image editing, preserves subject)
+    if (!imageUrl && process.env.FAL_KEY) {
+      try {
+        const result = await fal.subscribe('fal-ai/flux-pro/kontext', {
+          input: {
+            prompt: editPrompt,
+            image_url: start_image_url,
+            guidance_scale: 3.5,
+            num_images: 1,
+            output_format: 'jpeg',
+            seed: Math.floor(Math.random() * 999999),
+          },
+          logs: false,
+        }) as { data: { images?: Array<{ url?: string }> } }
+
+        const resultUrl = result?.data?.images?.[0]?.url
+        if (resultUrl) {
+          // Download and upload to our storage
+          const imgResp = await fetch(resultUrl)
+          const imgBuffer = Buffer.from(await imgResp.arrayBuffer())
+          const fileName = `${org_id}/end-images/${Date.now()}.jpg`
+          const { error: uploadError } = await supabase
+            .storage.from('videos')
+            .upload(fileName, imgBuffer, { contentType: 'image/jpeg', upsert: false })
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+            imageUrl = urlData.publicUrl
           }
         }
-        if (!b64 && !imageUrl) {
-          const content = message?.content
-          if (Array.isArray(content)) {
-            for (const part of content) {
-              if (part.type === 'image_url' && part.image_url?.url) {
-                if (part.image_url.url.startsWith('data:')) {
-                  const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
-                  if (match) { mimeType = match[1]; b64 = match[2] }
-                } else {
-                  imageUrl = part.image_url.url
+      } catch (falErr) {
+        console.error('Flux Kontext error:', falErr)
+      }
+    }
+
+    // Strategy 3: Fallback to Gemini (least reliable for angle changes)
+    if (!imageUrl) {
+      const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
+      if (OPENROUTER_API_KEY) {
+        const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://some.aiagenten.no',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-image',
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: start_image_url } },
+                { type: 'text', text: `Create a completely NEW image showing the exact same scene, person, and setting but from this perspective: ${angle_prompt}. This must be a DIFFERENT image, not the same photo. Generate a new photograph.` },
+              ],
+            }],
+          }),
+        })
+
+        if (imageResponse.ok) {
+          const imageData = await imageResponse.json()
+          const message = imageData.choices?.[0]?.message
+          let b64: string | null = null
+          let mimeType = 'image/png'
+
+          const images = message?.images || []
+          if (images.length > 0) {
+            const imgUrl = images[0]?.image_url?.url
+            if (imgUrl?.startsWith('data:')) {
+              const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/)
+              if (match) { mimeType = match[1]; b64 = match[2] }
+            } else if (imgUrl) { imageUrl = imgUrl }
+          }
+          if (!b64 && !imageUrl) {
+            const content = message?.content
+            if (Array.isArray(content)) {
+              for (const part of content) {
+                if (part.type === 'image_url' && part.image_url?.url) {
+                  if (part.image_url.url.startsWith('data:')) {
+                    const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+                    if (match) { mimeType = match[1]; b64 = match[2] }
+                  } else { imageUrl = part.image_url.url }
                 }
               }
             }
-          } else if (typeof content === 'string') {
-            const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
-            if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
+          }
+          if (b64 && !imageUrl) {
+            const ext = mimeType.includes('png') ? 'png' : 'jpg'
+            const fileName = `${org_id}/end-images/${Date.now()}.${ext}`
+            const buffer = Buffer.from(b64, 'base64')
+            const { error: uploadError } = await supabase
+              .storage.from('videos').upload(fileName, buffer, { contentType: mimeType, upsert: false })
+            if (!uploadError) {
+              const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+              imageUrl = urlData.publicUrl
+            }
           }
         }
-      } else {
-        console.error('Nano Banana error:', await imageResponse.text())
-        return NextResponse.json({ error: 'End image generation failed' }, { status: 500 })
       }
     }
 
-    // Upload to Supabase Storage
-    if (b64 && !imageUrl) {
-      const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
-      const fileName = `${org_id}/end-images/${Date.now()}.${ext}`
-      const buffer = Buffer.from(b64, 'base64')
-
-      const { error: uploadError } = await supabase
-        .storage.from('videos')
-        .upload(fileName, buffer, { contentType: mimeType, upsert: false })
-
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
-        imageUrl = urlData.publicUrl
-      } else {
-        console.error('Upload error:', uploadError)
-        return NextResponse.json({ error: 'Failed to upload end image' }, { status: 500 })
-      }
+    if (!imageUrl) {
+      return NextResponse.json({ error: 'Could not generate end image with any available model' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, image_url: imageUrl })
