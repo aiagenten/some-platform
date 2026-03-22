@@ -347,11 +347,14 @@ export default function PostDetailPage() {
     else setEditingSubtitle(false)
   }
 
+  const [overlaySaved, setOverlaySaved] = useState(false)
   const handleOverlayChange = async (overlayId: string) => {
     setSelectedOverlay(overlayId)
     if (post) {
       await supabase.from('social_posts').update({ selected_overlay: overlayId }).eq('id', post.id)
       setPost({ ...post, selected_overlay: overlayId })
+      setOverlaySaved(true)
+      setTimeout(() => setOverlaySaved(false), 2000)
     }
   }
 
@@ -513,6 +516,9 @@ export default function PostDetailPage() {
                   {/* Overlay selector — custom templates first, then standard */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <Layout className="w-3.5 h-3.5 text-slate-400" />
+                    {overlaySaved && (
+                      <span className="text-xs text-emerald-600 font-medium animate-pulse">✓ Lagret</span>
+                    )}
                     {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
                       <button key={tmpl.id} onClick={() => handleOverlayChange(`custom-${tmpl.id}`)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
