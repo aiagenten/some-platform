@@ -669,9 +669,42 @@ export default function VideoCreator() {
               </div>
             </div>
 
+            {/* Upload end image option */}
+            <div className="flex items-center gap-3 py-3 px-4 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-sm text-slate-600">Eller last opp eget sluttbilde:</span>
+              <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2">
+                <Upload className="w-4 h-4" />
+                Last opp
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file || !orgId) return
+                    setLoading(true)
+                    setError(null)
+                    try {
+                      const fileName = `${orgId}/end-images/${Date.now()}-${file.name}`
+                      const { error: uploadError } = await supabase
+                        .storage.from('videos')
+                        .upload(fileName, file, { contentType: file.type, upsert: false })
+                      if (uploadError) throw uploadError
+                      const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+                      setEndImageUrl(urlData.publicUrl)
+                    } catch {
+                      setError('Kunne ikke laste opp sluttbilde')
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
             {/* Angle presets */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Kameravinkel for sluttbilde</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Eller generer sluttbilde med AI — velg kameravinkel:</label>
               <div className="flex flex-wrap gap-2">
                 {ANGLE_PRESETS.map(a => (
                   <button
