@@ -49,7 +49,12 @@ export async function renderCustomOverlay(
         renderColorBlock(ctx, el, w, h)
         break
       case 'logo':
-        if (logo) renderLogo(ctx, el, logo, w, h)
+        if (el.useBrandLogo === false && el.imageUrl) {
+          // Custom logo — load from URL
+          await renderLogoFromUrl(ctx, el, el.imageUrl, w, h)
+        } else if (logo) {
+          renderLogo(ctx, el, logo, w, h)
+        }
         break
     }
 
@@ -159,6 +164,19 @@ function renderColorBlock(ctx: CanvasRenderingContext2D, el: OverlayElement, w: 
   } else {
     ctx.fillRect(el.left, el.top, w, h)
   }
+}
+
+async function renderLogoFromUrl(ctx: CanvasRenderingContext2D, el: OverlayElement, url: string, w: number, h: number): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      renderLogo(ctx, el, img, w, h)
+      resolve()
+    }
+    img.onerror = () => resolve() // silently skip if load fails
+    img.src = url
+  })
 }
 
 function renderLogo(ctx: CanvasRenderingContext2D, el: OverlayElement, logo: HTMLImageElement, w: number, h: number) {

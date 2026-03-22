@@ -518,11 +518,15 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
           brandToken: custom.brandToken,
         } as OverlayElement)
       } else if (custom.customType === 'logo') {
-        elements.push({
+        const logoEl: Partial<OverlayElement> = {
           ...base,
           type: 'logo',
           useBrandLogo: custom.useBrandLogo ?? true,
-        } as OverlayElement)
+        }
+        if (!custom.useBrandLogo && (obj as fabric.FabricObject & { imageUrl?: string }).imageUrl) {
+          logoEl.imageUrl = (obj as fabric.FabricObject & { imageUrl?: string }).imageUrl
+        }
+        elements.push(logoEl as OverlayElement)
       } else if (custom.customType === 'shape') {
         const s = obj as fabric.Rect & { shapeType?: string }
         elements.push({
