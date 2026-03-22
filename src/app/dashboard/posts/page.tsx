@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, Inbox } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, Inbox, Trash2, Loader2 } from 'lucide-react'
 
 type Post = {
   id: string
@@ -59,6 +59,8 @@ export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -90,6 +92,24 @@ export default function PostsPage() {
     }
     load()
   }, [filter])
+
+  const handleDelete = async (postId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (confirmDeleteId !== postId) {
+      setConfirmDeleteId(postId)
+      return
+    }
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setPosts(prev => prev.filter(p => p.id !== postId))
+      }
+    } catch { /* ignore */ }
+    setDeleteLoading(false)
+    setConfirmDeleteId(null)
+  }
 
   return (
     <div className="animate-fade-in-up">
@@ -173,6 +193,25 @@ export default function PostsPage() {
                 <span className={`text-xs px-3 py-1.5 rounded-full font-medium flex-shrink-0 ${STATUS_COLORS[post.status]}`}>
                   {STATUS_LABELS[post.status] || post.status}
                 </span>
+
+                {/* Delete button for draft/rejected */}
+                {(post.status === 'draft' || post.status === 'rejected') && (
+                  <button
+                    onClick={(e) => handleDelete(post.id, e)}
+                    className={`flex-shrink-0 p-2 rounded-xl transition-all duration-200 ${
+                      confirmDeleteId === post.id
+                        ? 'bg-red-100 text-red-700'
+                        : 'text-slate-300 hover:text-red-500 hover:bg-red-50'
+                    }`}
+                    title={confirmDeleteId === post.id ? 'Klikk igjen for å bekrefte' : 'Slett innlegg'}
+                  >
+                    {deleteLoading && confirmDeleteId === post.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
               </Link>
             )
           })}

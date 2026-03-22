@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import PlatformPreview from '@/components/PlatformPreview'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History, Trash2 } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
@@ -130,6 +130,8 @@ export default function PostDetailPage() {
   const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
   const [standardVisibility, setStandardVisibility] = useState<Record<string, boolean>>({})
   const [imageHistory, setImageHistory] = useState<Array<{ id: string; image_url: string; prompt: string | null; created_at: string; is_selected: boolean }>>([])
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingHeadline, setEditingHeadline] = useState(false)
   const [editingSubtitle, setEditingSubtitle] = useState(false)
   const [headlineValue, setHeadlineValue] = useState('')
@@ -358,6 +360,18 @@ export default function PostDetailPage() {
     setPost({ ...post, content_image_url: imageUrl })
     setImageHistory(prev => prev.map(h => ({ ...h, is_selected: h.id === generationId })))
     setActionLoading(false)
+  }
+
+  const handleDeletePost = async () => {
+    if (!post) return
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(`/api/posts/${post.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        router.push('/dashboard/posts')
+      }
+    } catch { /* ignore */ }
+    setDeleteLoading(false)
   }
 
   if (loading) return <div className="text-center py-12 text-slate-400">Laster...</div>
@@ -647,6 +661,39 @@ export default function PostDetailPage() {
                 className="w-full bg-purple-50 text-purple-600 py-2.5 rounded-xl font-medium hover:bg-purple-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-purple-100">
                 <RefreshCw className="w-4 h-4" /> Regenerer
               </button>
+
+              {(post.status === 'draft' || post.status === 'rejected') && (
+                <>
+                  {confirmDelete ? (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-2">
+                      <p className="text-xs text-red-700 mb-2 font-medium">Er du sikker? Innlegget slettes permanent.</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeletePost}
+                          disabled={deleteLoading}
+                          className="flex-1 bg-red-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {deleteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                          Ja, slett
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="flex-1 bg-white text-slate-600 py-2 rounded-lg text-xs font-medium hover:bg-slate-50 transition-all border border-slate-200"
+                        >
+                          Avbryt
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl font-medium hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 border border-red-100 mt-2"
+                    >
+                      <Trash2 className="w-4 h-4" /> Slett innlegg
+                    </button>
+                  )}
+                </>
+              )}
 
               {(post.status === 'approved' || post.status === 'scheduled') && (
                 <button onClick={handlePublish} disabled={publishLoading}

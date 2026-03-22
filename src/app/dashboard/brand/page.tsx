@@ -120,6 +120,7 @@ export default function BrandPage() {
         .from('social_posts')
         .select('id, platform, content_text, caption, created_at, status, ai_generated')
         .eq('org_id', profile.org_id)
+        .in('status', ['approved', 'published'])
         .order('created_at', { ascending: false })
         .limit(20)
 
@@ -474,7 +475,11 @@ export default function BrandPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-semibold text-slate-900">Treningsinnlegg</h2>
-                <p className="text-sm text-slate-500 mt-0.5">Innlegg AI-en lærer av. Fjern de som ikke representerer merkevaren godt.</p>
+                <p className="text-sm text-slate-500 mt-0.5">Innlegg AI-en lærer av. Kun godkjente og publiserte innlegg vises.</p>
+              </div>
+              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-medium text-indigo-700">{trainingPosts.length} innlegg</span>
               </div>
             </div>
 

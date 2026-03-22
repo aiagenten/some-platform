@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight, Target, Settings as SettingsIcon, Minus, Plus } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight, Target, Settings as SettingsIcon, Minus, Plus, GripVertical } from 'lucide-react'
+import Link from 'next/link'
 
 type Post = {
   id: string
@@ -108,6 +109,7 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [dragPost, setDragPost] = useState<string | null>(null)
+  const [unscheduledPosts, setUnscheduledPosts] = useState<Post[]>([])
   const [goals, setGoals] = useState<WeeklyGoal[]>([])
   const [showGoalSettings, setShowGoalSettings] = useState(false)
   const supabase = createClient()
@@ -128,9 +130,20 @@ export default function CalendarPage() {
       .from('social_posts')
       .select('id, content_text, caption, platform, status, scheduled_for, created_at')
       .eq('org_id', orgId)
+      .in('status', ['approved', 'scheduled', 'published', 'draft', 'pending_approval'])
       .not('scheduled_for', 'is', null)
       .order('scheduled_for')
     if (data) setPosts(data)
+
+    // Load unscheduled approved posts
+    const { data: unscheduled } = await supabase
+      .from('social_posts')
+      .select('id, content_text, caption, platform, status, scheduled_for, created_at')
+      .eq('org_id', orgId)
+      .eq('status', 'approved')
+      .is('scheduled_for', null)
+      .order('created_at', { ascending: false })
+    if (unscheduled) setUnscheduledPosts(unscheduled)
 
     // Also load all posts for weekly goal counting (approved/published/scheduled this week)
     const { monday, sunday } = getWeekBounds(currentDate)
@@ -138,7 +151,7 @@ export default function CalendarPage() {
       .from('social_posts')
       .select('id, content_text, caption, platform, status, created_at, scheduled_for')
       .eq('org_id', orgId)
-      .in('status', ['draft', 'approved', 'scheduled', 'published', 'pending_approval'])
+      .in('status', ['approved', 'scheduled', 'published'])
       .gte('created_at', monday.toISOString())
       .lte('created_at', sunday.toISOString())
     if (weekPosts) setAllPosts(weekPosts)
@@ -170,7 +183,7 @@ export default function CalendarPage() {
     if (!dragPost) return
     await supabase
       .from('social_posts')
-      .update({ scheduled_for: targetDate + 'T12:00:00Z' })
+      .update({ scheduled_for: targetDate + 'T12:00:00Z', status: 'scheduled' })
       .eq('id', dragPost)
     setDragPost(null)
     loadPosts()
@@ -397,6 +410,48 @@ export default function CalendarPage() {
       ) : (
         <div className="grid grid-cols-7 gap-1">
           {weekDays.map((day) => renderDayCell(day, true))}
+        </div>
+      )}
+
+      {/* Unscheduled approved posts */}
+      {unscheduledPosts.length > 0 && (
+        <div className="mt-6 bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+          <h3 className="font-semibold text-slate-900 mb-1">Ikke planlagt</h3>
+          <p className="text-sm text-slate-400 mb-4">Dra innlegg til en dato i kalenderen for å planlegge dem.</p>
+          <div className="space-y-2">
+            {unscheduledPosts.map((post) => {
+              const PlatformIcon = PLATFORM_ICONS[post.platform] || Smartphone
+              return (
+                <div
+                  key={post.id}
+                  draggable
+                  onDragStart={() => setDragPost(post.id)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50/50 hover:border-emerald-200 hover:shadow-sm transition-all duration-200 cursor-grab active:cursor-grabbing"
+                >
+                  <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0 border border-slate-100">
+                    <PlatformIcon className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-800 truncate font-medium">
+                      {post.caption || post.content_text || 'Ingen innhold'}
+                    </p>
+                    <p className="text-xs text-slate-400 capitalize">{post.platform}</p>
+                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-lg font-medium bg-emerald-50 text-emerald-700 flex-shrink-0">
+                    Godkjent
+                  </span>
+                  <Link
+                    href={`/dashboard/posts/${post.id}`}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Rediger
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Oversikt', icon: BarChart3 },
   { href: '/dashboard/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/dashboard/calendar', label: 'Kalender', icon: Calendar },
   { href: '/dashboard/posts', label: 'Innlegg', icon: FileText },
+  { href: '/dashboard/approval', label: 'Godkjenning', icon: CheckCircle2 },
   { href: '/dashboard/generate', label: 'Generer', icon: Sparkles },
   { href: '/dashboard/video', label: 'Video', icon: Video },
   { href: '/dashboard/overlay-editor', label: 'Overlay-maler', icon: Layers },
