@@ -17,14 +17,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
     }
 
-    // Check status
+    // Check status (must use full model path matching the queue submission)
+    const modelPath = 'fal-ai/kling-video/o1/image-to-video'
     const statusResp = await fetch(
-      `https://queue.fal.run/fal-ai/kling-video/requests/${requestId}/status`,
+      `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
       { headers: { 'Authorization': `Key ${FAL_KEY}` } }
     )
 
     if (!statusResp.ok) {
-      return NextResponse.json({ error: 'Failed to check status' }, { status: 500 })
+      const errText = await statusResp.text()
+      console.error('fal.ai status error:', statusResp.status, errText)
+      return NextResponse.json({ error: 'Failed to check status', detail: errText }, { status: 500 })
     }
 
     const statusData = await statusResp.json()
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
     if (statusData.status === 'COMPLETED') {
       // Fetch the result
       const resultResp = await fetch(
-        `https://queue.fal.run/fal-ai/kling-video/requests/${requestId}`,
+        `https://queue.fal.run/${modelPath}/requests/${requestId}`,
         { headers: { 'Authorization': `Key ${FAL_KEY}` } }
       )
 
