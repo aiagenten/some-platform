@@ -12,3 +12,7 @@
 # API routes need longer timeout for AI generation
 [functions."api-posts-generate-*"]
   timeout = 60
+
+# Video generation routes need even longer (Kling video = 30-120s, music = 15-30s)
+[functions."api-video-*"]
+  timeout = 300

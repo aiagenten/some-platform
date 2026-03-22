@@ -262,6 +262,7 @@ export default function VideoCreator() {
     setError(null)
     try {
       const vid = videoId || await ensureVideoRecord()
+      // Submit to queue (fast, non-blocking)
       const res = await fetch('/api/video/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -276,14 +277,52 @@ export default function VideoCreator() {
         }),
       })
       const data = await res.json()
-      if (data.video_url) {
-        setVideoUrl(data.video_url)
-      } else {
-        setError(data.error || 'Videogenerering feilet')
+      if (!data.request_id) {
+        setError(data.error || 'Kunne ikke starte videogenerering')
+        setGeneratingVideo(false)
+        return
       }
+
+      // Poll for completion
+      const requestId = data.request_id
+      let attempts = 0
+      const maxAttempts = 120 // 2 minutes max
+      const poll = async () => {
+        attempts++
+        try {
+          const statusRes = await fetch(
+            `/api/video/status?request_id=${requestId}&org_id=${orgId}&video_id=${vid}`
+          )
+          const statusData = await statusRes.json()
+
+          if (statusData.status === 'COMPLETED' && statusData.video_url) {
+            setVideoUrl(statusData.video_url)
+            setGeneratingVideo(false)
+            return
+          }
+          if (statusData.status === 'FAILED') {
+            setError('Videogenerering feilet')
+            setGeneratingVideo(false)
+            return
+          }
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 3000) // Poll every 3 seconds
+          } else {
+            setError('Videogenerering tok for lang tid. Prøv igjen.')
+            setGeneratingVideo(false)
+          }
+        } catch {
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000)
+          } else {
+            setError('Mistet kontakt med serveren')
+            setGeneratingVideo(false)
+          }
+        }
+      }
+      poll()
     } catch {
       setError('Nettverksfeil ved videogenerering')
-    } finally {
       setGeneratingVideo(false)
     }
   }

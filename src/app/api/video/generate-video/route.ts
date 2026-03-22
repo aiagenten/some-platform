@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fal } from '@fal-ai/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+const FAL_KEY = process.env.FAL_KEY
+
 export async function POST(request: NextRequest) {
-  if (!process.env.FAL_KEY) {
-    return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
-  }
-  fal.config({ credentials: process.env.FAL_KEY })
   try {
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
+    }
+
     const { start_image_url, end_image_url, motion_prompt, duration, aspect_ratio, video_id, org_id } = await request.json()
 
     if (!start_image_url || !org_id) {
@@ -16,7 +17,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Update video status
     if (video_id) {
       await supabase.from('videos').update({ status: 'generating_video' }).eq('id', video_id)
     }
@@ -27,55 +27,40 @@ export async function POST(request: NextRequest) {
       duration: String(duration || 5),
       aspect_ratio: aspect_ratio || '9:16',
     }
-
     if (end_image_url) {
       input.tail_image_url = end_image_url
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await fal.subscribe('fal-ai/kling-video/o1/image-to-video', { input } as any)
+    // Submit to fal.ai queue (non-blocking)
+    const queueResp = await fetch('https://queue.fal.run/fal-ai/kling-video/o1/image-to-video', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const videoUrl = (result as any)?.data?.video?.url || (result as any)?.video?.url || null
-
-    if (!videoUrl) {
-      console.error('No video URL in result:', JSON.stringify(result).substring(0, 500))
-      if (video_id) {
-        await supabase.from('videos').update({ status: 'failed', metadata: { error: 'No video URL returned' } }).eq('id', video_id)
-      }
-      return NextResponse.json({ error: 'Video generation failed - no URL returned' }, { status: 500 })
+    if (!queueResp.ok) {
+      const errText = await queueResp.text()
+      console.error('fal.ai queue error:', queueResp.status, errText)
+      return NextResponse.json({ error: `Video queue failed: ${errText}` }, { status: 500 })
     }
 
-    // Download and upload to Supabase Storage
-    let storedVideoUrl = videoUrl
-    try {
-      const videoResponse = await fetch(videoUrl)
-      if (videoResponse.ok) {
-        const videoBuffer = Buffer.from(await videoResponse.arrayBuffer())
-        const fileName = `${org_id}/raw-videos/${Date.now()}.mp4`
-        const { error: uploadError } = await supabase
-          .storage.from('videos')
-          .upload(fileName, videoBuffer, { contentType: 'video/mp4', upsert: false })
+    const queueData = await queueResp.json()
+    const requestId = queueData.request_id
 
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
-          storedVideoUrl = urlData.publicUrl
-        }
-      }
-    } catch (uploadErr) {
-      console.error('Video upload error:', uploadErr)
-      // Keep the original fal.ai URL as fallback
-    }
-
-    // Update video record
     if (video_id) {
-      await supabase.from('videos').update({
-        video_url: storedVideoUrl,
-        status: 'images_ready',
+      await supabase.from('videos').update({ 
+        metadata: { fal_request_id: requestId },
       }).eq('id', video_id)
     }
 
-    return NextResponse.json({ success: true, video_url: storedVideoUrl })
+    return NextResponse.json({ 
+      success: true, 
+      request_id: requestId,
+      status_url: queueData.status_url,
+    })
   } catch (err) {
     console.error('Generate video error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
