@@ -135,7 +135,7 @@ export default function VideoCreator() {
       const res = await fetch('/api/overlay-templates')
       if (res.ok) {
         const data = await res.json()
-        setOverlayTemplates(data.templates || [])
+        setOverlayTemplates(Array.isArray(data) ? data : data.templates || [])
       }
     }
     init()
@@ -345,14 +345,51 @@ export default function VideoCreator() {
         }),
       })
       const data = await res.json()
-      if (data.music_url) {
-        setMusicUrl(data.music_url)
-      } else {
-        setError(data.error || 'Musikkgenerering feilet')
+      if (!data.request_id) {
+        setError(data.error || 'Kunne ikke starte musikkgenerering')
+        setGeneratingMusic(false)
+        return
       }
+
+      // Poll for completion
+      const requestId = data.request_id
+      let attempts = 0
+      const maxAttempts = 60 // ~3 minutes
+      const poll = async () => {
+        attempts++
+        try {
+          const statusRes = await fetch(
+            `/api/video/music-status?request_id=${requestId}&org_id=${orgId}&video_id=${videoId}`
+          )
+          const statusData = await statusRes.json()
+          if (statusData.status === 'COMPLETED' && statusData.music_url) {
+            setMusicUrl(statusData.music_url)
+            setGeneratingMusic(false)
+            return
+          }
+          if (statusData.status === 'FAILED') {
+            setError('Musikkgenerering feilet')
+            setGeneratingMusic(false)
+            return
+          }
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 3000)
+          } else {
+            setError('Musikkgenerering tok for lang tid. Prøv igjen.')
+            setGeneratingMusic(false)
+          }
+        } catch {
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000)
+          } else {
+            setError('Mistet kontakt med serveren')
+            setGeneratingMusic(false)
+          }
+        }
+      }
+      poll()
     } catch {
       setError('Nettverksfeil ved musikkgenerering')
-    } finally {
       setGeneratingMusic(false)
     }
   }
@@ -403,7 +440,7 @@ export default function VideoCreator() {
     }
   }
 
-  // Save as draft
+  // Save as draft — also create a social_post so it appears in the posts list
   const saveAsDraft = async () => {
     if (!videoId || !orgId) return
     setSaving(true)
@@ -414,6 +451,19 @@ export default function VideoCreator() {
       music_mood: selectedMood,
       status: 'ready',
     }).eq('id', videoId)
+
+    // Create a social_post linked to the video so it shows in the posts list
+    await supabase.from('social_posts').insert({
+      org_id: orgId,
+      platform,
+      format: 'video',
+      caption: caption || '',
+      content_text: caption || '',
+      content_image_url: videoUrl,
+      video_id: videoId,
+      status: 'draft',
+    })
+
     setSaving(false)
     router.push('/dashboard/posts')
   }

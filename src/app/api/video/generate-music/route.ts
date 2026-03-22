@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fal } from '@fal-ai/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-fal.config({ credentials: process.env.FAL_KEY })
+const FAL_KEY = process.env.FAL_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
+    }
+
     const { music_prompt, duration, video_id, org_id } = await request.json()
 
     if (!music_prompt || !org_id) {
@@ -18,51 +21,39 @@ export async function POST(request: NextRequest) {
       await supabase.from('videos').update({ status: 'generating_music' }).eq('id', video_id)
     }
 
-    const falInput = { prompt: music_prompt, duration_seconds: duration || 5 }
-    const result = await fal.subscribe('fal-ai/minimax-music/v2', {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      input: falInput as any,
+    // Submit to fal.ai queue (non-blocking)
+    const queueResp = await fetch('https://queue.fal.run/fal-ai/minimax-music/v2', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: music_prompt,
+        duration_seconds: duration || 5,
+      }),
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const musicUrl = (result as any)?.data?.audio?.url || (result as any)?.audio?.url || null
-
-    if (!musicUrl) {
-      console.error('No music URL in result:', JSON.stringify(result).substring(0, 500))
-      if (video_id) {
-        await supabase.from('videos').update({ status: 'failed', metadata: { error: 'No music URL returned' } }).eq('id', video_id)
-      }
-      return NextResponse.json({ error: 'Music generation failed' }, { status: 500 })
+    if (!queueResp.ok) {
+      const errText = await queueResp.text()
+      console.error('fal.ai music queue error:', queueResp.status, errText)
+      return NextResponse.json({ error: `Music queue failed: ${errText}` }, { status: 500 })
     }
 
-    // Download and upload to Supabase Storage
-    let storedMusicUrl = musicUrl
-    try {
-      const musicResponse = await fetch(musicUrl)
-      if (musicResponse.ok) {
-        const musicBuffer = Buffer.from(await musicResponse.arrayBuffer())
-        const fileName = `${org_id}/music/${Date.now()}.mp3`
-        const { error: uploadError } = await supabase
-          .storage.from('videos')
-          .upload(fileName, musicBuffer, { contentType: 'audio/mpeg', upsert: false })
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
-          storedMusicUrl = urlData.publicUrl
-        }
-      }
-    } catch (uploadErr) {
-      console.error('Music upload error:', uploadErr)
-    }
+    const queueData = await queueResp.json()
+    const requestId = queueData.request_id
 
     if (video_id) {
       await supabase.from('videos').update({
-        music_url: storedMusicUrl,
+        metadata: { fal_music_request_id: requestId },
         music_prompt,
       }).eq('id', video_id)
     }
 
-    return NextResponse.json({ success: true, music_url: storedMusicUrl })
+    return NextResponse.json({
+      success: true,
+      request_id: requestId,
+    })
   } catch (err) {
     console.error('Generate music error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
