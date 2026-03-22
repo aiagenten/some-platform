@@ -17,10 +17,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
     }
 
-    // Check status (must use full model path matching the queue submission)
-    const modelPath = 'fal-ai/kling-video/o1/image-to-video'
+    // Check status — fal.ai uses the short base path for status/result URLs
     const statusResp = await fetch(
-      `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
+      `https://queue.fal.run/fal-ai/kling-video/requests/${requestId}/status`,
       { headers: { 'Authorization': `Key ${FAL_KEY}` } }
     )
 
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
     if (statusData.status === 'COMPLETED') {
       // Fetch the result
       const resultResp = await fetch(
-        `https://queue.fal.run/${modelPath}/requests/${requestId}`,
+        `https://queue.fal.run/fal-ai/kling-video/requests/${requestId}`,
         { headers: { 'Authorization': `Key ${FAL_KEY}` } }
       )
 
