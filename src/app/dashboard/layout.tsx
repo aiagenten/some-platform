@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Oversikt', icon: BarChart3 },
@@ -24,6 +25,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+
+  useEffect(() => {
+    async function checkRole() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      setIsSuperAdmin(profile?.role === 'aiagenten_admin')
+    }
+    checkRole()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(isSuperAdmin ? [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] : []),
+  ]
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -44,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
             const Icon = item.icon
             return (
@@ -93,7 +114,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
         <div className="flex overflow-x-auto px-2 pb-2 gap-1 scrollbar-hide">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
             const Icon = item.icon
             return (
