@@ -52,6 +52,13 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
       selection: true,
     })
 
+    // Tell Fabric about CSS display size so mouse coordinates map correctly
+    // Canvas backing store is 1080x1080, CSS display is 540x540
+    canvas.setDimensions(
+      { width: DISPLAY_SIZE, height: DISPLAY_SIZE },
+      { cssOnly: true }
+    )
+
     fabricRef.current = canvas
 
     // Selection events
