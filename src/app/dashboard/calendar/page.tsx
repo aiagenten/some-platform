@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight, Target, Settings as SettingsIcon, Minus, Plus } from 'lucide-react'
 
 type Post = {
   id: string
@@ -11,6 +11,14 @@ type Post = {
   platform: string
   status: string
   scheduled_for: string | null
+  created_at: string
+}
+
+type WeeklyGoal = {
+  id: string
+  org_id: string
+  platform: string
+  weekly_target: number
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -37,6 +45,18 @@ const PLATFORM_DOT_COLORS: Record<string, string> = {
   linkedin: 'bg-sky-500',
   tiktok: 'bg-slate-700',
 }
+
+const PLATFORM_BAR_COLORS: Record<string, string> = {
+  instagram: 'bg-gradient-to-r from-pink-500 to-purple-500',
+  facebook: 'bg-blue-500',
+  linkedin: 'bg-sky-600',
+}
+
+const PLATFORMS_LIST = [
+  { key: 'instagram', label: 'Instagram', icon: Instagram },
+  { key: 'facebook', label: 'Facebook', icon: Facebook },
+  { key: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+]
 
 const DAYS_NO = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
 const MONTHS_NO = ['Januar', 'Februar', 'Mars', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Desember']
@@ -71,13 +91,25 @@ function dateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function getWeekBounds(baseDate: Date) {
+  const days = getWeekDays(baseDate)
+  const monday = new Date(days[0])
+  monday.setHours(0, 0, 0, 0)
+  const sunday = new Date(days[6])
+  sunday.setHours(23, 59, 59, 999)
+  return { monday, sunday }
+}
+
 export default function CalendarPage() {
   const [view, setView] = useState<'month' | 'week'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [posts, setPosts] = useState<Post[]>([])
+  const [allPosts, setAllPosts] = useState<Post[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [dragPost, setDragPost] = useState<string | null>(null)
+  const [goals, setGoals] = useState<WeeklyGoal[]>([])
+  const [showGoalSettings, setShowGoalSettings] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -94,14 +126,37 @@ export default function CalendarPage() {
     if (!orgId) return
     const { data } = await supabase
       .from('social_posts')
-      .select('id, content_text, caption, platform, status, scheduled_for')
+      .select('id, content_text, caption, platform, status, scheduled_for, created_at')
       .eq('org_id', orgId)
       .not('scheduled_for', 'is', null)
       .order('scheduled_for')
     if (data) setPosts(data)
+
+    // Also load all posts for weekly goal counting (approved/published/scheduled this week)
+    const { monday, sunday } = getWeekBounds(currentDate)
+    const { data: weekPosts } = await supabase
+      .from('social_posts')
+      .select('id, content_text, caption, platform, status, created_at, scheduled_for')
+      .eq('org_id', orgId)
+      .in('status', ['draft', 'approved', 'scheduled', 'published', 'pending_approval'])
+      .gte('created_at', monday.toISOString())
+      .lte('created_at', sunday.toISOString())
+    if (weekPosts) setAllPosts(weekPosts)
+  }, [orgId, currentDate])
+
+  const loadGoals = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const res = await fetch(`/api/weekly-goals?org_id=${orgId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setGoals(data)
+      }
+    } catch { /* ignore */ }
   }, [orgId])
 
   useEffect(() => { loadPosts() }, [loadPosts])
+  useEffect(() => { loadGoals() }, [loadGoals])
 
   const postsByDate = posts.reduce<Record<string, Post[]>>((acc, post) => {
     if (!post.scheduled_for) return acc
@@ -129,6 +184,22 @@ export default function CalendarPage() {
   }
 
   const isToday = (d: Date) => dateKey(d) === dateKey(new Date())
+
+  // Weekly goals progress
+  const getGoalForPlatform = (platform: string) => goals.find(g => g.platform === platform)?.weekly_target || 0
+  const getPostCountForPlatform = (platform: string) => allPosts.filter(p => p.platform === platform).length
+
+  const updateGoal = async (platform: string, target: number) => {
+    if (!orgId || target < 0) return
+    try {
+      await fetch('/api/weekly-goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: orgId, platform, weekly_target: target }),
+      })
+      loadGoals()
+    } catch { /* ignore */ }
+  }
 
   const renderDayCell = (day: Date | null, large: boolean) => {
     if (!day) return <div key={Math.random()} className={large ? 'min-h-[120px]' : ''} />
@@ -178,6 +249,14 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Innholdskalender</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGoalSettings(!showGoalSettings)}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-1.5 border ${
+              showGoalSettings ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Target className="w-4 h-4" /> Ukemål
+          </button>
           <div className="flex bg-white border border-slate-200 rounded-xl p-1">
             <button
               onClick={() => setView('week')}
@@ -198,6 +277,75 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+
+      {/* Weekly Goals Progress + Settings */}
+      {(showGoalSettings || goals.length > 0) && (
+        <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <Target className="w-4 h-4 text-indigo-600" /> Ukemål denne uken
+            </h3>
+            <button onClick={() => setShowGoalSettings(!showGoalSettings)} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
+              <SettingsIcon className="w-3.5 h-3.5" /> {showGoalSettings ? 'Skjul' : 'Rediger'}
+            </button>
+          </div>
+
+          {/* Progress bars */}
+          <div className="space-y-3">
+            {PLATFORMS_LIST.map(({ key, label, icon: Icon }) => {
+              const target = getGoalForPlatform(key)
+              const count = getPostCountForPlatform(key)
+              const pct = target > 0 ? Math.min(100, Math.round((count / target) * 100)) : 0
+
+              if (!showGoalSettings && target === 0) return null
+
+              return (
+                <div key={key}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">{label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        {count} / {target || '—'}
+                      </span>
+                      {target > 0 && (
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${pct >= 100 ? 'bg-emerald-50 text-emerald-700' : pct >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-600'}`}>
+                          {pct}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {target > 0 && (
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-emerald-500' : PLATFORM_BAR_COLORS[key] || 'bg-indigo-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Settings: adjust target */}
+                  {showGoalSettings && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-slate-500">Mål per uke:</span>
+                      <button onClick={() => updateGoal(key, Math.max(0, target - 1))} className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="text-sm font-semibold text-slate-800 w-6 text-center">{target}</span>
+                      <button onClick={() => updateGoal(key, target + 1)} className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between mb-4">

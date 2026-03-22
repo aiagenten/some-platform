@@ -72,6 +72,37 @@ const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>
   tiktok: Music,
 }
 
+// Parse suggested_time strings like "Tirsdag kl 08:00 (2026-03-24)" or "Tirsdag-torsdag kl 08-10"
+function parseSuggestedTime(timeStr: string): { date: string; time: string } | null {
+  // Try explicit date format: "Dag kl HH:MM (YYYY-MM-DD)"
+  const explicitMatch = timeStr.match(/\((\d{4}-\d{2}-\d{2})\)/)
+  const timeMatch = timeStr.match(/kl\s*(\d{1,2}):?(\d{2})?/)
+  if (explicitMatch) {
+    const hour = timeMatch ? timeMatch[1].padStart(2, '0') : '09'
+    const min = timeMatch?.[2] || '00'
+    return { date: explicitMatch[1], time: `${hour}:${min}` }
+  }
+  // Parse day range: "Tirsdag-torsdag kl 08-10"
+  const dayMap: Record<string, number> = { mandag: 1, tirsdag: 2, onsdag: 3, torsdag: 4, fredag: 5, lørdag: 6, søndag: 0 }
+  const dayMatch = timeStr.match(/(mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag)/i)
+  const hourRangeMatch = timeStr.match(/kl\s*(\d{1,2})/)
+  if (dayMatch && hourRangeMatch) {
+    const targetDay = dayMap[dayMatch[1].toLowerCase()]
+    const hour = hourRangeMatch[1].padStart(2, '0')
+    if (targetDay !== undefined) {
+      const now = new Date()
+      const currentDay = now.getDay()
+      let daysAhead = targetDay - currentDay
+      if (daysAhead <= 0) daysAhead += 7
+      const target = new Date(now)
+      target.setDate(now.getDate() + daysAhead)
+      const dateStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
+      return { date: dateStr, time: `${hour}:00` }
+    }
+  }
+  return null
+}
+
 export default function PostDetailPage() {
   const params = useParams()
   const postId = params.id as string
@@ -205,11 +236,14 @@ export default function PostDetailPage() {
       const headingFont = brandFonts.find(f => f.role === 'heading')?.family || 'Inter'
       const bodyFont = brandFonts.find(f => f.role === 'body')?.family || headingFont
 
-      // Extract headline from post text (first line, short)
-      const firstLine = (post.content_text || post.caption || '').split('\n')[0].trim()
-      const headline = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
+      // Use headline/subtitle from DB, fallback to extracting from text
+      const headline = headlineValue || post.headline || (() => {
+        const firstLine = (post.content_text || post.caption || '').split('\n')[0].trim()
+        return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
+      })()
+      const subtitle = subtitleValue || post.subtitle || ''
 
-      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle: '', brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
 
       // Check if it's a custom template
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
@@ -219,7 +253,7 @@ export default function PostDetailPage() {
         await getOverlayTemplate(selectedOverlay).render(ctx, options)
       }
     } catch (err) { console.error('Overlay error:', err) }
-  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, customTemplates])
+  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates])
 
   useEffect(() => { renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
@@ -297,6 +331,22 @@ export default function PostDetailPage() {
     await supabase.from('social_posts').update({ status: 'draft' }).eq('id', post.id)
     setPost({ ...post, status: 'draft' })
     setActionLoading(false)
+  }
+
+  const saveHeadlineSubtitle = async (field: 'headline' | 'subtitle', value: string) => {
+    if (!post) return
+    await supabase.from('social_posts').update({ [field]: value }).eq('id', post.id)
+    setPost({ ...post, [field]: value })
+    if (field === 'headline') setEditingHeadline(false)
+    else setEditingSubtitle(false)
+  }
+
+  const handleOverlayChange = async (overlayId: string) => {
+    setSelectedOverlay(overlayId)
+    if (post) {
+      await supabase.from('social_posts').update({ selected_overlay: overlayId }).eq('id', post.id)
+      setPost({ ...post, selected_overlay: overlayId })
+    }
   }
 
   const handleRevertImage = async (imageUrl: string, generationId: string) => {
@@ -377,6 +427,46 @@ export default function PostDetailPage() {
               )}
             </div>
 
+            {/* Inline headline/subtitle editing */}
+            <div className="mt-4 space-y-2">
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-1 block">Overskrift (overlay)</label>
+                {editingHeadline ? (
+                  <div className="flex gap-2">
+                    <input type="text" value={headlineValue} onChange={e => setHeadlineValue(e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      autoFocus onKeyDown={e => { if (e.key === 'Enter') saveHeadlineSubtitle('headline', headlineValue); if (e.key === 'Escape') setEditingHeadline(false) }} />
+                    <button onClick={() => saveHeadlineSubtitle('headline', headlineValue)} className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs hover:bg-indigo-100"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEditingHeadline(false)} className="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-xs hover:bg-slate-100"><XIcon className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setHeadlineValue(post.headline || ''); setEditingHeadline(true) }}
+                    className="text-sm text-slate-800 hover:bg-slate-50 px-3 py-1.5 rounded-lg w-full text-left flex items-center gap-2 transition-colors border border-transparent hover:border-slate-200">
+                    {post.headline || <span className="text-slate-400 italic">Klikk for å legge til overskrift</span>}
+                    <Pencil className="w-3 h-3 text-slate-400 ml-auto flex-shrink-0" />
+                  </button>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-1 block">Undertekst (overlay)</label>
+                {editingSubtitle ? (
+                  <div className="flex gap-2">
+                    <input type="text" value={subtitleValue} onChange={e => setSubtitleValue(e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      autoFocus onKeyDown={e => { if (e.key === 'Enter') saveHeadlineSubtitle('subtitle', subtitleValue); if (e.key === 'Escape') setEditingSubtitle(false) }} />
+                    <button onClick={() => saveHeadlineSubtitle('subtitle', subtitleValue)} className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs hover:bg-indigo-100"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEditingSubtitle(false)} className="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-xs hover:bg-slate-100"><XIcon className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setSubtitleValue(post.subtitle || ''); setEditingSubtitle(true) }}
+                    className="text-sm text-slate-800 hover:bg-slate-50 px-3 py-1.5 rounded-lg w-full text-left flex items-center gap-2 transition-colors border border-transparent hover:border-slate-200">
+                    {post.subtitle || <span className="text-slate-400 italic">Klikk for å legge til undertekst</span>}
+                    <Pencil className="w-3 h-3 text-slate-400 ml-auto flex-shrink-0" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {post.ai_generated && (
               <div className="mt-4 px-4 py-3 bg-purple-50 rounded-xl text-xs text-purple-700 flex items-center gap-2 border border-purple-100">
                 <Sparkles className="w-4 h-4" />
@@ -406,7 +496,7 @@ export default function PostDetailPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <Layout className="w-3.5 h-3.5 text-slate-400" />
                     {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
-                      <button key={tmpl.id} onClick={() => setSelectedOverlay(`custom-${tmpl.id}`)}
+                      <button key={tmpl.id} onClick={() => handleOverlayChange(`custom-${tmpl.id}`)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
                         {tmpl.name}
                       </button>
@@ -415,7 +505,7 @@ export default function PostDetailPage() {
                       <span className="text-slate-300 text-xs">|</span>
                     )}
                     {OVERLAY_TEMPLATES.filter(t => standardVisibility[t.id] !== false).map((tmpl) => (
-                      <button key={tmpl.id} onClick={() => setSelectedOverlay(tmpl.id)}
+                      <button key={tmpl.id} onClick={() => handleOverlayChange(tmpl.id)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === tmpl.id ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
                         {tmpl.name}
                       </button>
@@ -493,7 +583,7 @@ export default function PostDetailPage() {
           )}
 
           {(post.caption || post.content_text) && (
-            <PlatformPreview caption={post.caption || post.content_text || ''} imageUrl={post.content_image_url} platform={post.platform} brandName={orgName} brandLogo={orgLogo} />
+            <PlatformPreview caption={post.caption || post.content_text || ''} imageUrl={post.content_image_url} platform={post.platform} brandName={orgName} brandLogo={orgLogo} overlayId={selectedOverlay} headline={headlineValue || post.headline} subtitle={subtitleValue || post.subtitle} brandColors={brandColors} brandFonts={brandFonts} brandLogoUrl={brandLogoUrl} />
           )}
         </div>
 
@@ -515,6 +605,12 @@ export default function PostDetailPage() {
 
                   {showSchedule && (
                     <div className="mt-2 space-y-2 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                      {post.suggested_time && (
+                        <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-amber-700">AI anbefaler: <strong>{post.suggested_time}</strong></p>
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
                           min={new Date().toISOString().split('T')[0]}

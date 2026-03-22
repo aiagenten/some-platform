@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Instagram, Linkedin, Facebook, ThumbsUp, MessageCircle, Share2, Send, Bookmark, Heart, MoreHorizontal } from 'lucide-react'
+import { getOverlayTemplate } from '@/lib/overlay-templates'
+import type { OverlayOptions } from '@/lib/overlay-templates'
 
 type Props = {
   caption: string
@@ -9,6 +11,12 @@ type Props = {
   platform: string
   brandName: string
   brandLogo?: string | null
+  overlayId?: string | null
+  headline?: string | null
+  subtitle?: string | null
+  brandColors?: Array<{ hex: string; role: string }>
+  brandFonts?: Array<{ family: string; role: string }>
+  brandLogoUrl?: string | null
 }
 
 const TABS = [
@@ -17,12 +25,60 @@ const TABS = [
   { key: 'facebook', label: 'Facebook', icon: Facebook },
 ]
 
-export default function PlatformPreview({ caption, imageUrl, platform, brandName, brandLogo }: Props) {
+export default function PlatformPreview({ caption, imageUrl, platform, brandName, brandLogo, overlayId, headline, subtitle, brandColors, brandFonts, brandLogoUrl }: Props) {
   const [activeTab, setActiveTab] = useState(platform || 'instagram')
+  const [overlayDataUrl, setOverlayDataUrl] = useState<string | null>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const truncatedCaption = caption?.length > 300 ? caption.substring(0, 300) + '...' : caption
   const displayName = brandName || 'Brand Name'
   const avatar = brandLogo || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&size=80`
+
+  // Render overlay for preview
+  const renderPreviewOverlay = useCallback(async () => {
+    if (!imageUrl || !overlayId || !brandColors?.length) return
+    const canvas = overlayCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const size = 540
+    canvas.width = size
+    canvas.height = size
+
+    const loadImg = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
+    })
+
+    try {
+      const baseImage = await loadImg(imageUrl)
+      let logo: HTMLImageElement | null = null
+      if (brandLogoUrl) { try { logo = await loadImg(brandLogoUrl) } catch { /* skip */ } }
+
+      const primaryColor = brandColors.find(c => c.role === 'primary')?.hex || '#9933ff'
+      const accentColor = brandColors.find(c => c.role === 'accent')?.hex || primaryColor
+      const headingFont = brandFonts?.find(f => f.role === 'heading')?.family || 'Inter'
+      const bodyFont = brandFonts?.find(f => f.role === 'body')?.family || headingFont
+
+      const options: OverlayOptions = {
+        size, baseImage, logo,
+        headline: headline || '',
+        subtitle: subtitle || '',
+        brandName: displayName,
+        primaryColor, accentColor, headingFont, bodyFont,
+      }
+
+      await getOverlayTemplate(overlayId).render(ctx, options)
+      setOverlayDataUrl(canvas.toDataURL('image/png'))
+    } catch { /* fallback to raw image */ }
+  }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName])
+
+  useEffect(() => {
+    if (overlayId && imageUrl && brandColors?.length) {
+      renderPreviewOverlay()
+    } else {
+      setOverlayDataUrl(null)
+    }
+  }, [renderPreviewOverlay, overlayId, imageUrl, brandColors])
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
@@ -52,14 +108,15 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
       {/* Preview */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
         {activeTab === 'instagram' && (
-          <InstagramPreview caption={truncatedCaption} imageUrl={imageUrl} displayName={displayName} avatar={avatar} />
+          <InstagramPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
         {activeTab === 'linkedin' && (
-          <LinkedInPreview caption={truncatedCaption} imageUrl={imageUrl} displayName={displayName} avatar={avatar} />
+          <LinkedInPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
         {activeTab === 'facebook' && (
-          <FacebookPreview caption={truncatedCaption} imageUrl={imageUrl} displayName={displayName} avatar={avatar} />
+          <FacebookPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
+        <canvas ref={overlayCanvasRef} className="hidden" />
       </div>
     </div>
   )
