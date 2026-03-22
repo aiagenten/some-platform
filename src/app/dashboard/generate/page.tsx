@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 
@@ -69,6 +69,22 @@ type BrandProfile = {
   tagline?: string
 }
 
+type MediaAsset = {
+  id: string
+  url: string
+  thumbnail_url: string | null
+  filename: string | null
+  source: string
+  is_favorite: boolean
+  tags: string[]
+}
+
+const VARIANT_OPTIONS = [
+  { value: 1, label: '1 bilde' },
+  { value: 3, label: '3 varianter' },
+  { value: 5, label: '5 varianter' },
+]
+
 export default function GeneratePage() {
   const [orgId, setOrgId] = useState<string | null>(null)
   const [platform, setPlatform] = useState('instagram')
@@ -85,6 +101,18 @@ export default function GeneratePage() {
   const [imageStyles, setImageStyles] = useState<ImageStyleOption[]>(DEFAULT_IMAGE_STYLES)
   const [selectedStyle, setSelectedStyle] = useState('scandinavian-photo')
   const [selectedOverlay, setSelectedOverlay] = useState('modern-dark')
+  // Reference image
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null)
+  const [showMediaPicker, setShowMediaPicker] = useState(false)
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([])
+  const [mediaSearch, setMediaSearch] = useState('')
+  const [loadingMedia, setLoadingMedia] = useState(false)
+  // Bulk generation
+  const [variantCount, setVariantCount] = useState(1)
+  const [bulkResults, setBulkResults] = useState<GeneratedContent[]>([])
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [selectedVariant, setSelectedVariant] = useState(0)
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -128,6 +156,40 @@ export default function GeneratePage() {
     }
     loadOrg()
   }, [])
+
+  // Load media library for picker
+  const loadMediaForPicker = async () => {
+    if (!orgId) return
+    setLoadingMedia(true)
+    try {
+      const res = await fetch(`/api/media?org_id=${orgId}`)
+      if (res.ok) {
+        const data = await res.json()
+        const allAssets: MediaAsset[] = [
+          ...(data.assets || []),
+          ...(data.storageImages || []).map((img: { url: string; name: string }) => ({
+            id: img.url,
+            url: img.url,
+            thumbnail_url: null,
+            filename: img.name,
+            source: 'ai_generated',
+            is_favorite: false,
+            tags: [],
+          })),
+        ]
+        setMediaAssets(allAssets)
+      }
+    } catch (err) {
+      console.error('Load media error:', err)
+    } finally {
+      setLoadingMedia(false)
+    }
+  }
+
+  const openMediaPicker = () => {
+    setShowMediaPicker(true)
+    loadMediaForPicker()
+  }
 
   // Get the AI-generated headline
   const getHeadline = useCallback(() => {
@@ -218,6 +280,50 @@ export default function GeneratePage() {
     if (!orgId) return
     setError(null)
     const isRegenerate = regenerateText || regenerateImage
+
+    // Bulk generation
+    if (!isRegenerate && variantCount > 1) {
+      setBulkLoading(true)
+      setLoading(true)
+      setBulkResults([])
+      setSelectedVariant(0)
+
+      try {
+        const promises = Array.from({ length: variantCount }, () =>
+          fetch('/api/posts/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              org_id: orgId,
+              platform,
+              format,
+              topic: topic || undefined,
+              image_style_id: selectedStyle,
+              reference_image_url: referenceImageUrl || undefined,
+              selected_overlay: selectedOverlay,
+            }),
+          }).then(r => r.json())
+        )
+
+        const results = await Promise.all(promises)
+        const validResults = results.filter(r => r.success).map(r => r.generated)
+
+        if (validResults.length > 0) {
+          setBulkResults(validResults)
+          setGenerated(validResults[0])
+          setPostId(results.find(r => r.success)?.post?.id || null)
+        } else {
+          setError('Alle genereringer feilet')
+        }
+      } catch {
+        setError('Nettverksfeil. Prøv igjen.')
+      } finally {
+        setLoading(false)
+        setBulkLoading(false)
+      }
+      return
+    }
+
     if (regenerateText) setLoadingText(true)
     else if (regenerateImage) setLoadingImage(true)
     else setLoading(true)
@@ -235,6 +341,8 @@ export default function GeneratePage() {
           regenerate_image: regenerateImage,
           post_id: isRegenerate ? postId : undefined,
           image_style_id: selectedStyle,
+          reference_image_url: referenceImageUrl || undefined,
+          selected_overlay: selectedOverlay,
         }),
       })
       const data = await res.json()
@@ -251,11 +359,13 @@ export default function GeneratePage() {
           subtitle: regenerateText ? data.generated.subtitle : (prev?.subtitle || null),
           hashtags: regenerateText ? data.generated.hashtags : (prev?.hashtags || []),
           image_url: regenerateImage ? data.generated.image_url : (prev?.image_url || null),
+          image_error: regenerateImage ? (data.generated.image_error || null) : (prev?.image_error || null),
           best_time: regenerateText ? (data.generated.best_time || null) : (prev?.best_time || null),
           image_suggestion: regenerateText ? (data.generated.image_suggestion || null) : (prev?.image_suggestion || null),
         }))
       } else {
         setGenerated(data.generated)
+        setBulkResults([])
       }
     } catch {
       setError('Nettverksfeil. Prøv igjen.')
@@ -265,6 +375,25 @@ export default function GeneratePage() {
       setLoadingImage(false)
     }
   }
+
+  // "Lag lignende i annen vinkel" — use current image as reference
+  const handleSimilarAngle = () => {
+    if (generated?.image_url) {
+      setReferenceImageUrl(generated.image_url)
+      handleGenerate(false, true)
+    }
+  }
+
+  // Filter media for picker
+  const filteredMedia = mediaAssets.filter(a => {
+    if (!mediaSearch) return true
+    const q = mediaSearch.toLowerCase()
+    return (a.filename?.toLowerCase().includes(q)) || a.tags.some(t => t.toLowerCase().includes(q))
+  }).sort((a, b) => {
+    if (a.is_favorite && !b.is_favorite) return -1
+    if (!a.is_favorite && b.is_favorite) return 1
+    return 0
+  })
 
   return (
     <div className="animate-fade-in-up">
@@ -344,6 +473,32 @@ export default function GeneratePage() {
               </div>
             </div>
 
+            {/* Reference Image */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Referansebilde <span className="text-slate-400 font-normal">(valgfritt)</span>
+              </label>
+              {referenceImageUrl ? (
+                <div className="relative inline-block">
+                  <img src={referenceImageUrl} alt="Referansebilde" className="w-24 h-24 rounded-xl object-cover border border-slate-200" />
+                  <button
+                    onClick={() => setReferenceImageUrl(null)}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={openMediaPicker}
+                  className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition-all"
+                >
+                  <Plus className="w-6 h-6" />
+                  <span className="text-[10px] mt-1">Velg bilde</span>
+                </button>
+              )}
+            </div>
+
             {/* Topic */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -358,6 +513,26 @@ export default function GeneratePage() {
               />
             </div>
 
+            {/* Variant count */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-700 mb-2">Antall varianter</label>
+              <div className="flex gap-2">
+                {VARIANT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setVariantCount(opt.value)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      variantCount === opt.value
+                        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Generate button */}
             <button
               onClick={() => handleGenerate()}
@@ -367,12 +542,12 @@ export default function GeneratePage() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Genererer...
+                  {bulkLoading ? `Genererer ${variantCount} varianter...` : 'Genererer...'}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Generer innhold
+                  {variantCount > 1 ? `Generer ${variantCount} varianter` : 'Generer innhold'}
                 </>
               )}
             </button>
@@ -401,13 +576,51 @@ export default function GeneratePage() {
               <div className="w-16 h-16 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
                 <Bot className="w-8 h-8 text-indigo-600" />
               </div>
-              <p className="text-slate-500">Genererer tekst og bilde...</p>
+              <p className="text-slate-500">
+                {bulkLoading ? `Genererer ${variantCount} varianter parallelt...` : 'Genererer tekst og bilde...'}
+              </p>
               <p className="text-xs text-slate-400 mt-1">Dette kan ta 10-30 sekunder</p>
             </div>
           )}
 
           {generated && (
             <>
+              {/* Bulk variant selector */}
+              {bulkResults.length > 1 && (
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-4 shadow-sm">
+                  <h3 className="text-sm font-medium text-slate-700 mb-3">Velg variant ({bulkResults.length} generert)</h3>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {bulkResults.map((result, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setSelectedVariant(i); setGenerated(result) }}
+                        className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                          selectedVariant === i
+                            ? 'border-indigo-500 shadow-md ring-2 ring-indigo-200'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {result.image_url ? (
+                          <img src={result.image_url} alt={`Variant ${i + 1}`} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                            <ImageIcon className="w-6 h-6 text-slate-300" />
+                          </div>
+                        )}
+                        <span className="absolute bottom-1 right-1 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded-md font-medium">
+                          {i + 1}
+                        </span>
+                        {selectedVariant === i && (
+                          <div className="absolute top-1 left-1">
+                            <Star className="w-4 h-4 fill-amber-500 text-amber-500 drop-shadow" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Text result */}
               <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
@@ -465,13 +678,24 @@ export default function GeneratePage() {
                   <h3 className="font-semibold text-slate-900">Bilde med merkevare</h3>
                   <div className="flex gap-2">
                     {generated.image_url && (
-                      <button
-                        onClick={handleDownloadOverlay}
-                        className="text-sm px-3 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all duration-200 flex items-center gap-1.5 border border-emerald-100"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Last ned
-                      </button>
+                      <>
+                        <button
+                          onClick={handleDownloadOverlay}
+                          className="text-sm px-3 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all duration-200 flex items-center gap-1.5 border border-emerald-100"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Last ned
+                        </button>
+                        <button
+                          onClick={handleSimilarAngle}
+                          disabled={loadingImage}
+                          className="text-sm px-3 py-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all duration-200 disabled:opacity-50 flex items-center gap-1.5 border border-amber-100"
+                          title="Lag lignende bilde i annen vinkel/setting"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Lignende
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleGenerate(false, true)}
@@ -566,6 +790,67 @@ export default function GeneratePage() {
           )}
         </div>
       </div>
+
+      {/* Media Picker Modal */}
+      {showMediaPicker && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowMediaPicker(false)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900">Velg referansebilde</h3>
+              <button onClick={() => setShowMediaPicker(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-slate-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={mediaSearch}
+                  onChange={e => setMediaSearch(e.target.value)}
+                  placeholder="Søk etter bilder..."
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {loadingMedia ? (
+                <div className="text-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
+                </div>
+              ) : filteredMedia.length > 0 ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                  {filteredMedia.map((asset, i) => (
+                    <button
+                      key={asset.id || i}
+                      onClick={() => {
+                        setReferenceImageUrl(asset.url)
+                        setShowMediaPicker(false)
+                      }}
+                      className="relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 hover:border-indigo-400 transition-all group"
+                    >
+                      <img src={asset.thumbnail_url || asset.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      {asset.is_favorite && (
+                        <div className="absolute top-1 left-1">
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 drop-shadow" />
+                        </div>
+                      )}
+                      <span className={`absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                        asset.source === 'ai_generated' ? 'bg-purple-500/80 text-white' :
+                        'bg-black/50 text-white'
+                      }`}>
+                        {asset.source === 'ai_generated' ? 'AI' : asset.source === 'upload' ? 'Opp.' : asset.source}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-sm text-slate-400 py-8">Ingen bilder funnet</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import PlatformPreview from '@/components/PlatformPreview'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
@@ -32,6 +32,10 @@ type Post = {
   published_id: string | null
   created_at: string
   updated_at: string
+  headline: string | null
+  subtitle: string | null
+  selected_overlay: string | null
+  suggested_time: string | null
 }
 
 type Feedback = {
@@ -94,6 +98,11 @@ export default function PostDetailPage() {
   const [scheduleTime, setScheduleTime] = useState('09:00')
   const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
   const [standardVisibility, setStandardVisibility] = useState<Record<string, boolean>>({})
+  const [imageHistory, setImageHistory] = useState<Array<{ id: string; image_url: string; prompt: string | null; created_at: string; is_selected: boolean }>>([])
+  const [editingHeadline, setEditingHeadline] = useState(false)
+  const [editingSubtitle, setEditingSubtitle] = useState(false)
+  const [headlineValue, setHeadlineValue] = useState('')
+  const [subtitleValue, setSubtitleValue] = useState('')
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -136,7 +145,30 @@ export default function PostDetailPage() {
       } catch { /* ignore */ }
 
       const { data: postData } = await supabase.from('social_posts').select('*').eq('id', postId).single()
-      if (postData) setPost(postData)
+      if (postData) {
+        setPost(postData)
+        // Pre-select overlay from DB
+        if (postData.selected_overlay) setSelectedOverlay(postData.selected_overlay)
+        // Pre-fill headline/subtitle for inline editing
+        if (postData.headline) setHeadlineValue(postData.headline)
+        if (postData.subtitle) setSubtitleValue(postData.subtitle)
+        // Pre-fill schedule with suggested_time
+        if (postData.suggested_time && !postData.scheduled_for) {
+          const parsed = parseSuggestedTime(postData.suggested_time)
+          if (parsed) {
+            setScheduleDate(parsed.date)
+            setScheduleTime(parsed.time)
+          }
+        }
+      }
+
+      // Load image generation history
+      const { data: imgHistory } = await supabase
+        .from('image_generations')
+        .select('id, image_url, prompt, created_at, is_selected')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false })
+      if (imgHistory) setImageHistory(imgHistory)
 
       const { data: feedbackData } = await supabase
         .from('content_feedback')
@@ -264,6 +296,17 @@ export default function PostDetailPage() {
     setActionLoading(true)
     await supabase.from('social_posts').update({ status: 'draft' }).eq('id', post.id)
     setPost({ ...post, status: 'draft' })
+    setActionLoading(false)
+  }
+
+  const handleRevertImage = async (imageUrl: string, generationId: string) => {
+    if (!post) return
+    setActionLoading(true)
+    await supabase.from('social_posts').update({ content_image_url: imageUrl }).eq('id', post.id)
+    await supabase.from('image_generations').update({ is_selected: false }).eq('post_id', post.id)
+    await supabase.from('image_generations').update({ is_selected: true }).eq('id', generationId)
+    setPost({ ...post, content_image_url: imageUrl })
+    setImageHistory(prev => prev.map(h => ({ ...h, is_selected: h.id === generationId })))
     setActionLoading(false)
   }
 
@@ -400,6 +443,52 @@ export default function PostDetailPage() {
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
               <h3 className="text-sm font-medium text-slate-500 mb-3">Video</h3>
               <video src={post.content_video_url} controls className="w-full rounded-xl" />
+            </div>
+          )}
+
+          {/* Image generation history */}
+          {imageHistory.length > 1 && (
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <History className="w-4 h-4 text-slate-500" />
+                <h3 className="text-sm font-medium text-slate-500">Bildehistorikk ({imageHistory.length} varianter)</h3>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {imageHistory.map((gen) => (
+                  <div
+                    key={gen.id}
+                    className={`relative group rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                      gen.is_selected
+                        ? 'border-indigo-500 ring-2 ring-indigo-200'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                    onClick={() => {
+                      if (!gen.is_selected) handleRevertImage(gen.image_url, gen.id)
+                    }}
+                  >
+                    <div className="aspect-square">
+                      <img src={gen.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </div>
+                    {gen.is_selected && (
+                      <div className="absolute top-1 right-1 bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded-md font-medium">
+                        Aktiv
+                      </div>
+                    )}
+                    {!gen.is_selected && (
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                        <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 px-2 py-1 rounded-lg">
+                          Bruk dette
+                        </span>
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-1.5">
+                      <p className="text-[10px] text-white/80">
+                        {new Date(gen.created_at).toLocaleString('nb-NO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

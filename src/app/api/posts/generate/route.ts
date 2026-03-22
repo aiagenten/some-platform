@@ -40,7 +40,7 @@ import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id } = body
+    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id, reference_image_url, selected_overlay } = body
 
     if (!org_id || !platform || !format) {
       return NextResponse.json(
@@ -280,7 +280,7 @@ Returner dette JSON-formatet:
 
       // Get the active image style from org settings, or use default
       const defaultStylePrompt = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. {situation}. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
-      
+
       // Use request style if provided, otherwise fall back to org default
       const styleToUse = image_style_id || activeStyleId
       const activeStyle = imageStyles.find(s => s.id === styleToUse)
@@ -291,12 +291,37 @@ Returner dette JSON-formatet:
       // Replace {situation} placeholder in style prompt
       const styledPrompt = stylePrompt.replace(/\{situation\}/g, imageContext)
 
-      const imageGenPrompt = `${styledPrompt}
+      // Fetch style guide images for this org
+      const { data: styleGuideImages } = await supabase
+        .from('media_assets')
+        .select('url')
+        .eq('org_id', org_id)
+        .eq('is_style_guide', true)
+        .limit(3)
+
+      let imageGenPrompt: string
+      if (reference_image_url) {
+        // Reference image mode — generate similar image in different angle
+        imageGenPrompt = `Create an image in the SAME style, with the SAME character(s) and visual feel, but from a DIFFERENT angle or setting.
+
+Style reference: ${styledPrompt}
+Brand colors for subtle accent/props: ${brandColorDesc}
+Industry: ${brandProfile?.description || 'technology and business'}
+
+IMPORTANT: No text overlays, no UI elements, no logos. Match the style and mood of the reference image closely.`
+      } else {
+        imageGenPrompt = `${styledPrompt}
 
 Brand colors for subtle accent/props: ${brandColorDesc}
 Industry: ${brandProfile?.description || 'technology and business'}
 
 IMPORTANT: No text overlays, no UI elements, no logos.`
+      }
+
+      // Add style guide context if available
+      if (styleGuideImages?.length && !reference_image_url) {
+        imageGenPrompt += `\n\nStyle reference images are provided. Match their visual style, color palette, and mood closely.`
+      }
 
       // Use configured model from org settings, or override from request body
       const selectedImageModel = image_model || configuredImageModel
@@ -333,7 +358,34 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
             console.error('GPT Image error:', imageResponse.status, await imageResponse.text())
           }
         } else {
-          // Nano Banana (Gemini) via OpenRouter
+          // Nano Banana (Gemini) via OpenRouter — supports multimodal with reference images
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const messageContent: any[] = []
+
+          // Add reference image if provided
+          if (reference_image_url) {
+            messageContent.push({
+              type: 'image_url',
+              image_url: { url: reference_image_url }
+            })
+          }
+
+          // Add style guide images as reference
+          if (styleGuideImages?.length && !reference_image_url) {
+            for (const sg of styleGuideImages) {
+              messageContent.push({
+                type: 'image_url',
+                image_url: { url: sg.url }
+              })
+            }
+          }
+
+          // Add the text prompt
+          messageContent.push({
+            type: 'text',
+            text: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${imageGenPrompt}`
+          })
+
           const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -346,7 +398,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
               messages: [
                 {
                   role: 'user',
-                  content: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${imageGenPrompt}`
+                  content: messageContent,
                 }
               ],
             }),
@@ -355,7 +407,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           if (imageResponse.ok) {
             const imageData = await imageResponse.json()
             const message = imageData.choices?.[0]?.message
-            
+
             // OpenRouter returns images in message.images array (separate from content)
             const images = message?.images || []
             if (images.length > 0) {
@@ -419,6 +471,17 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       }
     }
 
+    // Auto-schedule: compute suggested_time based on weekly goals + best practices
+    let suggestedTime = bestTime
+    if (!regenerate_text && !regenerate_image) {
+      try {
+        const computedTime = await computeSuggestedTime(supabase, org_id, platform, bestTime)
+        if (computedTime) suggestedTime = computedTime
+      } catch (err) {
+        console.error('Auto-schedule error:', err)
+      }
+    }
+
     // Save or update post in social_posts
     let postData
     if (post_id && (regenerate_text || regenerate_image)) {
@@ -428,9 +491,15 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         updates.content_text = generatedText
         updates.caption = generatedCaption
         updates.hashtags = generatedHashtags
+        updates.headline = generatedHeadline
+        updates.subtitle = generatedSubtitle
+        updates.suggested_time = suggestedTime
       }
       if (imageUrl) {
         updates.content_image_url = imageUrl
+      }
+      if (selected_overlay) {
+        updates.selected_overlay = selected_overlay
       }
 
       const { data, error } = await supabase
@@ -457,6 +526,10 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           caption: generatedCaption,
           hashtags: generatedHashtags,
           content_image_url: imageUrl,
+          headline: generatedHeadline,
+          subtitle: generatedSubtitle,
+          suggested_time: suggestedTime,
+          selected_overlay: selected_overlay || null,
           status: 'draft',
           ai_generated: true,
           ai_prompt: topic || topicText,
@@ -471,6 +544,28 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       postData = data
     }
 
+    // Save to image_generations history
+    if (imageUrl && postData) {
+      await supabase.from('image_generations').insert({
+        org_id,
+        post_id: postData.id,
+        image_url: imageUrl,
+        prompt: topic || topicText,
+        style_id: image_style_id || activeStyleId,
+        reference_image_url: reference_image_url || null,
+        is_selected: true,
+      }).then(() => {
+        // Mark previous generations for this post as not selected
+        if (postData.id) {
+          supabase.from('image_generations')
+            .update({ is_selected: false })
+            .eq('post_id', postData.id)
+            .neq('image_url', imageUrl)
+            .then(() => {})
+        }
+      })
+    }
+
     return NextResponse.json({
       success: true,
       post: postData,
@@ -482,7 +577,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         hashtags: generatedHashtags,
         image_url: imageUrl,
         image_error: imageError,
-        best_time: bestTime,
+        best_time: suggestedTime || bestTime,
         image_suggestion: imageSuggestion,
       },
     })
@@ -524,4 +619,91 @@ function extractHashtags(text: string): string[] {
   const hashtagRegex = /#[\wæøåÆØÅ]+/g
   const matches = text.match(hashtagRegex) || []
   return Array.from(new Set(matches)).slice(0, 15)
+}
+
+// Helper: compute optimal suggested time based on weekly goals and best practices
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function computeSuggestedTime(supabase: any, orgId: string, platform: string, aiBestTime: string | null): Promise<string | null> {
+  // Fetch weekly goal for this platform
+  const { data: goal } = await supabase
+    .from('weekly_posting_goals')
+    .select('weekly_target')
+    .eq('org_id', orgId)
+    .eq('platform', platform)
+    .single()
+
+  const weeklyTarget = goal?.weekly_target || 3
+
+  // Get current week boundaries (Monday to Sunday)
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + mondayOffset)
+  monday.setHours(0, 0, 0, 0)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59, 999)
+
+  // Count existing posts this week for this platform
+  const { count } = await supabase
+    .from('social_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('platform', platform)
+    .in('status', ['approved', 'scheduled', 'published', 'draft'])
+    .gte('created_at', monday.toISOString())
+    .lte('created_at', sunday.toISOString())
+
+  const postsThisWeek = count || 0
+
+  // Get scheduled times this week to find gaps
+  const { data: scheduledPosts } = await supabase
+    .from('social_posts')
+    .select('scheduled_for')
+    .eq('org_id', orgId)
+    .eq('platform', platform)
+    .not('scheduled_for', 'is', null)
+    .gte('scheduled_for', monday.toISOString())
+    .lte('scheduled_for', sunday.toISOString())
+
+  const scheduledDates = new Set(
+    (scheduledPosts || []).map((p: { scheduled_for: string }) => p.scheduled_for.slice(0, 10))
+  )
+
+  // Best posting hours by platform
+  const bestHours: Record<string, number[]> = {
+    instagram: [8, 9, 12, 17, 18],
+    linkedin: [8, 9, 10, 12],
+    facebook: [9, 12, 15, 18],
+  }
+  const hours = bestHours[platform] || bestHours.instagram
+
+  // Distribute posts evenly across the week
+  const remainingSlots = Math.max(0, weeklyTarget - postsThisWeek)
+  if (remainingSlots <= 0) {
+    return aiBestTime || null
+  }
+
+  // Find next available day (prefer Tue-Thu for most platforms)
+  const preferredDays = [2, 3, 4, 1, 5] // Tue, Wed, Thu, Mon, Fri
+  const daysNorsk = ['Søndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag']
+
+  for (const dayNum of preferredDays) {
+    const candidateDate = new Date(monday)
+    candidateDate.setDate(monday.getDate() + (dayNum - 1))
+
+    // Skip past days
+    if (candidateDate < now && candidateDate.toDateString() !== now.toDateString()) continue
+
+    const candidateKey = `${candidateDate.getFullYear()}-${String(candidateDate.getMonth() + 1).padStart(2, '0')}-${String(candidateDate.getDate()).padStart(2, '0')}`
+
+    if (!scheduledDates.has(candidateKey)) {
+      const hour = hours[Math.floor(Math.random() * hours.length)]
+      const dayName = daysNorsk[candidateDate.getDay()]
+      return `${dayName} kl ${String(hour).padStart(2, '0')}:00 (${candidateKey})`
+    }
+  }
+
+  return aiBestTime || null
 }
