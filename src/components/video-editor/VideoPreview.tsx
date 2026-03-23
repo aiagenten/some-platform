@@ -1,27 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, Clock } from 'lucide-react'
 import type { EditorState, SelectedRange } from '@/lib/editor-state'
 import { formatSeconds } from '@/lib/editor-state'
-import type { PlayerRef } from '@remotion/player'
-
-// Dynamically import Player to avoid SSR issues
-const Player = dynamic(() => import('@remotion/player').then(m => m.Player), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full bg-black flex items-center justify-center">
-      <div className="text-slate-400 text-sm">Loading player…</div>
-    </div>
-  ),
-})
-
-// Dynamically import the composition
-const EditorCompositionDynamic = dynamic(
-  () => import('@/remotion/EditorComposition').then(m => m.EditorComposition),
-  { ssr: false },
-)
+import { Player, type PlayerRef } from '@remotion/player'
+import { EditorComposition } from '@/remotion/EditorComposition'
 
 type Props = {
   editorState: EditorState
@@ -35,7 +19,11 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
   const [isPlaying, setIsPlaying] = useState(false)
   const [isSelectingRange, setIsSelectingRange] = useState(false)
   const [rangeStart, setRangeStart] = useState<number | null>(null)
-  const { fps, totalDurationInFrames, currentFrame } = editorState
+  const { fps, totalDurationInFrames, currentFrame, tracks } = editorState
+
+  // Compute a stable key for the player based on track item count and total duration
+  // This forces re-mount when items are added/removed
+  const playerKey = tracks.reduce((acc, t) => acc + t.items.length, 0) + '-' + totalDurationInFrames
 
   // Subscribe to frame updates from the player
   useEffect(() => {
@@ -153,8 +141,9 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
           style={{ aspectRatio: '16/9', maxHeight: '100%', maxWidth: '100%', margin: 'auto' }}
         >
           <Player
+            key={playerKey}
             ref={playerRef}
-            component={EditorCompositionDynamic as React.ComponentType<Record<string, unknown>>}
+            component={EditorComposition}
             inputProps={{ editorState }}
             durationInFrames={Math.max(totalDurationInFrames, 1)}
             compositionWidth={1920}
@@ -162,6 +151,7 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
             fps={fps}
             style={{ width: '100%', height: '100%' }}
             controls={false}
+            loop={false}
           />
         </div>
 

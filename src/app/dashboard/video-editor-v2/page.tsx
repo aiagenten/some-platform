@@ -17,7 +17,9 @@ type Toast = {
 export default function VideoEditorV2Page() {
   const {
     state,
+    maxTrackEnd,
     setCurrentFrame,
+    setTotalDuration,
     addTrackItem,
     moveTrackItem,
     resizeTrackItem,
@@ -26,6 +28,13 @@ export default function VideoEditorV2Page() {
     loadState,
     reset,
   } = useEditorState()
+
+  // Keep totalDurationInFrames in sync with actual track content
+  useEffect(() => {
+    if (maxTrackEnd > state.totalDurationInFrames) {
+      setTotalDuration(maxTrackEnd)
+    }
+  }, [maxTrackEnd, state.totalDurationInFrames, setTotalDuration])
 
   const [toasts, setToasts] = useState<Toast[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
