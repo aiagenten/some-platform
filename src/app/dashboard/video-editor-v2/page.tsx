@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, Film, Save, RotateCcw, Download, MoreVertical, Keyboard, Settings, FolderOpen, CheckCircle2 } from 'lucide-react'
 import { useEditorState } from '@/hooks/useEditorState'
 import { EditorLayout } from '@/components/video-editor/EditorLayout'
@@ -36,11 +37,33 @@ export default function VideoEditorV2Page() {
     }
   }, [maxTrackEnd, state.totalDurationInFrames, setTotalDuration])
 
+  const router = useRouter()
   const [toasts, setToasts] = useState<Toast[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [showProjects, setShowProjects] = useState(false)
   const [projects, setProjects] = useState<{ id: string; name: string; savedAt: string }[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const handleBack = useCallback(() => {
+    // Check if there are unsaved changes (any items on timeline)
+    const hasContent = state.tracks.some(t => t.items.length > 0)
+    if (hasContent) {
+      const shouldSave = confirm('Du har ulagrede endringer. Vil du lagre før du går tilbake?')
+      if (shouldSave) {
+        // Save first, then navigate
+        try {
+          const id = `project-${Date.now()}`
+          const savedAt = new Date().toLocaleString('nb-NO')
+          const projectName = `Video ${savedAt}`
+          localStorage.setItem(`${STORAGE_KEY}-${id}`, JSON.stringify(state))
+          const newProjects = [{ id, name: projectName, savedAt }, ...projects.slice(0, 9)]
+          setProjects(newProjects)
+          localStorage.setItem(`${STORAGE_KEY}-list`, JSON.stringify(newProjects))
+        } catch {}
+      }
+    }
+    router.push('/dashboard/video')
+  }, [state, projects, router])
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'success') => {
     const id = Math.random().toString(36).slice(2)
@@ -201,9 +224,9 @@ export default function VideoEditorV2Page() {
       <header className="h-12 flex items-center gap-3 px-4 bg-slate-950 border-b border-slate-800 shrink-0">
         {/* Back */}
         <button
-          onClick={() => setShowProjects(true)}
+          onClick={handleBack}
           className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs transition-colors"
-          title="Mine prosjekter"
+          title="Tilbake til dashboard"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Tilbake
