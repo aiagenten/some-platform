@@ -13,6 +13,13 @@ export async function renderCustomOverlay(
   const canvasW = options.width || size
   const canvasH = options.height || size
 
+  // Scale factor: templates are designed at template.width x template.height (usually 1080x1080)
+  // When rendering at a different size (e.g. 540px preview), scale all positions/sizes
+  const templateW = template.width || 1080
+  const templateH = template.height || 1080
+  const scaleX = canvasW / templateW
+  const scaleY = canvasH / templateH
+
   // Resolve brand tokens in element fills
   const resolveFill = (fill: string | undefined): string => {
     if (!fill) return 'rgba(0,0,0,0.5)'
@@ -33,18 +40,26 @@ export async function renderCustomOverlay(
   // Apply canvas background (over image if not transparent)
   renderBackground(ctx, template.canvas_background, canvasW, canvasH)
 
-  // Render each element using Fabric.js left/top as top-left origin
+  // Render each element using Fabric.js left/top as top-left origin, scaled to canvas size
   for (const el of template.elements) {
     ctx.save()
     ctx.globalAlpha = el.opacity ?? 1
 
-    const w = el.width * (el.scaleX || 1)
-    const h = el.height * (el.scaleY || 1)
+    // Scale element position and size from template coordinates to canvas coordinates
+    const scaledEl = {
+      ...el,
+      left: el.left * scaleX,
+      top: el.top * scaleY,
+      fontSize: el.fontSize ? el.fontSize * Math.min(scaleX, scaleY) : undefined,
+    }
+
+    const w = el.width * (el.scaleX || 1) * scaleX
+    const h = el.height * (el.scaleY || 1) * scaleY
 
     // Apply rotation around center of scaled element if needed
     if (el.angle) {
-      const cx = el.left + w / 2
-      const cy = el.top + h / 2
+      const cx = scaledEl.left + w / 2
+      const cy = scaledEl.top + h / 2
       ctx.translate(cx, cy)
       ctx.rotate(el.angle * Math.PI / 180)
       ctx.translate(-cx, -cy)
@@ -52,20 +67,19 @@ export async function renderCustomOverlay(
 
     switch (el.type) {
       case 'text':
-        renderText(ctx, el, w, h, { headline, subtitle, brandName, headingFont, bodyFont, primaryColor })
+        renderText(ctx, scaledEl, w, h, { headline, subtitle, brandName, headingFont, bodyFont, primaryColor })
         break
       case 'shape':
-        renderShape(ctx, el, w, h, resolveFill)
+        renderShape(ctx, scaledEl, w, h, resolveFill)
         break
       case 'color-block':
-        renderColorBlock(ctx, el, w, h, resolveFill)
+        renderColorBlock(ctx, scaledEl, w, h, resolveFill)
         break
       case 'logo':
         if (el.useBrandLogo === false && el.imageUrl) {
-          // Custom logo — load from URL
-          await renderLogoFromUrl(ctx, el, el.imageUrl, w, h)
+          await renderLogoFromUrl(ctx, scaledEl, el.imageUrl, w, h)
         } else if (logo) {
-          renderLogo(ctx, el, logo, w, h)
+          renderLogo(ctx, scaledEl, logo, w, h)
         }
         break
     }

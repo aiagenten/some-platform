@@ -14,6 +14,7 @@ type Post = {
   status: string
   scheduled_for: string | null
   content_image_url: string | null
+  overlay_image_url: string | null
   created_at: string
 }
 
@@ -78,7 +79,7 @@ export default function PostsPage() {
 
       let query = supabase
         .from('social_posts')
-        .select('id, content_text, caption, platform, format, status, scheduled_for, content_image_url, created_at')
+        .select('id, content_text, caption, platform, format, status, scheduled_for, content_image_url, overlay_image_url, created_at')
         .eq('org_id', profile.org_id)
         .order('created_at', { ascending: false })
 
@@ -160,7 +161,7 @@ export default function PostsPage() {
                 {/* Image thumbnail */}
                 {post.content_image_url ? (
                   <img
-                    src={post.content_image_url}
+                    src={post.overlay_image_url || post.content_image_url}
                     alt=""
                     className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                   />

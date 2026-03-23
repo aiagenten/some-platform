@@ -225,6 +225,8 @@ export default function PostDetailPage() {
   const renderPostOverlay = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas || !post?.content_image_url || brandColors.length === 0) return
+    // For custom overlays, wait until customTemplates are loaded
+    if (selectedOverlay.startsWith('custom-') && customTemplates.length === 0) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const dims = PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram
@@ -262,11 +264,30 @@ export default function PostDetailPage() {
         await getOverlayTemplate(selectedOverlay).render(ctx, options)
       }
       setOverlayRendered(true)
+
+      // Auto-save overlay image for thumbnail use in post list
+      try {
+        canvas.toBlob(async (blob) => {
+          if (!blob || !post?.id || !orgId) return
+          const fileName = `${orgId}/overlay-${post.id}.png`
+          const { data: uploadData } = await supabase.storage
+            .from('post-images')
+            .upload(fileName, blob, { contentType: 'image/png', upsert: true })
+          if (uploadData?.path) {
+            const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(uploadData.path)
+            if (urlData?.publicUrl) {
+              // Add cache buster to avoid stale thumbnails
+              const overlayUrl = `${urlData.publicUrl}?t=${Date.now()}`
+              await supabase.from('social_posts').update({ overlay_image_url: overlayUrl }).eq('id', post.id)
+            }
+          }
+        }, 'image/png')
+      } catch { /* non-critical, skip silently */ }
     } catch (err) {
       console.error('Overlay render error:', err)
       setOverlayRendered(false)
     }
-  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates])
+  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates, orgId])
 
   useEffect(() => { setOverlayRendered(false); renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
