@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Shield, ChevronDown, ChevronRight, ChevronLeft, Filter, X } from 'lucide-react'
+import { Shield, ChevronDown, ChevronRight, ChevronLeft, Filter, X, Activity } from 'lucide-react'
 
 type AuditEvent = {
   id: string
@@ -48,6 +48,20 @@ const RESOURCE_TYPE_OPTIONS = [
   { value: 'social_account', label: 'Tilkobling' },
 ]
 
+type UsageSummary = {
+  total_calls: number
+  total_cost: number
+  by_type: Record<string, { count: number; cost: number; success: number; failed: number }>
+}
+
+const USAGE_TYPE_LABELS: Record<string, string> = {
+  text_generation: 'Tekst',
+  image_generation: 'Bilde',
+  video_generation: 'Video',
+  music_generation: 'Musikk',
+  overlay_render: 'Overlay',
+}
+
 const PAGE_SIZE = 50
 
 export default function AuditTrailPage() {
@@ -58,6 +72,7 @@ export default function AuditTrailPage() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
+  const [usage, setUsage] = useState<UsageSummary | null>(null)
 
   // Filters
   const [resourceType, setResourceType] = useState('')
@@ -90,6 +105,17 @@ export default function AuditTrailPage() {
     }
     checkAccess()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load this month's API usage
+  useEffect(() => {
+    if (!authorized) return
+    const now = new Date()
+    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    fetch(`/api/admin/usage?from=${from}`)
+      .then(r => r.json())
+      .then(data => { if (data.total_calls !== undefined) setUsage(data) })
+      .catch(() => {})
+  }, [authorized])
 
   const loadEvents = useCallback(async () => {
     if (!authorized) return
@@ -228,6 +254,43 @@ export default function AuditTrailPage() {
               Nullstill filter
             </button>
           )}
+        </div>
+      )}
+
+      {/* API Usage Summary */}
+      {usage && usage.total_calls > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/60 p-4 mb-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-4 h-4 text-indigo-500" />
+            <h2 className="text-sm font-semibold text-slate-700">API-bruk denne m&#229;neden</h2>
+            <span className="ml-auto text-xs text-slate-500">
+              {usage.total_calls} kall &middot; ${usage.total_cost.toFixed(2)} estimert
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left py-1.5 text-xs font-medium text-slate-500">Type</th>
+                  <th className="text-right py-1.5 text-xs font-medium text-slate-500">Kall</th>
+                  <th className="text-right py-1.5 text-xs font-medium text-slate-500">OK</th>
+                  <th className="text-right py-1.5 text-xs font-medium text-slate-500">Feilet</th>
+                  <th className="text-right py-1.5 text-xs font-medium text-slate-500">Kostnad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(usage.by_type).map(([type, stats]) => (
+                  <tr key={type} className="border-b border-slate-50">
+                    <td className="py-1.5 text-slate-700">{USAGE_TYPE_LABELS[type] || type}</td>
+                    <td className="py-1.5 text-right text-slate-600">{stats.count}</td>
+                    <td className="py-1.5 text-right text-emerald-600">{stats.success}</td>
+                    <td className="py-1.5 text-right text-red-500">{stats.failed}</td>
+                    <td className="py-1.5 text-right text-slate-700 font-medium">${stats.cost.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

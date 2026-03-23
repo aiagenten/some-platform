@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logUsage } from '@/lib/usage'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
@@ -175,6 +176,7 @@ Returner dette JSON-formatet:
   "image_suggestion": "Kort beskrivelse av hvilket bilde som vil fungere godt"
 }`
 
+      const textGenStart = Date.now()
       const textResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -196,6 +198,7 @@ Returner dette JSON-formatet:
       if (!textResponse.ok) {
         const errText = await textResponse.text()
         console.error('OpenRouter error:', errText)
+        logUsage({ org_id, type: 'text_generation', provider: 'openrouter', model: 'google/gemini-2.0-flash-001', success: false, duration_ms: Date.now() - textGenStart })
         return NextResponse.json(
           { error: 'Failed to generate text content' },
           { status: 500 }
@@ -203,6 +206,7 @@ Returner dette JSON-formatet:
       }
 
       const textData = await textResponse.json()
+      logUsage({ org_id, type: 'text_generation', provider: 'openrouter', model: 'google/gemini-2.0-flash-001', success: true, duration_ms: Date.now() - textGenStart, cost_estimate: 0.003 })
       const fullText = textData.choices?.[0]?.message?.content || ''
 
       // Parse structured JSON response
@@ -329,6 +333,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       try {
         let b64: string | null = null
         let mimeType = 'image/png'
+        const imageGenStart = Date.now()
 
         if (selectedImageModel === 'gpt-image' && OPENAI_API_KEY) {
           // GPT Image 1.5 via OpenAI API
@@ -354,8 +359,10 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
             if (!b64 && imageData.data?.[0]?.url) {
               imageUrl = imageData.data[0].url
             }
+            logUsage({ org_id, type: 'image_generation', provider: 'openai', model: 'gpt-image-1', success: true, duration_ms: Date.now() - imageGenStart, cost_estimate: 0.04 })
           } else {
             console.error('GPT Image error:', imageResponse.status, await imageResponse.text())
+            logUsage({ org_id, type: 'image_generation', provider: 'openai', model: 'gpt-image-1', success: false, duration_ms: Date.now() - imageGenStart })
           }
         } else {
           // Nano Banana (Gemini) via OpenRouter — supports multimodal with reference images
@@ -439,10 +446,12 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
                 if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
               }
             }
+            logUsage({ org_id, type: 'image_generation', provider: 'gemini', model: 'google/gemini-2.5-flash-image', success: true, duration_ms: Date.now() - imageGenStart, cost_estimate: 0.02 })
           } else {
             const errText = await imageResponse.text()
             console.error('Nano Banana error:', imageResponse.status, errText)
             imageError = `Nano Banana ${imageResponse.status}: ${errText.substring(0, 200)}`
+            logUsage({ org_id, type: 'image_generation', provider: 'gemini', model: 'google/gemini-2.5-flash-image', success: false, duration_ms: Date.now() - imageGenStart })
           }
         }
 

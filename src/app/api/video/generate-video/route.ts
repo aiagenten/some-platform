@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logUsage } from '@/lib/usage'
 
 const FAL_KEY = process.env.FAL_KEY
 
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Submit to fal.ai queue (non-blocking)
+    const videoGenStart = Date.now()
     const queueResp = await fetch('https://queue.fal.run/fal-ai/kling-video/o1/image-to-video', {
       method: 'POST',
       headers: {
@@ -43,11 +45,13 @@ export async function POST(request: NextRequest) {
     if (!queueResp.ok) {
       const errText = await queueResp.text()
       console.error('fal.ai queue error:', queueResp.status, errText)
+      logUsage({ org_id, type: 'video_generation', provider: 'fal', model: 'kling-video/o1/image-to-video', success: false, duration_ms: Date.now() - videoGenStart })
       return NextResponse.json({ error: `Video queue failed: ${errText}` }, { status: 500 })
     }
 
     const queueData = await queueResp.json()
     const requestId = queueData.request_id
+    logUsage({ org_id, type: 'video_generation', provider: 'fal', model: 'kling-video/o1/image-to-video', success: true, duration_ms: Date.now() - videoGenStart, cost_estimate: 0.10, metadata: { duration: duration || 5 } })
 
     if (video_id) {
       await supabase.from('videos').update({ 

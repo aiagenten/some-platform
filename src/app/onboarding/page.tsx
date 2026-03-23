@@ -189,7 +189,8 @@ const STEPS = [
   { num: 2, label: 'SoMe-kontoer' },
   { num: 3, label: 'Nettside' },
   { num: 4, label: 'Merkevare' },
-  { num: 5, label: 'Ferdig' },
+  { num: 5, label: 'Innholdsmål' },
+  { num: 6, label: 'Ferdig' },
 ]
 
 export default function OnboardingPageWrapper() {
@@ -248,6 +249,9 @@ function OnboardingPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
+
+  // Content goals state (posts per week per platform)
+  const [contentGoals, setContentGoals] = useState<Record<string, number>>({})
 
   // Post image color extraction state
   const [postImageColors, setPostImageColors] = useState<string[]>([])
@@ -620,12 +624,23 @@ function OnboardingPage() {
       }, { onConflict: 'org_id,platform,account_id' })
     }
 
+    // Save content goals
+    for (const platform of selectedPlatforms) {
+      const weekly_target = contentGoals[platform] ?? 3
+      await fetch('/api/weekly-goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: orgId, platform, weekly_target }),
+      })
+    }
+
     setSaving(false)
     try {
       localStorage.removeItem('onboarding_platforms')
       localStorage.removeItem('onboarding_accounts')
       localStorage.removeItem('onboarding_meta_page')
       localStorage.removeItem('onboarding_linkedin_account')
+      localStorage.removeItem('onboarding_content_goals')
     } catch {}
     router.push('/dashboard')
   }
@@ -1961,8 +1976,85 @@ function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 5: Done */}
+        {/* Step 5: Content Goals */}
         {step === 5 && (
+          <div className="animate-fade-in-up">
+            <div className="text-center mb-8">
+              <div className="w-14 h-14 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Target className="w-7 h-7 text-indigo-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Innholdsmål</h2>
+              <p className="text-slate-500">Hvor ofte vil du publisere på hver plattform?</p>
+            </div>
+            <div className="max-w-md mx-auto space-y-4">
+              {selectedPlatforms.map((platformId) => {
+                const platform = PLATFORMS.find(p => p.id === platformId)
+                if (!platform) return null
+                const Icon = platform.icon
+                const goal = contentGoals[platformId] ?? 3
+                const monthly = Math.round(goal * 4.33)
+                return (
+                  <div key={platformId} className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${platform.color}`}>
+                        <Icon className="w-4.5 h-4.5" />
+                      </div>
+                      <span className="font-semibold text-slate-900">{platform.label}</span>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min={1}
+                          max={14}
+                          value={goal}
+                          onChange={(e) => setContentGoals(prev => ({ ...prev, [platformId]: Number(e.target.value) }))}
+                          className="flex-1 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                        />
+                        <div className="flex items-center gap-1.5 min-w-[4rem]">
+                          <input
+                            type="number"
+                            min={1}
+                            max={14}
+                            value={goal}
+                            onChange={(e) => {
+                              const v = Math.max(1, Math.min(14, Number(e.target.value) || 1))
+                              setContentGoals(prev => ({ ...prev, [platformId]: v }))
+                            }}
+                            className="w-12 text-center border border-slate-200 rounded-lg py-1 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                          />
+                          <span className="text-sm text-slate-500">/uke</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-400">
+                        {goal} poster per uke = ~{monthly} per måned
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Navigation */}
+            <div className="max-w-md mx-auto mt-8 flex gap-3">
+              <button
+                onClick={() => setStep(4)}
+                className="px-6 py-3 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-all duration-200"
+              >
+                Tilbake
+              </button>
+              <button
+                onClick={() => setStep(6)}
+                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/20"
+              >
+                Neste
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 6: Done */}
+        {step === 6 && (
           <div className="animate-fade-in-up text-center max-w-md mx-auto">
             <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <PartyPopper className="w-10 h-10 text-indigo-600" />
@@ -2052,7 +2144,7 @@ function OnboardingPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => setStep(4)}
+                onClick={() => setStep(5)}
                 className="px-6 py-3 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-all duration-200"
               >
                 Tilbake
