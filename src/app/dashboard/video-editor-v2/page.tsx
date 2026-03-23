@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import { ArrowLeft, Film, Save, RotateCcw, Download, MoreVertical, Keyboard, Settings, FolderOpen, CheckCircle2 } from 'lucide-react'
 import { useEditorState } from '@/hooks/useEditorState'
 import { EditorLayout } from '@/components/video-editor/EditorLayout'
