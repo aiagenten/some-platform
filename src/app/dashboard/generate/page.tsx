@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
@@ -111,6 +111,11 @@ export default function GeneratePage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([])
   const [mediaSearch, setMediaSearch] = useState('')
   const [loadingMedia, setLoadingMedia] = useState(false)
+  // Digital Twin
+  const [digitalTwins, setDigitalTwins] = useState<{ id: string; name: string; trigger_word: string; status: string }[]>([])
+  const [selectedTwin, setSelectedTwin] = useState<string | null>(null)
+  const [twinGenerating, setTwinGenerating] = useState(false)
+  const [twinImage, setTwinImage] = useState<string | null>(null)
   // Bulk generation
   const [variantCount, setVariantCount] = useState(1)
   const [bulkResults, setBulkResults] = useState<GeneratedContent[]>([])
@@ -141,6 +146,14 @@ export default function GeneratePage() {
           .limit(1)
           .single()
         if (bp) setBrand(bp)
+
+        // Load digital twins
+        const { data: twins } = await supabase
+          .from('digital_twins')
+          .select('id, name, trigger_word, status')
+          .eq('tenant_id', profile.org_id)
+          .eq('status', 'ready')
+        if (twins) setDigitalTwins(twins)
 
         // Load custom overlay templates
         try {
@@ -527,6 +540,80 @@ export default function GeneratePage() {
                 </button>
               )}
             </div>
+
+            {/* Digital Twin */}
+            {digitalTwins.length > 0 && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Digital Twin <span className="text-slate-400 font-normal">(valgfritt)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setSelectedTwin(null); setTwinImage(null) }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+                      !selectedTwin
+                        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Ingen
+                  </button>
+                  {digitalTwins.map(twin => (
+                    <button
+                      key={twin.id}
+                      onClick={() => setSelectedTwin(twin.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+                        selectedTwin === twin.id
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      <User className="w-3 h-3" />
+                      {twin.name}
+                    </button>
+                  ))}
+                </div>
+                {selectedTwin && (
+                  <div className="mt-2">
+                    <button
+                      onClick={async () => {
+                        const twin = digitalTwins.find(t => t.id === selectedTwin)
+                        if (!twin) return
+                        setTwinGenerating(true)
+                        try {
+                          const res = await fetch('/api/digital-twin/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              twin_id: twin.id,
+                              prompt: `Professional portrait of ${twin.trigger_word} for social media, high quality, natural lighting`,
+                              image_size: 'square',
+                              num_images: 1,
+                            }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            if (data.images?.[0]?.url) {
+                              setTwinImage(data.images[0].url)
+                              setReferenceImageUrl(data.images[0].url)
+                            }
+                          }
+                        } catch { /* ignore */ }
+                        setTwinGenerating(false)
+                      }}
+                      disabled={twinGenerating}
+                      className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                    >
+                      {twinGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                      {twinGenerating ? 'Genererer portrett...' : 'Generer portrett som referansebilde'}
+                    </button>
+                    {twinImage && (
+                      <img src={twinImage} alt="Twin-generert" className="w-20 h-20 rounded-xl object-cover border border-slate-200 mt-2" />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Topic */}
             <div className="mb-5">
