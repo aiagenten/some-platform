@@ -42,10 +42,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No training images uploaded' }, { status: 400 })
     }
 
-    // Create a zip URL from images for fal.ai
-    // fal.ai accepts images_data_url as a zip or individual URLs
-    // We'll pass the array directly as image URLs
+    // fal.ai flux-lora-fast-training accepts images as an array of {url, caption} objects
     const startTime = Date.now()
+    const imagesPayload = trainingImages.map((url: string) => ({
+      url,
+      caption: `a photo of ${twin.trigger_word}`,
+    }))
     const queueResp = await fetch('https://queue.fal.run/fal-ai/flux-lora-fast-training', {
       method: 'POST',
       headers: {
@@ -53,9 +55,10 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        images_data_url: trainingImages,
+        images: imagesPayload,
         trigger_word: twin.trigger_word,
         steps: 1000,
+        is_style: false,
       }),
     })
 
