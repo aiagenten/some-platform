@@ -76,7 +76,7 @@ export const FullBranded: React.FC<Props> = ({
         <span
           style={{
             color: '#ffffff',
-            fontSize: 18,
+            fontSize: 32,
             fontWeight: 700,
             fontFamily: 'sans-serif',
             textShadow: '0 1px 4px rgba(0,0,0,0.5)',
@@ -88,7 +88,7 @@ export const FullBranded: React.FC<Props> = ({
           <span
             style={{
               color: 'rgba(255,255,255,0.8)',
-              fontSize: 13,
+              fontSize: 22,
               fontWeight: 400,
               fontFamily: 'sans-serif',
               textShadow: '0 1px 3px rgba(0,0,0,0.5)',

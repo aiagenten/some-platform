@@ -462,22 +462,32 @@ export default function GeneratePage() {
     const url = URL.createObjectURL(file)
     setUploadPreview(url)
     setUploadedUrl(null)
+    // Auto-upload immediately
+    handleManualUpload(file)
   }
 
-  const handleManualUpload = async () => {
-    if (!uploadFile || !orgId) return
+  const handleManualUpload = async (file?: File) => {
+    const targetFile = file || uploadFile
+    if (!targetFile || !orgId) return
     setUploading(true)
     try {
       const formData = new FormData()
-      formData.append('file', uploadFile)
+      formData.append('file', targetFile)
       formData.append('org_id', orgId)
-      formData.append('type', uploadType)
+      formData.append('type', targetFile.type.startsWith('video/') ? 'video' : 'image')
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       if (res.ok) {
         const data = await res.json()
         setUploadedUrl(data.url)
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        console.error('Upload failed:', errData)
+        alert('Opplasting feilet: ' + (errData.error || 'Ukjent feil'))
       }
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Upload error:', e)
+      alert('Nettverksfeil ved opplasting')
+    }
     setUploading(false)
   }
 
@@ -703,7 +713,7 @@ export default function GeneratePage() {
 
                 {uploadFile && !uploadedUrl && (
                   <button
-                    onClick={handleManualUpload}
+                    onClick={() => handleManualUpload()}
                     disabled={uploading}
                     className="mt-3 w-full bg-indigo-100 text-indigo-700 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >

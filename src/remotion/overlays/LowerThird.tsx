@@ -81,7 +81,7 @@ export const LowerThird: React.FC<Props> = ({
             <span
               style={{
                 color: '#ffffff',
-                fontSize: 18,
+                fontSize: 32,
                 fontWeight: 700,
                 fontFamily: 'sans-serif',
                 letterSpacing: 0.5,
@@ -93,7 +93,7 @@ export const LowerThird: React.FC<Props> = ({
               <span
                 style={{
                   color: 'rgba(255,255,255,0.8)',
-                  fontSize: 13,
+                  fontSize: 22,
                   fontWeight: 400,
                   fontFamily: 'sans-serif',
                 }}

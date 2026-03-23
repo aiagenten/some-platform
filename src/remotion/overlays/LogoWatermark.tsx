@@ -48,7 +48,7 @@ export const LogoWatermark: React.FC<Props> = ({
         <span
           style={{
             color: '#ffffff',
-            fontSize: 14,
+            fontSize: 24,
             fontWeight: 600,
             fontFamily: 'sans-serif',
             textShadow: `0 1px 3px rgba(0,0,0,0.5)`,

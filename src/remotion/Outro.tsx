@@ -152,7 +152,7 @@ export const Outro: React.FC<Props> = ({
             <span
               style={{
                 color: 'rgba(255,255,255,0.7)',
-                fontSize: 15,
+                fontSize: 24,
                 fontWeight: 400,
                 fontFamily: 'sans-serif',
                 letterSpacing: 0.5,
