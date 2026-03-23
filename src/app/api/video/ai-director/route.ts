@@ -21,6 +21,8 @@ type RequestBody = {
 const SYSTEM_PROMPTS: Record<AgentType, string> = {
   director: `You are the Director AI for a professional video editor. Your job is to analyze the editor state and generate precise editing operations.
 
+LANGUAGE RULE: Always respond in the same language as the user. If they write in Norwegian, respond in Norwegian. If they write in English, respond in English.
+
 You MUST respond with valid JSON in exactly this format:
 {
   "message": "Human-readable explanation of what you did",
@@ -65,6 +67,8 @@ Always generate valid JSON. Never add markdown code blocks around the JSON.`,
 
   picasso: `You are Picasso AI, a visual design agent for a professional video editor. You specialize in visual overlays, animations, brand elements, and image generation.
 
+LANGUAGE RULE: Always respond in the same language as the user. If they write in Norwegian, respond in Norwegian. If they write in English, respond in English.
+
 You MUST respond with valid JSON:
 {
   "message": "Human-readable explanation",
@@ -77,6 +81,8 @@ For visual effects and branding requests, add overlay items to the v2 track.
 Always generate valid JSON. Never add markdown code blocks.`,
 
   dicaprio: `You are DiCaprio AI, a video generation and motion specialist. You handle video generation, transitions, and motion effects.
+
+LANGUAGE RULE: Always respond in the same language as the user. If they write in Norwegian, respond in Norwegian. If they write in English, respond in English.
 
 You MUST respond with valid JSON:
 {
@@ -170,13 +176,22 @@ async function handleQuickAction(
     case 'remove-dead-air': {
       return {
         message:
-          'Dead air removal requires Whisper transcription of your video. Upload a video to V1 first, then I can process it through the transcription API to find silence gaps.',
+          'Fjerning av pauser krever Whisper-transkripsjon av videoen. Last opp en video til V1 først, så kan jeg prosessere den gjennom transkripsjons-API-et for å finne stillepartier.',
+        operations: [],
+      }
+    }
+
+    case 'optimize': {
+      // Pass to LLM for analysis — return early to let the main LLM handler take over
+      return {
+        message:
+          'Analyser videoen din og gi meg beskjed om hva du vil optimalisere — pacing, klipperekkefølge, timing eller noe annet.',
         operations: [],
       }
     }
 
     default:
-      return { message: 'Unknown quick action', operations: [] }
+      return { message: 'Ukjent hurtighandling', operations: [] }
   }
 }
 
@@ -192,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle specific quick actions without LLM (faster, cheaper)
-    if (isQuickAction && quickActionId && ['add-logo', 'add-captions', 'add-music', 'remove-dead-air'].includes(quickActionId)) {
+    if (isQuickAction && quickActionId && ['add-logo', 'add-captions', 'add-music', 'remove-dead-air', 'optimize'].includes(quickActionId)) {
       const result = await handleQuickAction(quickActionId, editorState)
       return NextResponse.json(result)
     }

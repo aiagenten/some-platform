@@ -16,6 +16,20 @@ type Props = {
   onDoubleClick?: (item: TrackItem) => void
 }
 
+// Strip hash/UUID prefixes from filenames and truncate for display
+function getFriendlyLabel(item: TrackItem): string {
+  const raw = item.label || item.text || item.type
+  return raw
+    // Strip UUID-like prefix: 8-4-4-4-12 hex pattern
+    .replace(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}[-_]?/i, '')
+    // Strip hash-like prefix (8+ alphanumeric chars) before underscore or dash
+    .replace(/^[a-zA-Z0-9]{8,}[_-]/g, '')
+    // Trim whitespace
+    .trim()
+    .slice(0, 40)
+    || item.type
+}
+
 export function TimelineItemComp({
   item,
   trackId,
@@ -79,7 +93,7 @@ export function TimelineItemComp({
     transition: resizing ? 'none' : 'box-shadow 0.1s',
   }
 
-  const label = item.label || item.text || item.type
+  const label = getFriendlyLabel(item)
 
   return (
     <div

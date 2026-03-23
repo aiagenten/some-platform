@@ -1,6 +1,7 @@
 import {
   AbsoluteFill,
   Audio,
+  Img,
   OffthreadVideo,
   Sequence,
   useVideoConfig,
@@ -132,7 +133,17 @@ function TrackRenderer({ track, brand }: { track: Track; brand: EditorState['bra
           durationInFrames={item.durationInFrames}
           layout="none"
         >
-          {track.type === 'video' && item.src && (
+          {/* Video track: render images with Img, videos with OffthreadVideo */}
+          {track.type === 'video' && item.src && item.type === 'image' && (
+            <AbsoluteFill>
+              <Img
+                src={item.src}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </AbsoluteFill>
+          )}
+
+          {track.type === 'video' && item.src && item.type !== 'image' && (
             <AbsoluteFill>
               <OffthreadVideo
                 src={item.src}

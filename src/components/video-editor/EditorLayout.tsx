@@ -15,6 +15,7 @@ type Props = {
   onMoveItem: (trackId: string, itemId: string, newFrom: number) => void
   onResizeItem: (trackId: string, itemId: string, newDuration: number) => void
   onAddTrackItem: (trackId: string, item: Omit<TrackItem, 'id'>) => void
+  onRemoveItem: (trackId: string, itemId: string) => void
   onApplyOps: (ops: DirectorOperation[]) => void
   onFrameChange: (frame: number) => void
 }
@@ -25,6 +26,7 @@ export function EditorLayout({
   onMoveItem,
   onResizeItem,
   onAddTrackItem,
+  onRemoveItem,
   onApplyOps,
   onFrameChange,
 }: Props) {
@@ -39,27 +41,41 @@ export function EditorLayout({
     setAssets(prev => prev.filter(a => a.id !== id))
   }, [])
 
+  // Compute the end frame of items on a given track
+  const getTrackEnd = useCallback(
+    (trackId: string): number => {
+      const track = editorState.tracks.find(t => t.id === trackId)
+      if (!track || track.items.length === 0) return 0
+      return track.items.reduce((max, i) => Math.max(max, i.from + i.durationInFrames), 0)
+    },
+    [editorState.tracks],
+  )
+
   const handleDropToTimeline = useCallback(
     (asset: Asset, trackId: string) => {
       const durationInFrames = asset.durationSeconds
         ? Math.round(asset.durationSeconds * editorState.fps)
         : 90
+      // Place sequentially after existing items
+      const from = getTrackEnd(trackId)
       onAddTrackItem(trackId, {
         type: asset.type === 'image' ? 'image' : asset.type,
-        from: 0,
+        from,
         durationInFrames,
         src: asset.url,
         label: asset.name,
       })
     },
-    [editorState.fps, onAddTrackItem],
+    [editorState.fps, onAddTrackItem, getTrackEnd],
   )
 
   const handleAddToTimeline = useCallback(
     (trackId: string, item: Omit<TrackItem, 'id'>) => {
-      onAddTrackItem(trackId, item)
+      // Auto-place after existing items (unless the caller already set from)
+      const from = item.from === 0 ? getTrackEnd(trackId) : item.from
+      onAddTrackItem(trackId, { ...item, from })
     },
-    [onAddTrackItem],
+    [onAddTrackItem, getTrackEnd],
   )
 
   return (
@@ -111,6 +127,7 @@ export function EditorLayout({
           onMoveItem={onMoveItem}
           onResizeItem={onResizeItem}
           onSeek={onSeek}
+          onRemoveItem={onRemoveItem}
         />
       </div>
     </div>
