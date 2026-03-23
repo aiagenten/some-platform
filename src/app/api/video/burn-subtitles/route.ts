@@ -1,118 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { writeFile, unlink, mkdtemp } from 'fs/promises'
-import { join } from 'path'
-import { tmpdir } from 'os'
-import { readFile } from 'fs/promises'
 
-const execFileAsync = promisify(execFile)
+export const maxDuration = 300
+
+const WHISPER_URL = process.env.LOCAL_WHISPER_URL || ''
 
 export async function POST(request: NextRequest) {
-  let tempDir: string | null = null
-
   try {
-    const { video_url, srt_url, org_id } = await request.json()
+    const { video_url, segments, org_id } = await request.json()
 
-    if (!video_url || !srt_url || !org_id) {
+    if (!video_url || !segments || segments.length === 0) {
       return NextResponse.json(
-        { error: 'video_url, srt_url, and org_id are required' },
+        { error: 'video_url and segments are required' },
         { status: 400 }
       )
     }
 
-    // Check if ffmpeg is available
-    try {
-      await execFileAsync('ffmpeg', ['-version'])
-    } catch {
-      console.error('ffmpeg is not installed or not in PATH')
+    if (!WHISPER_URL) {
       return NextResponse.json(
-        { error: 'ffmpeg is not available on this server' },
+        { error: 'Burn subtitles service not configured' },
         { status: 503 }
       )
     }
 
-    // Create temp directory
-    tempDir = await mkdtemp(join(tmpdir(), 'burn-subs-'))
-    const videoPath = join(tempDir, 'input.mp4')
-    const srtPath = join(tempDir, 'subtitles.srt')
-    const outputPath = join(tempDir, 'output.mp4')
+    // Proxy to Railway whisper-api server (has ffmpeg)
+    console.log('Burning subtitles via:', WHISPER_URL)
+    const res = await fetch(`${WHISPER_URL}/burn-subtitles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_url, segments }),
+    })
 
-    // Download video and SRT files in parallel
-    const [videoResponse, srtResponse] = await Promise.all([
-      fetch(video_url),
-      fetch(srt_url),
-    ])
-
-    if (!videoResponse.ok) {
-      return NextResponse.json({ error: 'Failed to download video' }, { status: 500 })
-    }
-    if (!srtResponse.ok) {
-      return NextResponse.json({ error: 'Failed to download SRT file' }, { status: 500 })
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error('Burn subtitles error:', res.status, errText)
+      return NextResponse.json(
+        { error: `Burn failed: ${res.status}` },
+        { status: 500 }
+      )
     }
 
-    const [videoBuffer, srtText] = await Promise.all([
-      videoResponse.arrayBuffer(),
-      srtResponse.text(),
-    ])
+    // Get the video binary back
+    const videoBuffer = await res.arrayBuffer()
 
-    await Promise.all([
-      writeFile(videoPath, Buffer.from(videoBuffer)),
-      writeFile(srtPath, srtText),
-    ])
+    // Upload to Supabase Storage if org_id provided
+    if (org_id) {
+      const supabase = createAdminClient()
+      const fileName = `${org_id}/subtitled/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`
 
-    // Burn subtitles into video using ffmpeg
-    // The subtitles filter requires escaping colons and backslashes in the path
-    const escapedSrtPath = srtPath.replace(/\\/g, '\\\\').replace(/:/g, '\\:')
-    await execFileAsync('ffmpeg', [
-      '-i', videoPath,
-      '-vf', `subtitles=${escapedSrtPath}`,
-      '-c:a', 'copy',
-      '-y',
-      outputPath,
-    ], { timeout: 300000 }) // 5 minute timeout
+      const { error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(fileName, Buffer.from(videoBuffer), {
+          contentType: 'video/mp4',
+          upsert: false,
+        })
 
-    // Read the output file and upload to Supabase Storage
-    const outputBuffer = await readFile(outputPath)
-    const supabase = createAdminClient()
-    const fileName = `${org_id}/subtitled/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        return NextResponse.json({ error: 'Failed to upload processed video' }, { status: 500 })
+      }
 
-    const { error: uploadError } = await supabase.storage
-      .from('videos')
-      .upload(fileName, outputBuffer, {
-        contentType: 'video/mp4',
-        upsert: false,
-      })
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError)
-      return NextResponse.json({ error: 'Failed to upload processed video' }, { status: 500 })
+      const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+      return NextResponse.json({ success: true, url: urlData.publicUrl })
     }
 
-    const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
-
-    return NextResponse.json({
-      success: true,
-      url: urlData.publicUrl,
+    // Return video directly if no org_id
+    return new Response(videoBuffer, {
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'attachment; filename="subtitled.mp4"',
+      },
     })
   } catch (err) {
     console.error('Burn subtitles error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  } finally {
-    // Clean up temp files
-    if (tempDir) {
-      try {
-        const files = ['input.mp4', 'subtitles.srt', 'output.mp4']
-        await Promise.allSettled(
-          files.map(f => unlink(join(tempDir!, f)))
-        )
-        // Remove temp directory
-        const { rmdir } = await import('fs/promises')
-        await rmdir(tempDir).catch(() => {})
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
   }
 }

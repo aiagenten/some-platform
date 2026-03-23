@@ -13,6 +13,9 @@
       "dependencies": [
         "npm:@fal-ai/client@^1.9.4",
         "npm:@mendable/firecrawl-js@^4.16.0",
+        "npm:@remotion/cli@^4.0.438",
+        "npm:@remotion/player@^4.0.438",
+        "npm:@remotion/renderer@^4.0.438",
         "npm:@supabase/ssr@0.9",
         "npm:@supabase/supabase-js@^2.99.2",
         "npm:@types/node@20",
@@ -22,11 +25,13 @@
         "npm:eslint-config-next@14.2.35",
         "npm:eslint@8",
         "npm:fabric@^6.9.1",
+        "npm:jszip@^3.10.1",
         "npm:lucide-react@0.577",
         "npm:next@14.2.35",
         "npm:postcss@8",
         "npm:react-dom@18",
         "npm:react@18",
+        "npm:remotion@^4.0.438",
         "npm:tailwindcss@^3.4.1",
         "npm:typescript@5"
       ]

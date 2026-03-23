@@ -201,7 +201,8 @@ export default function VideoUploadPage() {
 
   const handleDownloadSRT = () => {
     const srtContent = formatSRT(segments)
-    const blob = new Blob([srtContent], { type: 'text/srt' })
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF])
+    const blob = new Blob([bom, srtContent], { type: 'text/srt;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -222,6 +223,7 @@ export default function VideoUploadPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_url: uploadedVideoUrl,
+          org_id: orgId,
           segments: segments.map(seg => ({
             start: seg.start,
             end: seg.end,
