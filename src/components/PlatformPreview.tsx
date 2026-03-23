@@ -3,7 +3,9 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { ThumbsUp, MessageCircle, Share2, Send, Bookmark, Heart, MoreHorizontal } from 'lucide-react'
 import { getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
+import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 
 type Props = {
   caption: string
@@ -17,11 +19,12 @@ type Props = {
   brandColors?: Array<{ hex: string; role: string }>
   brandFonts?: Array<{ family: string; role: string }>
   brandLogoUrl?: string | null
+  customTemplates?: CustomOverlayTemplate[]
 }
 
 const PREVIEW_WIDTH = 540
 
-export default function PlatformPreview({ caption, imageUrl, platform, brandName, brandLogo, overlayId, headline, subtitle, brandColors, brandFonts, brandLogoUrl }: Props) {
+export default function PlatformPreview({ caption, imageUrl, platform, brandName, brandLogo, overlayId, headline, subtitle, brandColors, brandFonts, brandLogoUrl, customTemplates }: Props) {
   const [overlayDataUrl, setOverlayDataUrl] = useState<string | null>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -71,10 +74,16 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
         primaryColor, accentColor, headingFont, bodyFont,
       }
 
-      await getOverlayTemplate(overlayId).render(ctx, options)
+      // Check if it's a custom template
+      const customTmpl = customTemplates?.find(t => `custom-${t.id}` === overlayId)
+      if (customTmpl) {
+        await renderCustomOverlay(ctx, customTmpl, options)
+      } else {
+        await getOverlayTemplate(overlayId).render(ctx, options)
+      }
       setOverlayDataUrl(canvas.toDataURL('image/png'))
-    } catch { /* fallback to raw image */ }
-  }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName, previewWidth, previewHeight])
+    } catch (err) { console.error('Preview overlay error:', err) }
+  }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName, previewWidth, previewHeight, customTemplates])
 
   useEffect(() => {
     if (overlayId && imageUrl && brandColors?.length) {
@@ -82,7 +91,7 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
     } else {
       setOverlayDataUrl(null)
     }
-  }, [renderPreviewOverlay, overlayId, imageUrl, brandColors])
+  }, [renderPreviewOverlay, overlayId, imageUrl, brandColors, customTemplates])
 
   const platformLabel = activePlatform === 'instagram' ? 'Instagram' : activePlatform === 'linkedin' ? 'LinkedIn' : activePlatform === 'facebook' ? 'Facebook' : activePlatform
 

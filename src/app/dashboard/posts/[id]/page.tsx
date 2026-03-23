@@ -139,6 +139,7 @@ export default function PostDetailPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [showCopyMenu, setShowCopyMenu] = useState(false)
   const [copyLoading, setCopyLoading] = useState(false)
+  const [overlayRendered, setOverlayRendered] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -260,10 +261,14 @@ export default function PostDetailPage() {
       } else {
         await getOverlayTemplate(selectedOverlay).render(ctx, options)
       }
-    } catch (err) { console.error('Overlay error:', err) }
+      setOverlayRendered(true)
+    } catch (err) {
+      console.error('Overlay render error:', err)
+      setOverlayRendered(false)
+    }
   }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates])
 
-  useEffect(() => { renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
+  useEffect(() => { setOverlayRendered(false); renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
   const handleDownloadOverlay = () => {
     const canvas = canvasRef.current
@@ -547,7 +552,10 @@ export default function PostDetailPage() {
               {/* Overlay canvas */}
               {post.content_image_url && (
                 <div className="space-y-3">
-                  <canvas ref={canvasRef} className="w-full rounded-xl shadow-sm border border-slate-200" style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
+                  <canvas ref={canvasRef} className={`w-full rounded-xl shadow-sm border border-slate-200 ${!overlayRendered ? 'hidden' : ''}`} style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
+                  {!overlayRendered && post.content_image_url && (
+                    <img src={post.content_image_url} alt="Post" className="w-full rounded-xl shadow-sm border border-slate-200 object-cover" style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
+                  )}
 
                   {/* Overlay selector — custom templates first, then standard */}
                   <div className="flex items-center gap-2 flex-wrap">
@@ -643,7 +651,7 @@ export default function PostDetailPage() {
           )}
 
           {(post.caption || post.content_text) && (
-            <PlatformPreview caption={post.caption || post.content_text || ''} imageUrl={post.content_image_url} platform={post.platform} brandName={orgName} brandLogo={orgLogo} overlayId={selectedOverlay} headline={headlineValue || post.headline} subtitle={subtitleValue || post.subtitle} brandColors={brandColors} brandFonts={brandFonts} brandLogoUrl={brandLogoUrl} />
+            <PlatformPreview caption={post.caption || post.content_text || ''} imageUrl={post.content_image_url} platform={post.platform} brandName={orgName} brandLogo={orgLogo} overlayId={selectedOverlay} headline={headlineValue || post.headline} subtitle={subtitleValue || post.subtitle} brandColors={brandColors} brandFonts={brandFonts} brandLogoUrl={brandLogoUrl} customTemplates={customTemplates} />
           )}
         </div>
 
