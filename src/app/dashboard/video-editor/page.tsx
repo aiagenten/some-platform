@@ -265,10 +265,15 @@ export default function VideoEditorPage() {
     setTranscribing(true)
     setError(null)
     try {
-      const res = await fetch('/api/video/transcribe', {
+      // Call Railway Whisper directly (Netlify has 26s timeout, Whisper can take 2min+)
+      const whisperUrl = process.env.NEXT_PUBLIC_WHISPER_URL || ''
+      const transcribeUrl = whisperUrl
+        ? `${whisperUrl}/transcribe`
+        : '/api/video/transcribe'
+      const res = await fetch(transcribeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_url: videoUrl }),
+        body: JSON.stringify({ video_url: videoUrl, language: 'no' }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
