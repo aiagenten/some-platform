@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logUsage } from '@/lib/usage'
+import { logAudit } from '@/lib/audit'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
@@ -41,7 +42,7 @@ import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id, reference_image_url, selected_overlay } = body
+    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id, reference_image_url, selected_overlay, generate_text_only } = body
 
     if (!org_id || !platform || !format) {
       return NextResponse.json(
@@ -273,7 +274,7 @@ Returner dette JSON-formatet:
     let imageUrl = null
     let imageError: string | null = null
 
-    if (!regenerate_text) {
+    if (!regenerate_text && !generate_text_only) {
       // Build image prompt from the generated text context
       const brandColorDesc = brandProfile?.colors?.length
         ? brandProfile.colors
@@ -480,6 +481,24 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       }
     }
 
+    // If text-only mode (for manual uploads), return generated text without saving
+    if (generate_text_only) {
+      return NextResponse.json({
+        success: true,
+        generated: {
+          text: generatedText,
+          caption: generatedCaption,
+          headline: generatedHeadline,
+          subtitle: generatedSubtitle,
+          hashtags: generatedHashtags,
+          image_url: null,
+          image_error: null,
+          best_time: bestTime,
+          image_suggestion: imageSuggestion,
+        },
+      })
+    }
+
     // Auto-schedule: compute suggested_time based on weekly goals + best practices
     let suggestedTime = bestTime
     let scheduledFor: string | null = null
@@ -558,6 +577,15 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         return NextResponse.json({ error: 'Failed to save post' }, { status: 500 })
       }
       postData = data
+
+      // Log AI generation to audit trail
+      await logAudit({
+        action: 'post.ai_generated',
+        resourceType: 'post',
+        resourceId: data?.id,
+        resourceTitle: generatedCaption?.substring(0, 80) || topic || 'AI-generert innlegg',
+        metadata: { platform, format, has_image: !!imageUrl, topic: topic || topicText },
+      }).catch(() => {})
     }
 
     // Save to image_generations history

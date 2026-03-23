@@ -111,10 +111,8 @@ export default function VideoUploadPage() {
     setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('type', 'video')
-      formData.append('org_id', orgId)
+      const ext = selectedFile.name.split('.').pop() || 'mp4'
+      const fileName = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
 
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
@@ -123,17 +121,20 @@ export default function VideoUploadPage() {
         })
       }, 300)
 
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      // Upload directly to Supabase Storage (no size limit from API route)
+      const { error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(fileName, selectedFile, {
+          contentType: selectedFile.type,
+          upsert: false,
+        })
 
       clearInterval(progressInterval)
 
-      if (!res.ok) throw new Error('Opplasting feilet')
+      if (uploadError) throw new Error(uploadError.message)
 
-      const data = await res.json()
-      setUploadedVideoUrl(data.url)
+      const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
+      setUploadedVideoUrl(urlData.publicUrl)
       setUploadProgress(100)
 
       setTimeout(() => {
@@ -250,9 +251,14 @@ export default function VideoUploadPage() {
       const { error } = await supabase.from('social_posts').insert({
         org_id: orgId,
         created_by: userId,
-        content: segments.map(s => s.text).join(' '),
-        media_urls: [videoUrl],
+        content_text: segments.map(s => s.text).join(' '),
+        caption: segments.map(s => s.text).join(' '),
+        video_url: videoUrl,
+        media_type: 'video',
+        platform: 'instagram',
+        format: 'reel',
         status: 'draft',
+        ai_generated: false,
       })
 
       if (error) throw error

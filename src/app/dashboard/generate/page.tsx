@@ -484,13 +484,14 @@ export default function GeneratePage() {
   const handleSaveManualPost = async () => {
     if (!orgId || !uploadedUrl) return
     setLoading(true)
+    setError(null)
     try {
       const postData: Record<string, unknown> = {
         org_id: orgId,
         platform,
         format,
-        content_text: manualCaption,
-        caption: manualCaption,
+        content_text: manualCaption || '',
+        caption: manualCaption || '',
         headline: manualHeadline || null,
         subtitle: manualSubtitle || null,
         status: 'pending_approval',
@@ -503,10 +504,15 @@ export default function GeneratePage() {
       } else {
         postData.content_image_url = uploadedUrl
       }
-      const { data: post } = await supabase.from('social_posts').insert(postData).select('id').single()
+      const { data: post, error: insertError } = await supabase.from('social_posts').insert(postData).select('id').single()
+      if (insertError) {
+        console.error('Save manual post error:', insertError)
+        setError(`Kunne ikke lagre innlegget: ${insertError.message}`)
+        setLoading(false)
+        return
+      }
       if (post) {
         setPostId(post.id)
-        // Set generated state for overlay preview
         setGenerated({
           text: manualCaption,
           caption: manualCaption,
@@ -519,8 +525,45 @@ export default function GeneratePage() {
           image_suggestion: null,
         })
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Save manual post error:', err)
+      setError('Noe gikk galt ved lagring. Prøv igjen.')
+    }
     setLoading(false)
+  }
+
+  const handleGenerateAIText = async () => {
+    if (!orgId) return
+    setLoadingText(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/posts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          platform,
+          format,
+          topic: manualCaption || undefined,
+          generate_text_only: true,
+          image_context_url: uploadedUrl || undefined,
+        }),
+      })
+      if (!res.ok) {
+        setError('AI-tekstgenerering feilet. Prøv igjen.')
+        setLoadingText(false)
+        return
+      }
+      const data = await res.json()
+      if (data.generated) {
+        setManualCaption(data.generated.caption || data.generated.text || '')
+        if (data.generated.headline) setManualHeadline(data.generated.headline)
+        if (data.generated.subtitle) setManualSubtitle(data.generated.subtitle)
+      }
+    } catch {
+      setError('Nettverksfeil ved AI-tekstgenerering.')
+    }
+    setLoadingText(false)
   }
 
   return (
@@ -679,7 +722,17 @@ export default function GeneratePage() {
                 {uploadFile && (
                   <div className="mt-4 space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Bildetekst / caption</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-sm font-medium text-slate-700">Bildetekst / caption</label>
+                        <button
+                          onClick={handleGenerateAIText}
+                          disabled={loadingText}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-all disabled:opacity-50"
+                        >
+                          {loadingText ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                          {loadingText ? 'Genererer...' : 'Generer tekst med AI'}
+                        </button>
+                      </div>
                       <textarea
                         value={manualCaption}
                         onChange={(e) => setManualCaption(e.target.value)}

@@ -12,6 +12,10 @@ import {
   Clock,
   ChevronLeft,
   Save,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
 } from 'lucide-react'
 
 type SeasonalEvent = {
@@ -22,6 +26,9 @@ type SeasonalEvent = {
   default_enabled: boolean
   icon: string | null
   suggested_prompt: string | null
+  is_custom?: boolean
+  created_by?: string | null
+  org_id?: string | null
 }
 
 type BrandSeasonalSetting = {
@@ -87,66 +94,80 @@ export default function SeasonsPage() {
   const [events, setEvents] = useState<SeasonalEvent[]>([])
   const [settings, setSettings] = useState<Record<string, BrandSeasonalSetting>>({})
   const [brandId, setBrandId] = useState<string | null>(null)
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [customPrompts, setCustomPrompts] = useState<Record<string, string>>({})
+  // Custom season modal
+  const [showModal, setShowModal] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<SeasonalEvent | null>(null)
+  const [modalName, setModalName] = useState('')
+  const [modalDate, setModalDate] = useState('')
+  const [modalDescription, setModalDescription] = useState('')
+  const [modalIcon, setModalIcon] = useState('')
+  const [modalPrompt, setModalPrompt] = useState('')
+  const [modalSaving, setModalSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+  const loadEvents = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/login'); return }
 
-      const { data: profile } = await supabase
-        .from('users')
-        .select('org_id')
-        .eq('id', user.id)
-        .single()
+    setUserId(user.id)
 
-      if (!profile) return
+    const { data: profile } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('id', user.id)
+      .single()
 
-      // Load brand profile
-      const { data: brands } = await supabase
-        .from('brand_profiles')
-        .select('id, org_id')
-        .eq('org_id', profile.org_id)
-        .limit(1)
+    if (!profile) return
+    setOrgId(profile.org_id)
 
-      const brand = brands?.[0]
-      if (brand) {
-        setBrandId(brand.id)
+    // Load brand profile
+    const { data: brands } = await supabase
+      .from('brand_profiles')
+      .select('id, org_id')
+      .eq('org_id', profile.org_id)
+      .limit(1)
 
-        // Load brand seasonal settings
-        const { data: settingsData } = await supabase
-          .from('brand_seasonal_settings')
-          .select('brand_id, seasonal_event_id, enabled, custom_prompt')
-          .eq('brand_id', brand.id)
+    const brand = brands?.[0]
+    if (brand) {
+      setBrandId(brand.id)
 
-        const settingsMap: Record<string, BrandSeasonalSetting> = {}
-        const promptsMap: Record<string, string> = {}
-        ;(settingsData || []).forEach((s: BrandSeasonalSetting) => {
-          settingsMap[s.seasonal_event_id] = s
-          if (s.custom_prompt) {
-            promptsMap[s.seasonal_event_id] = s.custom_prompt
-          }
-        })
-        setSettings(settingsMap)
-        setCustomPrompts(promptsMap)
-      }
+      // Load brand seasonal settings
+      const { data: settingsData } = await supabase
+        .from('brand_seasonal_settings')
+        .select('brand_id, seasonal_event_id, enabled, custom_prompt')
+        .eq('brand_id', brand.id)
 
-      // Load seasonal events
-      const { data: eventsData } = await supabase
-        .from('seasonal_events')
-        .select('id, name, date_pattern, description, default_enabled, icon, suggested_prompt')
-        .order('date_pattern')
-
-      setEvents(eventsData || [])
-      setLoading(false)
+      const settingsMap: Record<string, BrandSeasonalSetting> = {}
+      const promptsMap: Record<string, string> = {}
+      ;(settingsData || []).forEach((s: BrandSeasonalSetting) => {
+        settingsMap[s.seasonal_event_id] = s
+        if (s.custom_prompt) {
+          promptsMap[s.seasonal_event_id] = s.custom_prompt
+        }
+      })
+      setSettings(settingsMap)
+      setCustomPrompts(promptsMap)
     }
-    load()
+
+    // Load seasonal events (include custom columns)
+    const { data: eventsData } = await supabase
+      .from('seasonal_events')
+      .select('id, name, date_pattern, description, default_enabled, icon, suggested_prompt, is_custom, created_by, org_id')
+      .order('date_pattern')
+
+    setEvents(eventsData || [])
+    setLoading(false)
   }, [])
+
+  useEffect(() => { loadEvents() }, [loadEvents])
 
   const isEnabled = useCallback((eventId: string, defaultEnabled: boolean): boolean => {
     const setting = settings[eventId]
@@ -211,6 +232,87 @@ export default function SeasonsPage() {
     setTimeout(() => setSaved(null), 2000)
   }
 
+  // --- Custom season CRUD ---
+
+  const openCreateModal = () => {
+    setEditingEvent(null)
+    setModalName('')
+    setModalDate('')
+    setModalDescription('')
+    setModalIcon('')
+    setModalPrompt('')
+    setShowModal(true)
+  }
+
+  const openEditModal = (event: SeasonalEvent) => {
+    setEditingEvent(event)
+    setModalName(event.name)
+    setModalDate(event.date_pattern)
+    setModalDescription(event.description || '')
+    setModalIcon(event.icon || '')
+    setModalPrompt(event.suggested_prompt || '')
+    setShowModal(true)
+  }
+
+  const handleSaveCustomSeason = async () => {
+    if (!modalName.trim() || !modalDate.trim() || !userId || !orgId) return
+    // Validate date pattern MM-DD
+    const dateMatch = modalDate.match(/^(\d{1,2})-(\d{1,2})$/)
+    if (!dateMatch) {
+      alert('Ugyldig datoformat. Bruk MM-DD, f.eks. 03-08')
+      return
+    }
+    const month = parseInt(dateMatch[1], 10)
+    const day = parseInt(dateMatch[2], 10)
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+      alert('Ugyldig dato. Måneden må være 01-12 og dagen 01-31.')
+      return
+    }
+    const datePattern = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+    setModalSaving(true)
+
+    if (editingEvent) {
+      // Update existing custom event
+      await supabase
+        .from('seasonal_events')
+        .update({
+          name: modalName.trim(),
+          date_pattern: datePattern,
+          description: modalDescription.trim() || null,
+          icon: modalIcon.trim() || null,
+          suggested_prompt: modalPrompt.trim() || null,
+        })
+        .eq('id', editingEvent.id)
+    } else {
+      // Create new custom event
+      await supabase
+        .from('seasonal_events')
+        .insert({
+          name: modalName.trim(),
+          date_pattern: datePattern,
+          description: modalDescription.trim() || null,
+          icon: modalIcon.trim() || null,
+          suggested_prompt: modalPrompt.trim() || null,
+          default_enabled: true,
+          is_custom: true,
+          created_by: userId,
+          org_id: orgId,
+        })
+    }
+
+    setModalSaving(false)
+    setShowModal(false)
+    await loadEvents()
+  }
+
+  const handleDeleteCustomSeason = async (eventId: string) => {
+    setDeletingId(eventId)
+    await supabase.from('seasonal_events').delete().eq('id', eventId)
+    setDeletingId(null)
+    setEvents(prev => prev.filter(e => e.id !== eventId))
+  }
+
   const upcomingEvents = events
     .filter(e => {
       const days = daysUntilNext(e.date_pattern)
@@ -242,16 +344,25 @@ export default function SeasonsPage() {
         </Link>
 
         {/* Header */}
-        <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center">
-              <CalendarDays className="w-5 h-5 text-white" />
-            </div>
-            Sesonger
-          </h1>
-          <p className="text-slate-500 mt-2 ml-[52px]">
-            Planlegg innhold for kommende sesonger og høytider
-          </p>
+        <div className="mb-8 animate-fade-in-up flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-white" />
+              </div>
+              Sesonger
+            </h1>
+            <p className="text-slate-500 mt-2 ml-[52px]">
+              Planlegg innhold for kommende sesonger og høytider
+            </p>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Opprett egen sesong
+          </button>
         </div>
 
         {/* Upcoming seasons */}
@@ -339,6 +450,11 @@ export default function SeasonsPage() {
                             <Clock className="w-3 h-3" />
                             {getDaysLabel(days)}
                           </span>
+                          {event.is_custom && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">
+                              Egen
+                            </span>
+                          )}
                         </div>
                         {event.description && (
                           <p className="text-sm text-slate-500 mt-1">{event.description}</p>
@@ -378,8 +494,31 @@ export default function SeasonsPage() {
                       </div>
                     </div>
 
-                    {/* Toggle */}
+                    {/* Toggle + actions */}
                     <div className="flex items-center gap-3 flex-shrink-0">
+                      {event.is_custom && (
+                        <>
+                          <button
+                            onClick={() => openEditModal(event)}
+                            className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                            title="Rediger"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCustomSeason(event.id)}
+                            disabled={deletingId === event.id}
+                            className="p-2 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 disabled:opacity-50"
+                            title="Slett"
+                          >
+                            {deletingId === event.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </>
+                      )}
                       {enabled && days <= 30 && (
                         <Link
                           href={`/dashboard/generate?topic=${encodeURIComponent(customPrompts[event.id] || event.suggested_prompt || event.name)}`}
@@ -419,6 +558,98 @@ export default function SeasonsPage() {
           </div>
         </div>
       </div>
+
+      {/* Create/Edit custom season modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {editingEvent ? 'Rediger sesong' : 'Opprett egen sesong'}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Navn</label>
+                <input
+                  type="text"
+                  value={modalName}
+                  onChange={e => setModalName(e.target.value)}
+                  placeholder="F.eks. Firmajubileum"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Dato (MM-DD)</label>
+                <input
+                  type="text"
+                  value={modalDate}
+                  onChange={e => setModalDate(e.target.value)}
+                  placeholder="F.eks. 03-08"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                />
+                <p className="text-xs text-slate-400 mt-1">Format: MM-DD, f.eks. 05-17 for 17. mai</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Beskrivelse</label>
+                <input
+                  type="text"
+                  value={modalDescription}
+                  onChange={e => setModalDescription(e.target.value)}
+                  placeholder="Kort beskrivelse av sesongen..."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Ikon/emoji</label>
+                <input
+                  type="text"
+                  value={modalIcon}
+                  onChange={e => setModalIcon(e.target.value)}
+                  placeholder="F.eks. 🎉"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  maxLength={4}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">AI-prompt forslag</label>
+                <textarea
+                  value={modalPrompt}
+                  onChange={e => setModalPrompt(e.target.value)}
+                  placeholder="Lag et innlegg om..."
+                  rows={2}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={handleSaveCustomSeason}
+                disabled={modalSaving || !modalName.trim() || !modalDate.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {modalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingEvent ? 'Lagre endringer' : 'Opprett sesong'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

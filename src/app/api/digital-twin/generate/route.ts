@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logUsage } from '@/lib/usage'
+import { logAudit } from '@/lib/audit'
 
 const FAL_KEY = process.env.FAL_KEY
 
@@ -121,6 +122,14 @@ export async function POST(request: NextRequest) {
         metadata: { twin_id },
       })
 
+      await logAudit({
+        action: 'digital_twin.image_generated',
+        resourceType: 'digital_twin',
+        resourceId: twin_id,
+        resourceTitle: twin.name,
+        metadata: { num_images: persistedImages.length, prompt },
+      })
+
       return NextResponse.json({
         success: true,
         images: persistedImages,
@@ -168,6 +177,14 @@ export async function POST(request: NextRequest) {
             duration_ms: Date.now() - startTime,
             cost_estimate: 0.05 * (num_images || 1),
             metadata: { twin_id },
+          })
+
+          await logAudit({
+            action: 'digital_twin.image_generated',
+            resourceType: 'digital_twin',
+            resourceId: twin_id,
+            resourceTitle: twin.name,
+            metadata: { num_images: persistedImages.length, prompt },
           })
 
           return NextResponse.json({
