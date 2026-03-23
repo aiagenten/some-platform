@@ -42,12 +42,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No training images uploaded' }, { status: 400 })
     }
 
-    // fal.ai flux-lora-fast-training accepts images as an array of {url, caption} objects
+    // fal.ai flux-lora-fast-training requires images_data_url (URL to a zip file)
+    // Step 1: Download all images, zip them, upload zip to Supabase Storage
     const startTime = Date.now()
-    const imagesPayload = trainingImages.map((url: string) => ({
-      url,
-      caption: `a photo of ${twin.trigger_word}`,
-    }))
+
+    // Create zip server-side by fetching images and bundling
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+
+    for (let i = 0; i < trainingImages.length; i++) {
+      const imgResp = await fetch(trainingImages[i])
+      if (imgResp.ok) {
+        const buffer = await imgResp.arrayBuffer()
+        zip.file(`img_${String(i + 1).padStart(2, '0')}.jpeg`, buffer)
+      }
+    }
+
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+    // Upload zip to Supabase Storage
+    const zipPath = `${profile.org_id}/training-${twin_id}.zip`
+    const { error: uploadErr } = await admin.storage
+      .from('training-images')
+      .upload(zipPath, zipBuffer, { contentType: 'application/zip', upsert: true })
+
+    if (uploadErr) {
+      console.error('Zip upload error:', uploadErr)
+      await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
+      return NextResponse.json({ error: 'Failed to upload training zip' }, { status: 500 })
+    }
+
+    const { data: { publicUrl: zipUrl } } = admin.storage.from('training-images').getPublicUrl(zipPath)
+
     const queueResp = await fetch('https://queue.fal.run/fal-ai/flux-lora-fast-training', {
       method: 'POST',
       headers: {
@@ -55,10 +81,9 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        images: imagesPayload,
+        images_data_url: zipUrl,
         trigger_word: twin.trigger_word,
         steps: 1000,
-        is_style: false,
       }),
     })
 

@@ -64,9 +64,52 @@ export async function POST(request: NextRequest) {
 
     const genData = await genResp.json()
 
+    // Helper: persist images to Supabase Storage + media_assets table
+    const persistImages = async (images: { url: string; width: number; height: number }[]) => {
+      const saved = []
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i]
+        try {
+          // Download from fal.ai
+          const imgResp = await fetch(img.url)
+          if (!imgResp.ok) { saved.push(img); continue }
+          const buffer = Buffer.from(await imgResp.arrayBuffer())
+
+          // Upload to Supabase Storage
+          const filename = `digital-twin/${twin_id}/${Date.now()}-${i}.jpg`
+          const { error: upErr } = await admin.storage
+            .from('post-images')
+            .upload(filename, buffer, { contentType: 'image/jpeg', upsert: true })
+
+          if (upErr) { console.error('Upload error:', upErr); saved.push(img); continue }
+
+          const { data: { publicUrl } } = admin.storage.from('post-images').getPublicUrl(filename)
+
+          // Save to media_assets table (media library)
+          await admin.from('media_assets').insert({
+            org_id: profile.org_id,
+            url: publicUrl,
+            filename: filename.split('/').pop(),
+            mime_type: 'image/jpeg',
+            source: 'digital-twin',
+            tags: ['digital-twin', twin.name],
+            metadata: { twin_id, twin_name: twin.name, prompt, width: img.width, height: img.height, original_url: img.url },
+          }).then(() => {}, (e: unknown) => console.error('media_assets insert error:', e))
+
+          saved.push({ ...img, url: publicUrl, persisted: true })
+        } catch (e) {
+          console.error('Persist image error:', e)
+          saved.push(img)
+        }
+      }
+      return saved
+    }
+
     // If queued, we need to poll — but flux-lora via queue returns request_id
     // Check if we got images directly or a request_id
     if (genData.images) {
+      const persistedImages = await persistImages(genData.images)
+
       logUsage({
         org_id: profile.org_id,
         type: 'image_generation',
@@ -80,7 +123,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        images: genData.images,
+        images: persistedImages,
       })
     }
 
@@ -114,6 +157,8 @@ export async function POST(request: NextRequest) {
 
         if (resultResp.ok) {
           const resultData = await resultResp.json()
+          const persistedImages = await persistImages(resultData.images)
+
           logUsage({
             org_id: profile.org_id,
             type: 'image_generation',
@@ -127,7 +172,7 @@ export async function POST(request: NextRequest) {
 
           return NextResponse.json({
             success: true,
-            images: resultData.images,
+            images: persistedImages,
           })
         }
       }

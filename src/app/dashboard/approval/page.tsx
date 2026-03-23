@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar, XCircle, Target, MessageSquare } from 'lucide-react'
 import { getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
@@ -145,6 +145,10 @@ export default function ApprovalPage() {
   const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
   const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [weeklyGoals, setWeeklyGoals] = useState<{ platform: string; weekly_target: number }[]>([])
+  const [weeklyPostCounts, setWeeklyPostCounts] = useState<Record<string, number>>({})
   const supabase = createClient()
 
   useEffect(() => { loadPosts() }, [])
@@ -179,6 +183,30 @@ export default function ApprovalPage() {
       .order('created_at', { ascending: false })
 
     setPosts(data || [])
+
+    // Load weekly goals
+    const { data: goals } = await supabase
+      .from('weekly_posting_goals')
+      .select('platform, weekly_target')
+      .eq('org_id', profile.org_id)
+    if (goals) setWeeklyGoals(goals)
+
+    // Count posts scheduled/approved this week
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1)
+    weekStart.setHours(0, 0, 0, 0)
+    const { data: weekPosts } = await supabase
+      .from('social_posts')
+      .select('platform')
+      .eq('org_id', profile.org_id)
+      .in('status', ['approved', 'scheduled', 'published'])
+      .gte('created_at', weekStart.toISOString())
+    if (weekPosts) {
+      const counts: Record<string, number> = {}
+      weekPosts.forEach(p => { counts[p.platform] = (counts[p.platform] || 0) + 1 })
+      setWeeklyPostCounts(counts)
+    }
+
     setLoading(false)
   }
 
@@ -203,6 +231,32 @@ export default function ApprovalPage() {
     await supabase.from('social_posts').update(updates).eq('id', postId)
     setPosts(prev => prev.filter(p => p.id !== postId))
     setActionLoadingId(null)
+  }
+
+  const handleReject = async (postId: string) => {
+    if (!rejectionReason.trim()) return
+    setActionLoadingId(postId)
+    await supabase.from('social_posts').update({
+      status: 'draft',
+      rejection_reason: rejectionReason.trim(),
+    }).eq('id', postId)
+    // Save learning
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
+      if (profile) {
+        await supabase.from('content_learnings').insert({
+          tenant_id: profile.org_id,
+          learning_type: 'rejection_reason',
+          description: rejectionReason.trim(),
+          source_post_id: postId,
+        })
+      }
+    }
+    setPosts(prev => prev.filter(p => p.id !== postId))
+    setActionLoadingId(null)
+    setRejectingId(null)
+    setRejectionReason('')
   }
 
   const handleDiscard = async (postId: string) => {
@@ -250,6 +304,36 @@ export default function ApprovalPage() {
           </p>
         </div>
       </div>
+
+      {/* Weekly Goals */}
+      {weeklyGoals.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Target className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-semibold text-slate-900">Ukentlig mål</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {weeklyGoals.map(goal => {
+              const count = weeklyPostCounts[goal.platform] || 0
+              const pct = Math.min((count / goal.weekly_target) * 100, 100)
+              return (
+                <div key={goal.platform} className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600 capitalize">{goal.platform}</span>
+                    <span className="text-xs text-slate-400">{count}/{goal.weekly_target}</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {posts.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 shadow-sm">
@@ -345,7 +429,32 @@ export default function ApprovalPage() {
                     <div className="flex-1" />
 
                     {/* Actions */}
-                    {isConfirmingDelete ? (
+                    {rejectingId === post.id ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
+                          <p className="text-xs font-medium text-amber-800">Avvisningsgrunn</p>
+                        </div>
+                        <textarea
+                          value={rejectionReason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          placeholder="Beskriv hvorfor innlegget avvises..."
+                          rows={2}
+                          className="w-full text-sm bg-white border border-amber-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-amber-500 focus:outline-none resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={() => handleReject(post.id)} disabled={isLoading || !rejectionReason.trim()}
+                            className="flex-1 bg-amber-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-1">
+                            {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                            Avvis
+                          </button>
+                          <button onClick={() => { setRejectingId(null); setRejectionReason('') }}
+                            className="flex-1 bg-white text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 border border-slate-200">
+                            Avbryt
+                          </button>
+                        </div>
+                      </div>
+                    ) : isConfirmingDelete ? (
                       <div className="bg-red-50 border border-red-200 rounded-xl p-3">
                         <p className="text-xs text-red-700 mb-2 font-medium">Er du sikker? Innlegget slettes permanent.</p>
                         <div className="flex gap-2">
@@ -368,6 +477,11 @@ export default function ApprovalPage() {
                           Godkjenn og planlegg
                         </button>
                         <div className="flex gap-2">
+                          <button onClick={() => setRejectingId(post.id)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition-all border border-slate-200">
+                            <XCircle className="w-3.5 h-3.5" />
+                            Avvis
+                          </button>
                           <Link href={`/dashboard/posts/${post.id}`}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-slate-200">
                             <Pencil className="w-3.5 h-3.5" />

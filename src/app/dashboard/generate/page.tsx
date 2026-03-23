@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User, Upload, Film } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
@@ -121,6 +121,17 @@ export default function GeneratePage() {
   const [bulkResults, setBulkResults] = useState<GeneratedContent[]>([])
   const [bulkLoading, setBulkLoading] = useState(false)
   const [selectedVariant, setSelectedVariant] = useState(0)
+  // Manual upload
+  const [contentMode, setContentMode] = useState<'ai' | 'upload'>('ai')
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null)
+  const [uploadType, setUploadType] = useState<'image' | 'video'>('image')
+  const [uploading, setUploading] = useState(false)
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
+  const [manualCaption, setManualCaption] = useState('')
+  const [manualHeadline, setManualHeadline] = useState('')
+  const [manualSubtitle, setManualSubtitle] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
@@ -437,6 +448,81 @@ export default function GeneratePage() {
     return 0
   })
 
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFileSelect(file)
+  }
+
+  const handleFileSelect = (file: File) => {
+    setUploadFile(file)
+    const isVideo = file.type.startsWith('video/')
+    setUploadType(isVideo ? 'video' : 'image')
+    const url = URL.createObjectURL(file)
+    setUploadPreview(url)
+    setUploadedUrl(null)
+  }
+
+  const handleManualUpload = async () => {
+    if (!uploadFile || !orgId) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('org_id', orgId)
+      formData.append('type', uploadType)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        setUploadedUrl(data.url)
+      }
+    } catch { /* ignore */ }
+    setUploading(false)
+  }
+
+  const handleSaveManualPost = async () => {
+    if (!orgId || !uploadedUrl) return
+    setLoading(true)
+    try {
+      const postData: Record<string, unknown> = {
+        org_id: orgId,
+        platform,
+        format,
+        content_text: manualCaption,
+        caption: manualCaption,
+        headline: manualHeadline || null,
+        subtitle: manualSubtitle || null,
+        status: 'pending_approval',
+        ai_generated: false,
+        media_type: uploadType,
+        selected_overlay: selectedOverlay,
+      }
+      if (uploadType === 'video') {
+        postData.video_url = uploadedUrl
+      } else {
+        postData.content_image_url = uploadedUrl
+      }
+      const { data: post } = await supabase.from('social_posts').insert(postData).select('id').single()
+      if (post) {
+        setPostId(post.id)
+        // Set generated state for overlay preview
+        setGenerated({
+          text: manualCaption,
+          caption: manualCaption,
+          headline: manualHeadline || null,
+          subtitle: manualSubtitle || null,
+          hashtags: [],
+          image_url: uploadType === 'image' ? uploadedUrl : null,
+          image_error: null,
+          best_time: null,
+          image_suggestion: null,
+        })
+      }
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
   return (
     <div className="animate-fade-in-up">
       <Link href="/dashboard" className="text-sm text-slate-500 hover:text-slate-700 mb-4 inline-flex items-center gap-1 transition-colors">
@@ -449,6 +535,32 @@ export default function GeneratePage() {
         {/* Config panel */}
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            {/* Content Mode Toggle */}
+            <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-xl">
+              <button
+                onClick={() => setContentMode('ai')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  contentMode === 'ai'
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                Generer med AI
+              </button>
+              <button
+                onClick={() => setContentMode('upload')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  contentMode === 'upload'
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                Last opp selv
+              </button>
+            </div>
+
             <h2 className="font-semibold text-slate-900 mb-5">Innstillinger</h2>
 
             {/* Platform */}
@@ -495,27 +607,140 @@ export default function GeneratePage() {
               </div>
             </div>
 
-            {/* Image Style */}
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Bildestil</label>
-              <div className="flex flex-wrap gap-2">
-                {imageStyles.map((style) => (
-                  <button
-                    key={style.id}
-                    onClick={() => setSelectedStyle(style.id)}
-                    className={`px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
-                      selectedStyle === style.id
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                    }`}
-                  >
-                    {style.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Manual Upload Zone - only in upload mode */}
+            {contentMode === 'upload' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Last opp bilde eller video</label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleFileDrop}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${
+                    dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'
+                  }`}
+                  onClick={() => {
+                    const input = document.createElement('input')
+                    input.type = 'file'
+                    input.accept = 'image/*,video/mp4,video/mov,video/webm'
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0]
+                      if (file) handleFileSelect(file)
+                    }
+                    input.click()
+                  }}
+                >
+                  {uploadPreview ? (
+                    <div className="space-y-3">
+                      {uploadType === 'video' ? (
+                        <video src={uploadPreview} className="w-full max-h-48 rounded-lg mx-auto object-contain" controls />
+                      ) : (
+                        <img src={uploadPreview} alt="Forhåndsvisning" className="w-full max-h-48 rounded-lg mx-auto object-contain" />
+                      )}
+                      <div className="flex items-center justify-center gap-2 text-sm text-slate-600">
+                        {uploadType === 'video' ? <Film className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
+                        <span>{uploadFile?.name}</span>
+                        <span className="text-slate-400">({(uploadFile!.size / 1024 / 1024).toFixed(1)} MB)</span>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setUploadFile(null); setUploadPreview(null); setUploadedUrl(null) }}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Fjern og velg ny
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Upload className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="text-sm text-slate-500">Dra og slipp bilde eller video her</p>
+                      <p className="text-xs text-slate-400">Eller klikk for å velge fil</p>
+                      <p className="text-xs text-slate-400">Støtter JPG, PNG, WebP, MP4, MOV, WebM</p>
+                    </div>
+                  )}
+                </div>
 
-            {/* Reference Image */}
+                {uploadFile && !uploadedUrl && (
+                  <button
+                    onClick={handleManualUpload}
+                    disabled={uploading}
+                    className="mt-3 w-full bg-indigo-100 text-indigo-700 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {uploading ? 'Laster opp...' : 'Last opp fil'}
+                  </button>
+                )}
+
+                {uploadedUrl && (
+                  <div className="mt-2 p-2 bg-emerald-50 text-emerald-700 text-xs rounded-lg border border-emerald-100 text-center">
+                    Fil lastet opp!
+                  </div>
+                )}
+
+                {/* Caption and overlay text for manual uploads */}
+                {uploadFile && (
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Bildetekst / caption</label>
+                      <textarea
+                        value={manualCaption}
+                        onChange={(e) => setManualCaption(e.target.value)}
+                        placeholder="Skriv teksten til innlegget..."
+                        rows={3}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                      />
+                    </div>
+                    {uploadType === 'image' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Overlay-overskrift</label>
+                          <input
+                            type="text"
+                            value={manualHeadline}
+                            onChange={(e) => setManualHeadline(e.target.value)}
+                            placeholder="Overskrift på bildet..."
+                            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Undertekst</label>
+                          <input
+                            type="text"
+                            value={manualSubtitle}
+                            onChange={(e) => setManualSubtitle(e.target.value)}
+                            placeholder="Undertekst på bildet..."
+                            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Image Style - AI mode only */}
+            {contentMode === 'ai' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Bildestil</label>
+                <div className="flex flex-wrap gap-2">
+                  {imageStyles.map((style) => (
+                    <button
+                      key={style.id}
+                      onClick={() => setSelectedStyle(style.id)}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+                        selectedStyle === style.id
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {style.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reference Image - AI mode only */}
+            {contentMode === 'ai' && (
             <div className="mb-5">
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Referansebilde <span className="text-slate-400 font-normal">(valgfritt)</span>
@@ -540,9 +765,10 @@ export default function GeneratePage() {
                 </button>
               )}
             </div>
+            )}
 
-            {/* Digital Twin */}
-            {digitalTwins.length > 0 && (
+            {/* Digital Twin - AI mode only */}
+            {contentMode === 'ai' && digitalTwins.length > 0 && (
               <div className="mb-5">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Digital Twin <span className="text-slate-400 font-normal">(valgfritt)</span>
@@ -615,58 +841,82 @@ export default function GeneratePage() {
               </div>
             )}
 
-            {/* Topic */}
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Tema <span className="text-slate-400 font-normal">(valgfritt)</span>
-              </label>
-              <input
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="F.eks. lansering av nytt produkt, kundehistorie, bransjetips..."
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 hover:border-slate-300"
-              />
-            </div>
-
-            {/* Variant count */}
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Antall varianter</label>
-              <div className="flex gap-2">
-                {VARIANT_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setVariantCount(opt.value)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      variantCount === opt.value
-                        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            {/* Topic - AI mode only */}
+            {contentMode === 'ai' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tema <span className="text-slate-400 font-normal">(valgfritt)</span>
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="F.eks. lansering av nytt produkt, kundehistorie, bransjetips..."
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all duration-200 hover:border-slate-300"
+                />
               </div>
-            </div>
+            )}
 
-            {/* Generate button */}
-            <button
-              onClick={() => handleGenerate()}
-              disabled={loading || !orgId}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {bulkLoading ? `Genererer ${variantCount} varianter...` : 'Genererer...'}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  {variantCount > 1 ? `Generer ${variantCount} varianter` : 'Generer innhold'}
-                </>
-              )}
-            </button>
+            {/* Variant count - AI mode only */}
+            {contentMode === 'ai' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Antall varianter</label>
+                <div className="flex gap-2">
+                  {VARIANT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setVariantCount(opt.value)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        variantCount === opt.value
+                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Generate / Save button */}
+            {contentMode === 'ai' ? (
+              <button
+                onClick={() => handleGenerate()}
+                disabled={loading || !orgId}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {bulkLoading ? `Genererer ${variantCount} varianter...` : 'Genererer...'}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    {variantCount > 1 ? `Generer ${variantCount} varianter` : 'Generer innhold'}
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleSaveManualPost}
+                disabled={loading || !orgId || !uploadedUrl}
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-3.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Lagrer...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Lagre innlegg
+                  </>
+                )}
+              </button>
+            )}
 
             {error && (
               <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100">
