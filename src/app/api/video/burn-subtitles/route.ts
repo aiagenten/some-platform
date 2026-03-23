@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 export const maxDuration = 300
 
 const WHISPER_URL = process.env.LOCAL_WHISPER_URL || ''
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,17 +19,30 @@ export async function POST(request: NextRequest) {
 
     if (!WHISPER_URL) {
       return NextResponse.json(
-        { error: 'Burn subtitles service not configured' },
+        { error: 'Burn subtitles service not configured (LOCAL_WHISPER_URL missing)' },
         { status: 503 }
       )
     }
 
-    // Proxy to Railway whisper-api server (has ffmpeg)
+    // Build upload path for Supabase
+    const uploadPath = org_id
+      ? `${org_id}/subtitled/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`
+      : null
+
+    // Send to Railway — Railway uploads directly to Supabase (avoids Netlify body size limit)
     console.log('Burning subtitles via:', WHISPER_URL)
+    const payload: Record<string, unknown> = { video_url, segments }
+
+    if (uploadPath && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+      payload.supabase_url = SUPABASE_URL
+      payload.supabase_key = SUPABASE_SERVICE_KEY
+      payload.upload_path = uploadPath
+    }
+
     const res = await fetch(`${WHISPER_URL}/burn-subtitles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_url, segments }),
+      body: JSON.stringify(payload),
     })
 
     if (!res.ok) {
@@ -40,31 +54,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the video binary back
-    const videoBuffer = await res.arrayBuffer()
+    const contentType = res.headers.get('content-type') || ''
 
-    // Upload to Supabase Storage if org_id provided
-    if (org_id) {
-      const supabase = createAdminClient()
-      const fileName = `${org_id}/subtitled/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`
-
-      const { error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(fileName, Buffer.from(videoBuffer), {
-          contentType: 'video/mp4',
-          upsert: false,
-        })
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        return NextResponse.json({ error: 'Failed to upload processed video' }, { status: 500 })
-      }
-
-      const { data: urlData } = supabase.storage.from('videos').getPublicUrl(fileName)
-      return NextResponse.json({ success: true, url: urlData.publicUrl })
+    // If Railway returned JSON (uploaded to Supabase directly)
+    if (contentType.includes('application/json')) {
+      const data = await res.json()
+      return NextResponse.json(data)
     }
 
-    // Return video directly if no org_id
+    // Fallback: binary response (shouldn't happen with Supabase upload)
+    const videoBuffer = await res.arrayBuffer()
     return new Response(videoBuffer, {
       headers: {
         'Content-Type': 'video/mp4',
