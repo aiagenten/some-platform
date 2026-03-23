@@ -1,11 +1,22 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, Clock } from 'lucide-react'
 import type { EditorState, SelectedRange } from '@/lib/editor-state'
 import { formatSeconds } from '@/lib/editor-state'
-import { Player, type PlayerRef } from '@remotion/player'
-import { EditorComposition } from '@/remotion/EditorComposition'
+import type { PlayerRef } from '@remotion/player'
+
+// Must be dynamic to avoid SSR issues with Remotion
+const RemotionPlayer = dynamic(
+  () => import('@remotion/player').then(m => m.Player),
+  { ssr: false }
+)
+
+const EditorComposition = dynamic(
+  () => import('@/remotion/EditorComposition').then(m => m.EditorComposition),
+  { ssr: false }
+)
 
 type Props = {
   editorState: EditorState
@@ -140,10 +151,10 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
           className="w-full h-full"
           style={{ aspectRatio: '16/9', maxHeight: '100%', maxWidth: '100%', margin: 'auto' }}
         >
-          <Player
+          <RemotionPlayer
             key={playerKey}
             ref={playerRef}
-            component={EditorComposition}
+            component={EditorComposition as React.ComponentType<Record<string, unknown>>}
             inputProps={{ editorState }}
             durationInFrames={Math.max(totalDurationInFrames, 1)}
             compositionWidth={1920}
