@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon, Users, Activity, Building2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 type NavItem = { href: string; label: string; icon: typeof BarChart3 }
@@ -53,6 +53,16 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
+const ADMIN_NAV_SECTION: NavSection = {
+  section: 'Admin',
+  items: [
+    { href: '/dashboard/admin/audit', label: 'Audit Trail', icon: Shield },
+    { href: '/dashboard/admin/users', label: 'Brukere', icon: Users },
+    { href: '/dashboard/admin/usage', label: 'API-forbruk', icon: Activity },
+    { href: '/dashboard/admin/orgs', label: 'Organisasjoner', icon: Building2 },
+  ],
+}
+
 // Flat list for mobile nav
 const NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items)
 
@@ -61,6 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const supabase = createClient()
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [viewingOrgName, setViewingOrgName] = useState<string | null>(null)
 
   useEffect(() => {
     async function checkRole() {
@@ -76,11 +87,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     checkRole()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Check for admin org switcher in localStorage
+  useEffect(() => {
+    const orgName = localStorage.getItem('admin_viewing_org_name')
+    setViewingOrgName(orgName)
+  }, [])
+
+  const handleExitOrgView = async () => {
+    localStorage.removeItem('admin_viewing_org_id')
+    localStorage.removeItem('admin_viewing_org_name')
+    await fetch('/api/admin/orgs/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ org_id: null }),
+    })
+    setViewingOrgName(null)
+    window.location.reload()
+  }
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
   }
+
+  const allSections = [...NAV_SECTIONS, ...(isSuperAdmin ? [ADMIN_NAV_SECTION] : [])]
+  const allMobileItems = [...NAV_ITEMS, ...(isSuperAdmin ? ADMIN_NAV_SECTION.items : [])]
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -95,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
-          {[...NAV_SECTIONS, ...(isSuperAdmin ? [{ section: 'Admin', items: [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] }] : [])].map((section) => (
+          {allSections.map((section) => (
             <div key={section.section}>
               <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 {section.section}
@@ -155,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
         <div className="flex overflow-x-auto px-2 pb-2 gap-1 scrollbar-hide">
-          {[...NAV_ITEMS, ...(isSuperAdmin ? [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] : [])].map((item) => {
+          {allMobileItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && !item.href.includes('?') && pathname.startsWith(item.href))
             const Icon = item.icon
             return (
@@ -178,6 +210,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Content */}
       <main className="flex-1 lg:ml-64 pt-24 lg:pt-0">
+        {/* Admin org switcher banner */}
+        {viewingOrgName && (
+          <div className="bg-amber-400 text-amber-900 px-4 py-2.5 flex items-center justify-between gap-4">
+            <span className="text-sm font-medium">
+              👁 Du ser plattformen som: <strong>{viewingOrgName}</strong>
+            </span>
+            <button
+              onClick={handleExitOrgView}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1 rounded-lg transition-colors"
+            >
+              <X className="w-3 h-3" />
+              Avslutt
+            </button>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </div>
