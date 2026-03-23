@@ -3,28 +3,58 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Upload, Scissors, Film } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, FolderOpen, VideoIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Oversikt', icon: BarChart3 },
-  { href: '/dashboard/analytics', label: 'Analytics', icon: TrendingUp },
-  { href: '/dashboard/calendar', label: 'Kalender', icon: Calendar },
-  { href: '/dashboard/posts', label: 'Innlegg', icon: FileText },
-  { href: '/dashboard/approval', label: 'Godkjenning', icon: CheckCircle2 },
-  { href: '/dashboard/generate', label: 'Generer', icon: Sparkles },
-  { href: '/dashboard/video', label: 'Video', icon: Video },
-  { href: '/dashboard/overlay-editor', label: 'Overlay-maler', icon: Layers },
-  { href: '/dashboard/media', label: 'Mediebibliotek', icon: ImageIcon },
-  { href: '/dashboard/digital-twin', label: 'Digital Twin', icon: User },
-  { href: '/dashboard/seasons', label: 'Sesonger', icon: Snowflake },
-  { href: '/dashboard/video-upload', label: 'Video & tekst', icon: Upload },
-  { href: '/dashboard/video-editor', label: 'Video Editor', icon: Scissors },
-  { href: '/dashboard/video-editor-v2', label: 'Video Studio', icon: Film },
-  { href: '/dashboard/brand', label: 'Merkevare', icon: Palette },
-  { href: '/dashboard/imported-posts', label: 'Importerte poster', icon: Download },
-  { href: '/dashboard/settings', label: 'Innstillinger', icon: Settings },
+type NavItem = { href: string; label: string; icon: typeof BarChart3 }
+type NavSection = { section: string; items: NavItem[] }
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    section: 'Oversikt',
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+      { href: '/dashboard/analytics', label: 'Analytics', icon: TrendingUp },
+      { href: '/dashboard/calendar', label: 'Kalender', icon: Calendar },
+      { href: '/dashboard/seasons', label: 'Sesonger', icon: Snowflake },
+    ],
+  },
+  {
+    section: 'Innlegg',
+    items: [
+      { href: '/dashboard/posts', label: 'Innlegg', icon: FileText },
+      { href: '/dashboard/approval', label: 'Godkjenning', icon: CheckCircle2 },
+    ],
+  },
+  {
+    section: 'Generer',
+    items: [
+      { href: '/dashboard/generate', label: 'Bilde', icon: Sparkles },
+      { href: '/dashboard/digital-twin', label: 'Digital tvilling', icon: User },
+      { href: '/dashboard/video', label: 'Video', icon: Video },
+      { href: '/dashboard/video-editor-v2', label: 'Video Studio', icon: Film },
+    ],
+  },
+  {
+    section: 'Mediebibliotek',
+    items: [
+      { href: '/dashboard/media', label: 'Bilder', icon: ImageIcon },
+      { href: '/dashboard/media?type=video', label: 'Videoer', icon: VideoIcon },
+    ],
+  },
+  {
+    section: 'Innstillinger',
+    items: [
+      { href: '/dashboard/brand', label: 'Merkevare', icon: Palette },
+      { href: '/dashboard/imported-posts', label: 'Importerte poster', icon: Download },
+      { href: '/dashboard/overlay-editor', label: 'Overlay-maler', icon: Layers },
+      { href: '/dashboard/settings', label: 'Innstillinger', icon: Settings },
+    ],
+  },
 ]
+
+// Flat list for mobile nav
+const NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items)
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -46,11 +76,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     checkRole()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const navItems = [
-    ...NAV_ITEMS,
-    ...(isSuperAdmin ? [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] : []),
-  ]
-
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -69,28 +94,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group ${
-                  isActive
-                    ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                {isActive && (
-                  <div className="absolute left-0 w-1 h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-r-full" />
-                )}
-                <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+          {[...NAV_SECTIONS, ...(isSuperAdmin ? [{ section: 'Admin', items: [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] }] : [])].map((section) => (
+            <div key={section.section}>
+              <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {section.section}
+              </p>
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const isActive = pathname === item.href || 
+                    (item.href !== '/dashboard' && !item.href.includes('?') && pathname.startsWith(item.href)) ||
+                    (item.href.includes('?') && pathname + (typeof window !== 'undefined' ? window.location.search : '') === item.href)
+                  const Icon = item.icon
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                        isActive
+                          ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 w-1 h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-r-full" />
+                      )}
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Logout */}
@@ -119,8 +155,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
         <div className="flex overflow-x-auto px-2 pb-2 gap-1 scrollbar-hide">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+          {[...NAV_ITEMS, ...(isSuperAdmin ? [{ href: '/dashboard/audit', label: 'Audit Trail', icon: Shield }] : [])].map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/dashboard' && !item.href.includes('?') && pathname.startsWith(item.href))
             const Icon = item.icon
             return (
               <Link
