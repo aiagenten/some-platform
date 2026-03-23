@@ -6,6 +6,37 @@ import { logAudit } from '@/lib/audit'
 
 const FAL_KEY = process.env.FAL_KEY
 
+/**
+ * Enhance digital twin prompts with photorealistic quality modifiers.
+ * Wraps the user's scene description with camera, lighting, and skin texture
+ * instructions to avoid the "plasticky AI look".
+ */
+function enhancePrompt(userPrompt: string): string {
+  // Check if user already included technical photography terms — don't double-wrap
+  const hasPhotoTerms = /canon|nikon|sony|85mm|50mm|f\/\d|iso \d|film grain|skin texture|pores/i.test(userPrompt)
+  if (hasPhotoTerms) return userPrompt
+
+  // Detect scene type for appropriate lighting
+  const isOutdoor = /outdoor|outside|forest|nature|trail|park|street|walk|beach|mountain|garden/i.test(userPrompt)
+  const isStage = /stage|conference|keynote|presentation|event|podium|spotlight/i.test(userPrompt)
+
+  const photoPrefix = 'Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens.'
+  const skinRealism = 'Real skin texture with visible pores, subtle wrinkles, imperfections, age-appropriate features. No airbrushing, no smoothing. Authentic human face.'
+
+  let lighting: string
+  if (isOutdoor) {
+    lighting = 'Golden hour natural sunlight with warm tones. Dappled light through trees. Subtle film grain, ISO 800+.'
+  } else if (isStage) {
+    lighting = 'Professional stage lighting with soft key light. Warm skin tones despite cool ambient. Subtle film grain, ISO 1600+.'
+  } else {
+    lighting = 'Natural window light with soft shadows, golden hour warmth. Subtle film grain, ISO 800+.'
+  }
+
+  const style = 'Muted Scandinavian color palette. Candid, authentic moment. Everyday clothing (wool, cotton, linen). No text on screens. No plastic skin. No perfect symmetry.'
+
+  return `${photoPrefix} ${userPrompt}. ${skinRealism} ${lighting} ${style}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!FAL_KEY) {
@@ -49,7 +80,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt,
+        prompt: enhancePrompt(prompt),
         loras: [{ path: twin.lora_url, scale: twin.lora_scale || 1.0 }],
         image_size: image_size || 'landscape_16_9',
         num_images: num_images || 1,

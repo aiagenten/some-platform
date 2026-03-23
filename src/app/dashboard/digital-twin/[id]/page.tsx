@@ -24,12 +24,12 @@ type GeneratedImage = {
 }
 
 const PRESET_PROMPTS = [
-  { label: 'Profesjonelt portrett', prompt: 'Professional portrait of TRIGGER in a modern office setting, natural lighting, confident pose, business attire' },
-  { label: 'Casualt utendørs', prompt: 'Casual outdoor photo of TRIGGER in a Nordic nature setting, warm natural light, relaxed and friendly expression' },
-  { label: 'Konferansetaler', prompt: 'TRIGGER giving a keynote presentation on stage, professional lighting, audience in background, confident and engaging' },
-  { label: 'Kreativt studio', prompt: 'Creative studio portrait of TRIGGER with colorful artistic background, editorial style lighting' },
-  { label: 'Kafé-setting', prompt: 'TRIGGER sitting in a cozy Scandinavian café, holding a coffee cup, warm ambient lighting, thoughtful expression' },
-  { label: 'LinkedIn profil', prompt: 'Professional LinkedIn headshot of TRIGGER, clean neutral background, warm smile, business professional' },
+  { label: 'Profesjonelt portrett', prompt: 'TRIGGER in a modern Scandinavian office with white walls and light wood furniture. Wearing a fitted wool blazer over a simple t-shirt. Standing by a window, soft natural light from the left. Warm, confident expression with a slight smile' },
+  { label: 'Casualt utendørs', prompt: 'TRIGGER walking through a Nordic forest trail in autumn. Wearing a casual wool sweater and jeans. Golden hour sunlight filtering through birch trees. Relaxed, genuine smile. Shallow depth of field with bokeh background' },
+  { label: 'Konferansetaler', prompt: 'TRIGGER on stage at a tech conference, mid-gesture while speaking. Dark stage background with soft blue accent lighting. Wearing smart casual attire. Audience silhouettes visible. Confident, engaging expression' },
+  { label: 'Kreativt studio', prompt: 'TRIGGER in a bright creative workspace with plants and books. Sitting casually on a desk edge. Wearing a simple black turtleneck. Large window providing natural sidelight. Thoughtful, focused expression' },
+  { label: 'Kafé-setting', prompt: 'TRIGGER at a cozy Scandinavian café with minimalist interior. Holding a ceramic coffee cup with both hands. Wooden table, soft ambient lighting from pendant lamps. Relaxed, candid moment mid-conversation' },
+  { label: 'LinkedIn profil', prompt: 'Headshot of TRIGGER against a clean light grey wall. Soft diffused window light from the right. Wearing a crisp collared shirt. Warm, approachable smile. Shallow depth of field, shoulders slightly angled' },
 ]
 
 export default function DigitalTwinDetailPage() {
