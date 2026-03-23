@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Upload } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Upload, Scissors } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 const NAV_ITEMS = [
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/digital-twin', label: 'Digital Twin', icon: User },
   { href: '/dashboard/seasons', label: 'Sesonger', icon: Snowflake },
   { href: '/dashboard/video-upload', label: 'Video & tekst', icon: Upload },
+  { href: '/dashboard/video-editor', label: 'Video Editor', icon: Scissors },
   { href: '/dashboard/brand', label: 'Merkevare', icon: Palette },
   { href: '/dashboard/imported-posts', label: 'Importerte poster', icon: Download },
   { href: '/dashboard/settings', label: 'Innstillinger', icon: Settings },
