@@ -1,21 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, Clock } from 'lucide-react'
 import type { EditorState, SelectedRange } from '@/lib/editor-state'
 import { formatSeconds } from '@/lib/editor-state'
-import type { PlayerRef } from '@remotion/player'
 
-// Must be dynamic to avoid SSR issues with Remotion
-const RemotionPlayer = dynamic(
-  () => import('@remotion/player').then(m => m.Player),
-  { ssr: false }
-)
-
-const EditorComposition = dynamic(
-  () => import('@/remotion/EditorComposition').then(m => m.EditorComposition),
-  { ssr: false }
+// Dynamically import the wrapper (which handles client-side only rendering internally)
+const RemotionPlayerWrapper = dynamic(
+  () => import('./RemotionPlayerWrapper').then(m => m.RemotionPlayerWrapper),
+  { ssr: false, loading: () => (
+    <div className="w-full h-full bg-black flex items-center justify-center">
+      <div className="text-slate-400 text-sm">Laster spiller…</div>
+    </div>
+  )}
 )
 
 type Props = {
@@ -25,73 +23,56 @@ type Props = {
   onSelectRange: (range: SelectedRange) => void
 }
 
+type PlayerContainer = HTMLDivElement & {
+  play?: () => void
+  pause?: () => void
+  seekTo?: (frame: number) => void
+}
+
 export function VideoPreview({ editorState, onFrameChange, selectedRange, onSelectRange }: Props) {
-  const playerRef = useRef<PlayerRef>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isSelectingRange, setIsSelectingRange] = useState(false)
   const [rangeStart, setRangeStart] = useState<number | null>(null)
-  const { fps, totalDurationInFrames, currentFrame, tracks } = editorState
+  const { fps, totalDurationInFrames, currentFrame } = editorState
 
-  // Compute a stable key for the player based on track item count and total duration
-  // This forces re-mount when items are added/removed
-  const playerKey = tracks.reduce((acc, t) => acc + t.items.length, 0) + '-' + totalDurationInFrames
-
-  // Subscribe to frame updates from the player
-  useEffect(() => {
-    const player = playerRef.current
-    if (!player) return
-
-    const onFrameUpdate = (data: { detail: { frame: number } }) => {
-      onFrameChange(data.detail.frame)
-    }
-    const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
-    const onEnded = () => setIsPlaying(false)
-
-    player.addEventListener('frameupdate', onFrameUpdate)
-    player.addEventListener('play', onPlay)
-    player.addEventListener('pause', onPause)
-    player.addEventListener('ended', onEnded)
-
-    return () => {
-      player.removeEventListener('frameupdate', onFrameUpdate)
-      player.removeEventListener('play', onPlay)
-      player.removeEventListener('pause', onPause)
-      player.removeEventListener('ended', onEnded)
-    }
-  }, [onFrameChange])
+  // Get player container element for control methods
+  const getPlayerContainer = useCallback((): PlayerContainer | null => {
+    return document.getElementById('remotion-player-container') as PlayerContainer | null
+  }, [])
 
   const totalSeconds = totalDurationInFrames / fps
   const currentSeconds = currentFrame / fps
 
   const handlePlay = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.play()
-      setIsPlaying(true)
+    const container = getPlayerContainer()
+    if (container?.play) {
+      container.play()
     }
-  }, [])
+  }, [getPlayerContainer])
 
   const handlePause = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.pause()
-      setIsPlaying(false)
+    const container = getPlayerContainer()
+    if (container?.pause) {
+      container.pause()
     }
-  }, [])
+  }, [getPlayerContainer])
 
   const handleSkipBack = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.seekTo(0)
+    const container = getPlayerContainer()
+    if (container?.seekTo) {
+      container.seekTo(0)
       onFrameChange(0)
     }
-  }, [onFrameChange])
+  }, [getPlayerContainer, onFrameChange])
 
   const handleSkipForward = useCallback(() => {
-    if (playerRef.current) {
+    const container = getPlayerContainer()
+    if (container?.seekTo) {
       const last = totalDurationInFrames - 1
-      playerRef.current.seekTo(last)
+      container.seekTo(last)
       onFrameChange(last)
     }
-  }, [totalDurationInFrames, onFrameChange])
+  }, [getPlayerContainer, totalDurationInFrames, onFrameChange])
 
   const handleTimelineClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -111,13 +92,14 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
           setIsSelectingRange(false)
         }
       } else {
-        if (playerRef.current) {
-          playerRef.current.seekTo(frame)
+        const container = getPlayerContainer()
+        if (container?.seekTo) {
+          container.seekTo(frame)
           onFrameChange(frame)
         }
       }
     },
-    [totalDurationInFrames, isSelectingRange, rangeStart, onSelectRange, onFrameChange],
+    [totalDurationInFrames, isSelectingRange, rangeStart, onSelectRange, onFrameChange, getPlayerContainer],
   )
 
   const toggleRangeSelect = useCallback(() => {
@@ -151,18 +133,10 @@ export function VideoPreview({ editorState, onFrameChange, selectedRange, onSele
           className="w-full h-full"
           style={{ aspectRatio: '16/9', maxHeight: '100%', maxWidth: '100%', margin: 'auto' }}
         >
-          <RemotionPlayer
-            key={playerKey}
-            ref={playerRef}
-            component={EditorComposition as React.ComponentType<Record<string, unknown>>}
-            inputProps={{ editorState }}
-            durationInFrames={Math.max(totalDurationInFrames, 1)}
-            compositionWidth={1920}
-            compositionHeight={1080}
-            fps={fps}
-            style={{ width: '100%', height: '100%' }}
-            controls={false}
-            loop={false}
+          <RemotionPlayerWrapper
+            editorState={editorState}
+            onFrameChange={onFrameChange}
+            onPlayingChange={setIsPlaying}
           />
         </div>
 
