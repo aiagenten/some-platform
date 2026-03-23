@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Instagram, Linkedin, Facebook, ThumbsUp, MessageCircle, Share2, Send, Bookmark, Heart, MoreHorizontal } from 'lucide-react'
-import { getOverlayTemplate } from '@/lib/overlay-templates'
+import { useRef, useEffect, useCallback, useState } from 'react'
+import { ThumbsUp, MessageCircle, Share2, Send, Bookmark, Heart, MoreHorizontal } from 'lucide-react'
+import { getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 
 type Props = {
@@ -19,20 +19,22 @@ type Props = {
   brandLogoUrl?: string | null
 }
 
-const TABS = [
-  { key: 'instagram', label: 'Instagram', icon: Instagram },
-  { key: 'linkedin', label: 'LinkedIn', icon: Linkedin },
-  { key: 'facebook', label: 'Facebook', icon: Facebook },
-]
+const PREVIEW_WIDTH = 540
 
 export default function PlatformPreview({ caption, imageUrl, platform, brandName, brandLogo, overlayId, headline, subtitle, brandColors, brandFonts, brandLogoUrl }: Props) {
-  const [activeTab, setActiveTab] = useState(platform || 'instagram')
   const [overlayDataUrl, setOverlayDataUrl] = useState<string | null>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const truncatedCaption = caption?.length > 300 ? caption.substring(0, 300) + '...' : caption
   const displayName = brandName || 'Brand Name'
   const avatar = brandLogo || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&size=80`
+
+  // Get platform-specific dimensions scaled to preview width
+  const activePlatform = platform || 'instagram'
+  const fullDims = PLATFORM_DIMENSIONS[activePlatform] || PLATFORM_DIMENSIONS.instagram
+  const previewScale = PREVIEW_WIDTH / fullDims.width
+  const previewWidth = PREVIEW_WIDTH
+  const previewHeight = Math.round(fullDims.height * previewScale)
 
   // Render overlay for preview
   const renderPreviewOverlay = useCallback(async () => {
@@ -41,9 +43,8 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const size = 540
-    canvas.width = size
-    canvas.height = size
+    canvas.width = previewWidth
+    canvas.height = previewHeight
 
     const loadImg = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
       const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
@@ -60,7 +61,10 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
       const bodyFont = brandFonts?.find(f => f.role === 'body')?.family || headingFont
 
       const options: OverlayOptions = {
-        size, baseImage, logo,
+        size: previewWidth,
+        width: previewWidth,
+        height: previewHeight,
+        baseImage, logo,
         headline: headline || '',
         subtitle: subtitle || '',
         brandName: displayName,
@@ -70,7 +74,7 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
       await getOverlayTemplate(overlayId).render(ctx, options)
       setOverlayDataUrl(canvas.toDataURL('image/png'))
     } catch { /* fallback to raw image */ }
-  }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName])
+  }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName, previewWidth, previewHeight])
 
   useEffect(() => {
     if (overlayId && imageUrl && brandColors?.length) {
@@ -80,41 +84,27 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
     }
   }, [renderPreviewOverlay, overlayId, imageUrl, brandColors])
 
+  const platformLabel = activePlatform === 'instagram' ? 'Instagram' : activePlatform === 'linkedin' ? 'LinkedIn' : activePlatform === 'facebook' ? 'Facebook' : activePlatform
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
-      <h3 className="font-semibold text-slate-900 mb-4">Plattform-preview</h3>
+      <h3 className="font-semibold text-slate-900 mb-4">
+        {platformLabel}-preview
+      </h3>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-xl">
-        {TABS.map((tab) => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                activeTab === tab.key
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Preview */}
+      {/* Preview — only the selected platform */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-        {activeTab === 'instagram' && (
+        {activePlatform === 'instagram' && (
           <InstagramPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
-        {activeTab === 'linkedin' && (
+        {activePlatform === 'linkedin' && (
           <LinkedInPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
-        {activeTab === 'facebook' && (
+        {activePlatform === 'facebook' && (
           <FacebookPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
+        )}
+        {!['instagram', 'linkedin', 'facebook'].includes(activePlatform) && (
+          <InstagramPreview caption={truncatedCaption} imageUrl={overlayDataUrl || imageUrl} displayName={displayName} avatar={avatar} />
         )}
         <canvas ref={overlayCanvasRef} className="hidden" />
       </div>
@@ -176,7 +166,7 @@ function LinkedInPreview({ caption, imageUrl, displayName, avatar }: { caption: 
       </div>
 
       {imageUrl && (
-        <div className="aspect-video bg-slate-100 relative overflow-hidden">
+        <div className="bg-slate-100 relative overflow-hidden" style={{ aspectRatio: '1200/627' }}>
           <img src={imageUrl} alt="" className="w-full h-full object-cover" />
         </div>
       )}
@@ -225,7 +215,7 @@ function FacebookPreview({ caption, imageUrl, displayName, avatar }: { caption: 
       </div>
 
       {imageUrl && (
-        <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden">
+        <div className="bg-slate-100 relative overflow-hidden" style={{ aspectRatio: '1200/630' }}>
           <img src={imageUrl} alt="" className="w-full h-full object-cover" />
         </div>
       )}

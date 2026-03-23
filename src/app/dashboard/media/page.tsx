@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Image as ImageIcon, Upload, Star, Search, X, Tag, Loader2,
-  HardDrive, Sparkles, FolderOpen, Trash2, Plus
+  HardDrive, Sparkles, FolderOpen, Trash2, Plus, User
 } from 'lucide-react'
 
 type MediaAsset = {
@@ -47,6 +47,7 @@ type CloudFile = {
 const SOURCE_TABS = [
   { value: 'all', label: 'Alle', icon: ImageIcon },
   { value: 'ai_generated', label: 'AI-generert', icon: Sparkles },
+  { value: 'digital-twin', label: 'Digital Twin', icon: User },
   { value: 'upload', label: 'Opplastet', icon: Upload },
   { value: 'google_drive', label: 'Google Drive', icon: HardDrive },
   { value: 'onedrive', label: 'OneDrive', icon: FolderOpen },

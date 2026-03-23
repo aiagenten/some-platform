@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import PlatformPreview from '@/components/PlatformPreview'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History, Trash2 } from 'lucide-react'
-import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History, Trash2, Copy } from 'lucide-react'
+import { OVERLAY_TEMPLATES, getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
@@ -137,6 +137,8 @@ export default function PostDetailPage() {
   const [headlineValue, setHeadlineValue] = useState('')
   const [subtitleValue, setSubtitleValue] = useState('')
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [showCopyMenu, setShowCopyMenu] = useState(false)
+  const [copyLoading, setCopyLoading] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -218,15 +220,15 @@ export default function PostDetailPage() {
     load()
   }, [postId])
 
-  // Overlay rendering for post image
+  // Overlay rendering for post image — uses platform-specific dimensions
   const renderPostOverlay = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas || !post?.content_image_url || brandColors.length === 0) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const size = 1080
-    canvas.width = size
-    canvas.height = size
+    const dims = PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram
+    canvas.width = dims.width
+    canvas.height = dims.height
 
     const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
       const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
@@ -249,7 +251,7 @@ export default function PostDetailPage() {
       })()
       const subtitle = subtitleValue || post.subtitle || ''
 
-      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+      const options: OverlayOptions = { size: dims.width, width: dims.width, height: dims.height, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
 
       // Check if it's a custom template
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
@@ -259,7 +261,7 @@ export default function PostDetailPage() {
         await getOverlayTemplate(selectedOverlay).render(ctx, options)
       }
     } catch (err) { console.error('Overlay error:', err) }
-  }, [post?.content_image_url, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates])
+  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates])
 
   useEffect(() => { renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
@@ -379,6 +381,40 @@ export default function PostDetailPage() {
       }
     } catch { /* ignore */ }
     setDeleteLoading(false)
+  }
+
+  const handleCopyToPlatform = async (targetPlatform: string) => {
+    if (!post || !orgId) return
+    setCopyLoading(true)
+    try {
+      const { data: newPost, error } = await supabase.from('social_posts').insert({
+        org_id: orgId,
+        platform: targetPlatform,
+        format: post.format,
+        status: 'draft',
+        caption: post.caption,
+        content_text: post.content_text,
+        headline: post.headline,
+        subtitle: post.subtitle,
+        content_image_url: post.content_image_url,
+        content_video_url: post.content_video_url,
+        hashtags: post.hashtags,
+        selected_overlay: post.selected_overlay,
+        ai_generated: post.ai_generated,
+        ai_prompt: post.ai_prompt,
+      }).select('id').single()
+
+      if (error) throw error
+      if (newPost) {
+        setShowCopyMenu(false)
+        router.push(`/dashboard/posts/${newPost.id}`)
+      }
+    } catch (err) {
+      console.error('Copy error:', err)
+      alert('Kunne ikke kopiere innlegget')
+    } finally {
+      setCopyLoading(false)
+    }
   }
 
   if (loading) return <div className="text-center py-12 text-slate-400">Laster...</div>
@@ -511,7 +547,7 @@ export default function PostDetailPage() {
               {/* Overlay canvas */}
               {post.content_image_url && (
                 <div className="space-y-3">
-                  <canvas ref={canvasRef} className="w-full rounded-xl shadow-sm border border-slate-200" style={{ aspectRatio: '1/1' }} />
+                  <canvas ref={canvasRef} className="w-full rounded-xl shadow-sm border border-slate-200" style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
 
                   {/* Overlay selector — custom templates first, then standard */}
                   <div className="flex items-center gap-2 flex-wrap">
@@ -673,6 +709,28 @@ export default function PostDetailPage() {
                   <RefreshCw className="w-4 h-4" /> Regenerer
                 </button>
               )}
+
+              {/* Copy to another platform */}
+              <div className="relative">
+                <button onClick={() => setShowCopyMenu(!showCopyMenu)} disabled={copyLoading}
+                  className="w-full bg-slate-50 text-slate-600 py-2.5 rounded-xl font-medium hover:bg-slate-100 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-slate-200">
+                  {copyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />} Kopier til annen plattform
+                </button>
+                {showCopyMenu && (
+                  <div className="absolute z-10 mt-1 w-full bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+                    {[
+                      { key: 'instagram', label: 'Instagram', icon: Instagram },
+                      { key: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+                      { key: 'facebook', label: 'Facebook', icon: Facebook },
+                    ].filter(p => p.key !== post.platform).map(p => (
+                      <button key={p.key} onClick={() => handleCopyToPlatform(p.key)}
+                        className="w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
+                        <p.icon className="w-4 h-4" /> {p.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {(post.status === 'draft' || post.status === 'rejected') && (
                 <>

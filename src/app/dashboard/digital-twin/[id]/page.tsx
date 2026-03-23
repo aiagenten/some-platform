@@ -43,6 +43,7 @@ export default function DigitalTwinDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [imageSize, setImageSize] = useState('landscape_16_9')
+  const [triggerWords, setTriggerWords] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -60,7 +61,10 @@ export default function DigitalTwinDetailPage() {
         .eq('tenant_id', profile.org_id)
         .single()
 
-      if (data) setTwin(data as DigitalTwin)
+      if (data) {
+        setTwin(data as DigitalTwin)
+        setTriggerWords((data as DigitalTwin).trigger_word)
+      }
       setLoading(false)
     }
     load()
@@ -89,8 +93,8 @@ export default function DigitalTwinDetailPage() {
     const finalPrompt = promptText || prompt
     if (!twin || !finalPrompt) return
 
-    // Replace TRIGGER with actual trigger word
-    const resolvedPrompt = finalPrompt.replace(/TRIGGER/g, twin.trigger_word)
+    // Replace TRIGGER with actual trigger word(s)
+    const resolvedPrompt = finalPrompt.replace(/TRIGGER/g, triggerWords || twin.trigger_word)
 
     setGenerating(true)
     setError(null)
@@ -122,7 +126,8 @@ export default function DigitalTwinDetailPage() {
         setGeneratedImages(prev => [...newImages, ...prev])
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt')
+      const msg = err instanceof Error ? err.message : 'Noe gikk galt'
+      setError(`${msg} — prøv igjen!`)
     } finally {
       setGenerating(false)
     }
@@ -222,17 +227,30 @@ export default function DigitalTwinDetailPage() {
                 {PRESET_PROMPTS.map((preset) => (
                   <button
                     key={preset.label}
-                    onClick={() => {
-                      setPrompt(preset.prompt)
-                      handleGenerate(preset.prompt)
-                    }}
+                    onClick={() => setPrompt(preset.prompt)}
                     disabled={generating}
-                    className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-xs font-medium transition-all border border-slate-200 disabled:opacity-50"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border disabled:opacity-50 ${
+                      prompt === preset.prompt
+                        ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
+                        : 'bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 border-slate-200'
+                    }`}
                   >
                     {preset.label}
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Trigger words */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Trigger word(s)</label>
+              <input
+                value={triggerWords}
+                onChange={(e) => setTriggerWords(e.target.value)}
+                placeholder={twin.trigger_word}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all hover:border-slate-300 font-mono"
+              />
+              <p className="text-xs text-slate-400 mt-1">Legg til flere trigger words (f.eks. to personer) separert med komma</p>
             </div>
 
             {/* Custom prompt */}
@@ -245,7 +263,7 @@ export default function DigitalTwinDetailPage() {
                 rows={3}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all hover:border-slate-300 resize-none"
               />
-              <p className="text-xs text-slate-400 mt-1">Bruk <code className="bg-slate-100 px-1 rounded">{twin.trigger_word}</code> i prompten for å referere til personen, eller det legges til automatisk.</p>
+              <p className="text-xs text-slate-400 mt-1">Bruk <code className="bg-slate-100 px-1 rounded">TRIGGER</code> i prompten — erstattes med trigger word(s) automatisk.</p>
             </div>
 
             {/* Image size */}

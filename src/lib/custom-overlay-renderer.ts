@@ -10,6 +10,8 @@ export async function renderCustomOverlay(
   options: OverlayOptions
 ) {
   const { size, baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = options
+  const canvasW = options.width || size
+  const canvasH = options.height || size
 
   // Resolve brand tokens in element fills
   const resolveFill = (fill: string | undefined): string => {
@@ -20,15 +22,16 @@ export async function renderCustomOverlay(
       .replace('{{brandName}}', brandName)
   }
 
-  // Draw base image first (covers full canvas)
+  // Draw base image first (covers full canvas, crop to fit aspect ratio)
+  const canvasRatio = canvasW / canvasH
   const imgRatio = baseImage.width / baseImage.height
   let sx = 0, sy = 0, sw = baseImage.width, sh = baseImage.height
-  if (imgRatio > 1) { sx = (baseImage.width - baseImage.height) / 2; sw = baseImage.height }
-  else if (imgRatio < 1) { sy = (baseImage.height - baseImage.width) / 2; sh = baseImage.width }
-  ctx.drawImage(baseImage, sx, sy, sw, sh, 0, 0, size, size)
+  if (imgRatio > canvasRatio) { sw = baseImage.height * canvasRatio; sx = (baseImage.width - sw) / 2 }
+  else if (imgRatio < canvasRatio) { sh = baseImage.width / canvasRatio; sy = (baseImage.height - sh) / 2 }
+  ctx.drawImage(baseImage, sx, sy, sw, sh, 0, 0, canvasW, canvasH)
 
   // Apply canvas background (over image if not transparent)
-  renderBackground(ctx, template.canvas_background, size)
+  renderBackground(ctx, template.canvas_background, canvasW, canvasH)
 
   // Render each element using Fabric.js left/top as top-left origin
   for (const el of template.elements) {
@@ -71,22 +74,22 @@ export async function renderCustomOverlay(
   }
 }
 
-function renderBackground(ctx: CanvasRenderingContext2D, bg: CanvasBackground, size: number) {
+function renderBackground(ctx: CanvasRenderingContext2D, bg: CanvasBackground, w: number, h: number) {
   if (bg.type === 'transparent') return
 
   if (bg.type === 'solid') {
     ctx.fillStyle = bg.color || '#000000'
     ctx.globalAlpha = bg.opacity ?? 1
-    ctx.fillRect(0, 0, size, size)
+    ctx.fillRect(0, 0, w, h)
     ctx.globalAlpha = 1
   } else if (bg.type === 'gradient' && bg.gradient) {
     const grad = bg.gradient.type === 'linear'
-      ? ctx.createLinearGradient(0, 0, size, size)
-      : ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+      ? ctx.createLinearGradient(0, 0, w, h)
+      : ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 2)
     bg.gradient.colorStops.forEach(stop => grad.addColorStop(stop.offset, stop.color))
     ctx.fillStyle = grad
     ctx.globalAlpha = bg.opacity ?? 1
-    ctx.fillRect(0, 0, size, size)
+    ctx.fillRect(0, 0, w, h)
     ctx.globalAlpha = 1
   }
 }
