@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Image as ImageIcon, Upload, Star, Search, X, Tag, Loader2,
@@ -71,6 +71,8 @@ export default function MediaLibraryPage() {
   const [loadingCloud, setLoadingCloud] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const typeFilter = searchParams.get('type') // 'video' | 'image' | null
   const supabase = createClient()
 
   useEffect(() => {
@@ -244,6 +246,10 @@ export default function MediaLibraryPage() {
 
   // Filter assets by search query
   const filteredAssets = assets.filter(a => {
+    // Filter by type (from URL query param ?type=video or ?type=image)
+    if (typeFilter === 'video' && !a.mime_type?.startsWith('video/')) return false
+    if (typeFilter === 'image' && !a.mime_type?.startsWith('image/')) return false
+
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
     return (a.filename?.toLowerCase().includes(q)) ||
@@ -267,7 +273,9 @@ export default function MediaLibraryPage() {
       </Link>
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Mediebibliotek</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {typeFilter === 'video' ? 'Videoer' : typeFilter === 'image' ? 'Bilder' : 'Mediebibliotek'}
+        </h1>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
