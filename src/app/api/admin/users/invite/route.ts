@@ -106,41 +106,41 @@ export async function POST(request: NextRequest) {
     })
 
     if (linkError) {
-      // If user already exists in auth, try to find/create in public.users
+      // If user already exists in auth, ensure profile exists and send magic link
       if (linkError.message?.includes('already been registered')) {
         const { data: existingUsers } = await supabase.auth.admin.listUsers()
         const existingUser = existingUsers?.users?.find(u => u.email === email)
 
         if (existingUser) {
-          const { data: existingProfile } = await supabase
+          // Ensure public user record exists
+          await supabase
             .from('users')
-            .select('id, org_id')
-            .eq('id', existingUser.id)
-            .single()
-
-          if (existingProfile) {
-            return NextResponse.json({
-              error: 'Brukeren er allerede registrert i systemet',
-              existing_org_id: existingProfile.org_id,
-            }, { status: 409 })
-          }
-
-          // Create public user record
-          const { error: createError } = await supabase
-            .from('users')
-            .insert({
+            .upsert({
               id: existingUser.id,
               email,
               name: name || email.split('@')[0],
               org_id,
               role,
-            })
+            }, { onConflict: 'id' })
 
-          if (createError) {
-            return NextResponse.json({ error: 'Kunne ikke opprette brukerprofil' }, { status: 500 })
+          // Send magic link via Resend so they can log in
+          const { data: magicData, error: magicError } = await supabase.auth.admin.generateLink({
+            type: 'magiclink',
+            email,
+            options: {
+              redirectTo: `${SITE_URL}/auth/callback`,
+            },
+          })
+
+          if (!magicError && magicData?.properties?.action_link) {
+            await sendEmailViaResend(
+              email,
+              `Du er invitert til ${org.name} på SoMe-plattformen`,
+              buildInviteHtml(magicData.properties.action_link, org.name)
+            )
           }
 
-          return NextResponse.json({ success: true, message: 'Bruker lagt til i organisasjon' })
+          return NextResponse.json({ success: true, message: `Invitasjon sendt til ${email}` })
         }
       }
 
