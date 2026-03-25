@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, Image, HardDrive, Bell, Brain } from 'lucide-react'
+import { Users, Image, HardDrive, Bell, Brain, Globe } from 'lucide-react'
 
 const SETTINGS_TABS = [
   { href: '/dashboard/settings', label: 'Kontoer', icon: Users },
@@ -10,6 +10,7 @@ const SETTINGS_TABS = [
   { href: '/dashboard/settings/storage', label: 'Lagring', icon: HardDrive },
   { href: '/dashboard/settings/notifications', label: 'Varslinger', icon: Bell },
   { href: '/dashboard/settings/learnings', label: 'AI-læring', icon: Brain },
+  { href: '/dashboard/settings/website', label: 'Nettside', icon: Globe },
 ]
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
