@@ -20,6 +20,20 @@ async function verifyAdmin() {
   return user
 }
 
+const SITE_URL_RESEND = process.env.NEXT_PUBLIC_SITE_URL || 'https://some.aiagenten.no'
+
+function rewriteSupabaseUrl(supabaseUrl: string): string {
+  try {
+    const url = new URL(supabaseUrl)
+    const token = url.searchParams.get('token')
+    const type = url.searchParams.get('type') || 'invite'
+    if (token) {
+      return `${SITE_URL_RESEND}/api/auth/verify?token=${token}&type=${type}&redirect_to=/auth/callback`
+    }
+  } catch {}
+  return supabaseUrl
+}
+
 async function sendEmailViaResend(to: string, subject: string, html: string) {
   if (!RESEND_API_KEY) return false
 
@@ -107,7 +121,7 @@ export async function POST(request: NextRequest) {
 <p style="color:#52525b;line-height:1.6;margin:0 0 24px">Klikk knappen under for å logge inn på SoMe-plattformen.</p>
 <table cellpadding="0" cellspacing="0" style="margin:0 auto"><tr>
 <td style="background:linear-gradient(135deg,#7c3aed,#3b82f6);border-radius:8px;padding:14px 32px">
-<a href="${magicUrl}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">Logg inn</a>
+<a href="${rewriteSupabaseUrl(magicUrl)}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">Logg inn</a>
 </td></tr></table>
 </td></tr>
 <tr><td style="background:#f4f4f5;padding:20px 32px;text-align:center">
@@ -140,7 +154,7 @@ export async function POST(request: NextRequest) {
 <p style="color:#52525b;line-height:1.6;margin:0 0 24px">Du har blitt invitert til SoMe-plattformen for <strong>${orgName}</strong>. Klikk knappen under for å akseptere invitasjonen.</p>
 <table cellpadding="0" cellspacing="0" style="margin:0 auto"><tr>
 <td style="background:linear-gradient(135deg,#7c3aed,#3b82f6);border-radius:8px;padding:14px 32px">
-<a href="${confirmUrl}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">Aksepter invitasjon</a>
+<a href="${rewriteSupabaseUrl(confirmUrl)}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px">Aksepter invitasjon</a>
 </td></tr></table>
 </td></tr>
 <tr><td style="background:#f4f4f5;padding:20px 32px;text-align:center">

@@ -20,7 +20,21 @@ async function verifyAdmin() {
   return user
 }
 
-function buildInviteHtml(confirmUrl: string, orgName?: string) {
+function rewriteSupabaseUrl(supabaseUrl: string): string {
+  // Convert raw supabase.co verify URLs to our own domain
+  // to avoid Office 365 spam filters quarantining the email
+  try {
+    const url = new URL(supabaseUrl)
+    const token = url.searchParams.get('token')
+    const type = url.searchParams.get('type') || 'invite'
+    if (token) {
+      return `${SITE_URL}/api/auth/verify?token=${token}&type=${type}&redirect_to=/auth/callback`
+    }
+  } catch {}
+  return supabaseUrl
+}
+
+function buildInviteHtml(rewriteSupabaseUrl(confirmUrl): string, orgName?: string) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px"><tr><td align="center">
@@ -136,7 +150,7 @@ export async function POST(request: NextRequest) {
             await sendEmailViaResend(
               email,
               `Du er invitert til ${org.name} på SoMe-plattformen`,
-              buildInviteHtml(magicData.properties.action_link, org.name)
+              buildInviteHtml(rewriteSupabaseUrl(magicData.properties.action_link), org.name)
             )
           }
 
@@ -171,7 +185,7 @@ export async function POST(request: NextRequest) {
       const emailSent = await sendEmailViaResend(
         email,
         `Du er invitert til ${org.name} på SoMe-plattformen`,
-        buildInviteHtml(confirmUrl, org.name)
+        buildInviteHtml(rewriteSupabaseUrl(confirmUrl), org.name)
       )
 
       if (!emailSent) {
