@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Users, Search, Plus, Building2, Mail, Trash2, Edit2, X, ChevronDown } from 'lucide-react'
+import { Users, Search, Plus, Building2, Mail, Trash2, Edit2, X, ChevronDown, RefreshCw } from 'lucide-react'
 
 type OrgInfo = { id: string; name: string; slug: string }
 
@@ -61,6 +61,9 @@ export default function AdminUsersPage() {
   const [newOrgUserName, setNewOrgUserName] = useState('')
   const [createOrgLoading, setCreateOrgLoading] = useState(false)
   const [createOrgError, setCreateOrgError] = useState('')
+
+  // Resend invite
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null)
 
   // Edit role
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -176,6 +179,27 @@ export default function AdminUsersPage() {
     })
     setEditingUserId(null)
     loadData()
+  }
+
+  const handleResendInvite = async (user: UserRow) => {
+    if (!user.email) return
+    setResendingUserId(user.id)
+    try {
+      const res = await fetch('/api/admin/users/resend-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, org_id: user.org_id, role: user.role }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(data.message || 'Invitasjon sendt!')
+      } else {
+        alert(data.error || 'Kunne ikke sende invitasjon')
+      }
+    } catch {
+      alert('Noe gikk galt')
+    }
+    setResendingUserId(null)
   }
 
   const handleDeleteUser = async (userId: string, userEmail: string | null) => {
@@ -310,6 +334,14 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleResendInvite(u)}
+                          disabled={resendingUserId === u.id}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
+                          title="Send invitasjon på nytt"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${resendingUserId === u.id ? 'animate-spin' : ''}`} />
+                        </button>
                         <button
                           onClick={() => { setEditingUserId(u.id); setEditRole(u.role) }}
                           className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
