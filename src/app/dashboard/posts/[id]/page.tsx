@@ -8,6 +8,8 @@ import PlatformPreview from '@/components/PlatformPreview'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History, Trash2, Copy } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
+import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 
@@ -124,6 +126,7 @@ export default function PostDetailPage() {
   const [brandColors, setBrandColors] = useState<Array<{hex: string; role: string}>>([])
   const [brandFonts, setBrandFonts] = useState<Array<{family: string; role: string}>>([])
   const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
+  const [brandVisualStyle, setBrandVisualStyle] = useState<BrandVisualStyle | null>(null)
   const [showSchedule, setShowSchedule] = useState(false)
   const [scheduleDate, setScheduleDate] = useState('')
   const [scheduleTime, setScheduleTime] = useState('09:00')
@@ -153,12 +156,13 @@ export default function PostDetailPage() {
         const { data: org } = await supabase.from('organizations').select('name, logo_url').eq('id', profile.org_id).single()
         if (org) { setOrgName(org.name); setOrgLogo(org.logo_url) }
         // Load brand profile for overlay
-        const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts')
+        const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts, visual_style')
           .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(1).single()
         if (bp) {
           setBrandColors(bp.colors || [])
           setBrandFonts(bp.fonts || [])
           setBrandLogoUrl(bp.logo_url)
+          setBrandVisualStyle(bp.visual_style as BrandVisualStyle | null)
         }
       }
 
@@ -254,7 +258,8 @@ export default function PostDetailPage() {
       })()
       const subtitle = subtitleValue || post.subtitle || ''
 
-      const options: OverlayOptions = { size: dims.width, width: dims.width, height: dims.height, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+      const resolvedStyle = resolveOverlayStyle(brandVisualStyle)
+      const options: OverlayOptions = { size: dims.width, width: dims.width, height: dims.height, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle }
 
       // Check if it's a custom template
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
@@ -287,7 +292,7 @@ export default function PostDetailPage() {
       console.error('Overlay render error:', err)
       setOverlayRendered(false)
     }
-  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates, orgId])
+  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates, orgId])
 
   useEffect(() => { setOverlayRendered(false); renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 

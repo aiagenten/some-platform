@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar, XCircle, Target, MessageSquare } from 'lucide-react'
 import { getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
+import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 
@@ -59,11 +61,12 @@ function parseScheduledFromSuggested(timeStr: string): string | null {
 }
 
 // Full overlay preview rendered on canvas
-function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates }: {
+function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, customTemplates }: {
   post: Post
   brandColors: Array<{ hex: string; role: string }>
   brandFonts: Array<{ family: string; role: string }>
   brandLogoUrl: string | null
+  brandVisualStyle?: BrandVisualStyle | null
   orgName: string
   customTemplates: CustomOverlayTemplate[]
 }) {
@@ -99,7 +102,8 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, orgNa
       })()
       const subtitle = post.subtitle || ''
 
-      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont }
+      const resolvedStyle = resolveOverlayStyle(brandVisualStyle)
+      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle }
 
       const overlayId = post.selected_overlay || 'modern-dark'
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
@@ -112,7 +116,7 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, orgNa
     } catch {
       setRendered(false)
     }
-  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, brandColors, brandFonts, brandLogoUrl, orgName, customTemplates])
+  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, customTemplates])
 
   useEffect(() => { render() }, [render])
 
@@ -143,6 +147,7 @@ export default function ApprovalPage() {
   const [brandColors, setBrandColors] = useState<Array<{ hex: string; role: string }>>([])
   const [brandFonts, setBrandFonts] = useState<Array<{ family: string; role: string }>>([])
   const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
+  const [brandVisualStyle, setBrandVisualStyle] = useState<BrandVisualStyle | null>(null)
   const [orgName, setOrgName] = useState('')
   const [customTemplates, setCustomTemplates] = useState<CustomOverlayTemplate[]>([])
   const [rejectingId, setRejectingId] = useState<string | null>(null)
@@ -162,12 +167,13 @@ export default function ApprovalPage() {
     const { data: org } = await supabase.from('organizations').select('name, logo_url').eq('id', profile.org_id).single()
     if (org) setOrgName(org.name)
 
-    const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts')
+    const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts, visual_style')
       .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(1).single()
     if (bp) {
       setBrandColors(bp.colors || [])
       setBrandFonts(bp.fonts || [])
       setBrandLogoUrl(bp.logo_url)
+      setBrandVisualStyle(bp.visual_style as BrandVisualStyle | null)
     }
 
     try {
@@ -363,6 +369,7 @@ export default function ApprovalPage() {
                       brandColors={brandColors}
                       brandFonts={brandFonts}
                       brandLogoUrl={brandLogoUrl}
+                      brandVisualStyle={brandVisualStyle}
                       orgName={orgName}
                       customTemplates={customTemplates}
                     />

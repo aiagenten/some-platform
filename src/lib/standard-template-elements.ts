@@ -2,16 +2,38 @@
 // so they can be loaded into the drag-and-drop editor for forking/editing
 
 import type { OverlayElement, CanvasBackground } from './custom-overlay-types'
+import type { ResolvedOverlayStyle } from './overlay-style-resolver'
 
 type StandardTemplateData = {
   elements: OverlayElement[]
   canvas_background: CanvasBackground
 }
 
-export function getStandardTemplateElements(templateId: string): StandardTemplateData {
+/** Apply resolved visual style to standard template elements */
+function applyVisualStyle(data: StandardTemplateData, style?: ResolvedOverlayStyle | null): StandardTemplateData {
+  if (!style) return data
+  return {
+    canvas_background: data.canvas_background,
+    elements: data.elements.map(el => {
+      const patched = { ...el }
+      // Add border radius to color blocks and shapes
+      if ((el.type === 'color-block' || el.type === 'shape') && style.useRoundedElements) {
+        patched.rx = style.colorBlockBorderRadius
+        patched.ry = style.colorBlockBorderRadius
+      }
+      // Add shadow to elements when enabled
+      if (style.shadowEnabled && (el.type === 'color-block' || el.type === 'text')) {
+        patched.stroke = undefined // ensure no conflict
+      }
+      return patched
+    }),
+  }
+}
+
+export function getStandardTemplateElements(templateId: string, visualStyle?: ResolvedOverlayStyle | null): StandardTemplateData {
   const uid = () => crypto.randomUUID()
 
-  switch (templateId) {
+  const result = (() => { switch (templateId) {
     case 'modern-dark':
       return {
         canvas_background: { type: 'solid', color: 'rgba(0,0,0,0.55)' },
@@ -79,4 +101,6 @@ export function getStandardTemplateElements(templateId: string): StandardTemplat
     default:
       return { elements: [], canvas_background: { type: 'transparent' } }
   }
+  })()
+  return applyVisualStyle(result as StandardTemplateData, visualStyle)
 }

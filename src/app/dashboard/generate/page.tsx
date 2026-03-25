@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User, Upload, Film } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
+import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
+import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 
@@ -69,6 +71,7 @@ type BrandProfile = {
   fonts: BrandFont[]
   name?: string
   tagline?: string
+  visual_style?: Record<string, unknown> | null
 }
 
 type MediaAsset = {
@@ -151,7 +154,7 @@ export default function GeneratePage() {
         // Load brand profile
         const { data: bp } = await supabase
           .from('brand_profiles')
-          .select('logo_url, colors, fonts, tagline')
+          .select('logo_url, colors, fonts, tagline, visual_style')
           .eq('org_id', profile.org_id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -282,6 +285,7 @@ export default function GeneratePage() {
       const headingFont = brand.fonts.find(f => f.role === 'heading')?.family || 'Inter'
       const bodyFont = brand.fonts.find(f => f.role === 'body')?.family || headingFont
 
+      const resolvedStyle = resolveOverlayStyle(brand.visual_style as BrandVisualStyle | null)
       const options: OverlayOptions = {
         size,
         baseImage,
@@ -293,6 +297,7 @@ export default function GeneratePage() {
         accentColor,
         headingFont,
         bodyFont,
+        visualStyle: resolvedStyle,
       }
 
       // Check if it's a custom template
