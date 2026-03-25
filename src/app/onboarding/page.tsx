@@ -36,6 +36,20 @@ type BrandProfile = {
   dont_list: string[]
   key_messages: string[]
   industry: string
+  visual_style?: {
+    border_radius?: string
+    button_style?: { border_radius: string; has_shadow: boolean; has_gradient: boolean; is_outlined: boolean; typical_padding: string }
+    card_style?: { border_radius: string; has_shadow: boolean; has_border: boolean; background: string }
+    spacing_feel?: string
+    visual_weight?: string
+    layout_style?: string
+    hero_pattern?: string
+    signature_elements?: string[]
+    color_usage?: { primary_usage: string; accent_usage: string; background_style: string }
+    typography_feel?: string
+    overall_vibe?: string
+  }
+  website_screenshot_url?: string | null
 }
 
 const COLOR_ROLES: { value: ColorRole; label: string; description: string }[] = [
@@ -253,6 +267,9 @@ function OnboardingPage() {
 
   // Content goals state (posts per week per platform)
   const [contentGoals, setContentGoals] = useState<Record<string, number>>({})
+
+  // Visual capture state
+  const [visualCapturing, setVisualCapturing] = useState(false)
 
   // Post image color extraction state
   const [postImageColors, setPostImageColors] = useState<string[]>([])
@@ -691,6 +708,22 @@ function OnboardingPage() {
           last_scraped_at: new Date().toISOString(),
         }, { onConflict: 'org_id' })
         await saveOnboardingStep(supabase, orgId, 4)
+
+        // Fire visual capture in parallel (non-blocking bonus feature)
+        setVisualCapturing(true)
+        fetch('/api/brand/visual-capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: websiteUrl, org_id: orgId }),
+        })
+          .then(r => r.json())
+          .then(vc => {
+            if (vc.visual_style) {
+              setBrandProfile(prev => prev ? { ...prev, visual_style: vc.visual_style, website_screenshot_url: vc.screenshot_url } : prev)
+            }
+          })
+          .catch(err => console.warn('Visual capture failed (non-critical):', err))
+          .finally(() => setVisualCapturing(false))
       }
       setStep(4)
     } catch {
@@ -1975,6 +2008,62 @@ function OnboardingPage() {
                 </div>
               </div>
             </div>
+
+            {/* Section: Visuell Stil */}
+            {(brandProfile.visual_style || visualCapturing) && (
+              <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <Palette className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-semibold text-slate-900">Visuell Stil</h3>
+                  {visualCapturing && (
+                    <span className="text-xs text-indigo-500 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      📸 Analyserer visuell stil...
+                    </span>
+                  )}
+                </div>
+                {brandProfile.visual_style && (
+                  <>
+                    {/* Screenshot thumbnail */}
+                    {brandProfile.website_screenshot_url && (
+                      <img
+                        src={brandProfile.website_screenshot_url}
+                        alt="Nettside"
+                        className="w-full rounded-xl border border-slate-200 mb-4 max-h-48 object-cover object-top"
+                      />
+                    )}
+                    {/* Design tags */}
+                    {brandProfile.visual_style.signature_elements && brandProfile.visual_style.signature_elements.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {brandProfile.visual_style.signature_elements.map((el, i) => (
+                          <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-100 rounded-lg px-3 py-1.5">
+                            {el}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Key metrics */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {brandProfile.visual_style.layout_style && (
+                        <div><span className="text-slate-500">Layout:</span> <span className="font-medium">{brandProfile.visual_style.layout_style}</span></div>
+                      )}
+                      {brandProfile.visual_style.button_style?.border_radius && (
+                        <div><span className="text-slate-500">Knapper:</span> <span className="font-medium">{brandProfile.visual_style.button_style.border_radius}</span></div>
+                      )}
+                      {brandProfile.visual_style.spacing_feel && (
+                        <div><span className="text-slate-500">Spacing:</span> <span className="font-medium">{brandProfile.visual_style.spacing_feel}</span></div>
+                      )}
+                      {brandProfile.visual_style.typography_feel && (
+                        <div><span className="text-slate-500">Typografi:</span> <span className="font-medium">{brandProfile.visual_style.typography_feel}</span></div>
+                      )}
+                    </div>
+                    {brandProfile.visual_style.overall_vibe && (
+                      <p className="text-sm text-slate-600 mt-3 italic">{brandProfile.visual_style.overall_vibe}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Section 2: Description & Tagline */}
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6 shadow-sm">
