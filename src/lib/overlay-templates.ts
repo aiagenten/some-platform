@@ -24,6 +24,7 @@ export type OverlayOptions = {
   headingFont: string
   bodyFont: string
   visualStyle?: ResolvedOverlayStyle
+  ctaText?: string
 }
 
 // Platform dimensions (full resolution)
@@ -31,6 +32,13 @@ export const PLATFORM_DIMENSIONS: Record<string, { width: number; height: number
   instagram: { width: 1080, height: 1080 },
   linkedin: { width: 1200, height: 627 },
   facebook: { width: 1200, height: 630 },
+}
+
+export const ASPECT_RATIO_DIMENSIONS: Record<string, { width: number; height: number; label: string }> = {
+  '1:1': { width: 1080, height: 1080, label: 'Kvadrat (1:1)' },
+  '16:9': { width: 1200, height: 675, label: 'Landskap (16:9)' },
+  '9:16': { width: 1080, height: 1920, label: 'Portrett (9:16)' },
+  '4:5': { width: 1080, height: 1350, label: 'Portrett (4:5)' },
 }
 
 /** Get effective width/height from options, falling back to size for backwards compat */
@@ -89,7 +97,7 @@ const FALLBACK_STYLE: ResolvedOverlayStyle = {
   shadowOffsetX: 0, shadowOffsetY: 2, overlayOpacity: 0.55, spacingMultiplier: 1.0,
   colorBlockHasGradient: false, colorBlockBorderRadius: 0, accentLineThickness: 5,
   accentLineRounded: false, textShadowEnabled: false, textShadowBlur: 0,
-  useRoundedElements: false, isMinimal: false, isBold: false,
+  useRoundedElements: false, isMinimal: false, isBold: false, buttonIsOutlined: false,
 }
 
 function getStyle(opts: OverlayOptions): ResolvedOverlayStyle {
@@ -132,6 +140,62 @@ function resetShadow(ctx: CanvasRenderingContext2D) {
 /** Scale a padding/spacing value by the style's spacing multiplier */
 function sp(base: number, s: ResolvedOverlayStyle): number {
   return Math.round(base * s.spacingMultiplier)
+}
+
+/** Draw a CTA button. Returns the button height (0 if no text). */
+function drawCTAButton(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number, y: number,
+  scale: number,
+  style: ResolvedOverlayStyle,
+  accentColor: string,
+  bodyFont: string,
+  variant: 'filled' | 'outlined' = 'filled'
+): number {
+  if (!text) return 0
+
+  const fontSize = Math.round(22 * scale)
+  const paddingX = Math.round(32 * scale)
+  const paddingY = Math.round(14 * scale)
+
+  ctx.font = `600 ${fontSize}px '${bodyFont}', sans-serif`
+  const textWidth = ctx.measureText(text).width
+  const btnWidth = textWidth + paddingX * 2
+  const btnHeight = fontSize + paddingY * 2
+
+  // Use brand's border radius
+  const radius = Math.min(style.borderRadius, btnHeight / 2)
+
+  // Shadow if brand uses it
+  applyShadow(ctx, style)
+
+  if (variant === 'filled') {
+    ctx.fillStyle = accentColor
+    fillRoundRect(ctx, x, y, btnWidth, btnHeight, radius)
+    resetShadow(ctx)
+    // Text in white
+    ctx.fillStyle = '#ffffff'
+  } else {
+    // Outlined variant
+    ctx.strokeStyle = accentColor
+    ctx.lineWidth = Math.round(2 * scale)
+    ctx.beginPath()
+    ctx.roundRect(x, y, btnWidth, btnHeight, radius)
+    ctx.stroke()
+    resetShadow(ctx)
+    // Text in accent color
+    ctx.fillStyle = accentColor
+  }
+
+  ctx.font = `600 ${fontSize}px '${bodyFont}', sans-serif`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  ctx.fillText(text, x + btnWidth / 2, y + btnHeight / 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+
+  return btnHeight
 }
 
 // ============================================
@@ -197,6 +261,7 @@ const modernDark: OverlayTemplate = {
       resetShadow(ctx)
 
       // Subtitle
+      let subtitleBottomY = accentY + sp(Math.round(30 * scale), s)
       if (subtitle) {
         ctx.font = `400 ${Math.round(28 * scale)}px '${bodyFont}', sans-serif`
         ctx.fillStyle = 'rgba(255,255,255,0.75)'
@@ -205,7 +270,15 @@ const modernDark: OverlayTemplate = {
         subLines.slice(0, 2).forEach((line, i) => {
           ctx.fillText(line, pad, accentY + sp(Math.round(30 * scale), s) + i * sp(Math.round(36 * scale), s))
         })
+        subtitleBottomY = accentY + sp(Math.round(30 * scale), s) + Math.min(subLines.length, 2) * sp(Math.round(36 * scale), s)
         resetShadow(ctx)
+      }
+
+      // CTA button
+      if (opts.ctaText) {
+        const ctaY = subtitleBottomY + sp(Math.round(24 * scale), s)
+        const variant = s.buttonIsOutlined ? 'outlined' : 'filled'
+        drawCTAButton(ctx, opts.ctaText, pad, ctaY, scale, s, accentColor, bodyFont, variant)
       }
     }
 
@@ -271,6 +344,13 @@ const gradientBanner: OverlayTemplate = {
       applyTextShadow(ctx, s)
       ctx.fillText(subtitle, pad, h - pad - sp(Math.round(40 * scale), s))
       resetShadow(ctx)
+    }
+
+    // CTA button
+    if (opts.ctaText) {
+      const ctaY = h - pad - sp(Math.round(30 * scale), s)
+      const variant = s.buttonIsOutlined ? 'outlined' : 'filled'
+      drawCTAButton(ctx, opts.ctaText, pad, ctaY, scale, s, accentColor, bodyFont, variant)
     }
 
     // Brand name bottom-right
@@ -537,6 +617,14 @@ const boldBlock: OverlayTemplate = {
       applyTextShadow(ctx, s)
       ctx.fillText(subtitle, pad, contentY)
       resetShadow(ctx)
+      contentY += sp(Math.round(36 * scale), s)
+    }
+
+    // CTA button
+    if (opts.ctaText) {
+      const ctaY = contentY + sp(Math.round(16 * scale), s)
+      const variant = s.buttonIsOutlined ? 'outlined' : 'filled'
+      drawCTAButton(ctx, opts.ctaText, pad, ctaY, scale, s, accentColor, bodyFont, variant)
     }
 
     // Bottom accent

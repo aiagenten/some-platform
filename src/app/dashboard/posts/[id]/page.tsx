@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import PlatformPreview from '@/components/PlatformPreview'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, RefreshCw, Send, Loader2, Clock, AlertCircle, Check, X as XIcon, Pencil, Sparkles, Layout, Download, Calendar, History, Trash2, Copy } from 'lucide-react'
-import { OVERLAY_TEMPLATES, getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
+import { OVERLAY_TEMPLATES, getOverlayTemplate, PLATFORM_DIMENSIONS, ASPECT_RATIO_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
 import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
@@ -36,6 +36,8 @@ type Post = {
   updated_at: string
   headline: string | null
   subtitle: string | null
+  cta_text: string | null
+  aspect_ratio: string | null
   selected_overlay: string | null
   suggested_time: string | null
 }
@@ -139,6 +141,9 @@ export default function PostDetailPage() {
   const [editingSubtitle, setEditingSubtitle] = useState(false)
   const [headlineValue, setHeadlineValue] = useState('')
   const [subtitleValue, setSubtitleValue] = useState('')
+  const [ctaValue, setCtaValue] = useState('')
+  const [editingCTA, setEditingCTA] = useState(false)
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [showCopyMenu, setShowCopyMenu] = useState(false)
   const [copyLoading, setCopyLoading] = useState(false)
@@ -192,6 +197,8 @@ export default function PostDetailPage() {
         // Pre-fill headline/subtitle for inline editing
         if (postData.headline) setHeadlineValue(postData.headline)
         if (postData.subtitle) setSubtitleValue(postData.subtitle)
+        if (postData.cta_text) setCtaValue(postData.cta_text)
+        if (postData.aspect_ratio) setSelectedAspectRatio(postData.aspect_ratio)
         // Pre-fill schedule from scheduled_for or suggested_time
         if (postData.scheduled_for) {
           const d = new Date(postData.scheduled_for)
@@ -233,7 +240,9 @@ export default function PostDetailPage() {
     if (selectedOverlay.startsWith('custom-') && customTemplates.length === 0) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const dims = PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram
+    const dims = selectedAspectRatio !== '1:1'
+      ? ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']
+      : (post.aspect_ratio && ASPECT_RATIO_DIMENSIONS[post.aspect_ratio]) || PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram
     canvas.width = dims.width
     canvas.height = dims.height
 
@@ -259,7 +268,7 @@ export default function PostDetailPage() {
       const subtitle = subtitleValue || post.subtitle || ''
 
       const resolvedStyle = resolveOverlayStyle(brandVisualStyle)
-      const options: OverlayOptions = { size: dims.width, width: dims.width, height: dims.height, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle }
+      const options: OverlayOptions = { size: dims.width, width: dims.width, height: dims.height, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle, ctaText: ctaValue || post.cta_text || '' }
 
       // Check if it's a custom template
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
@@ -292,7 +301,7 @@ export default function PostDetailPage() {
       console.error('Overlay render error:', err)
       setOverlayRendered(false)
     }
-  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, customTemplates, orgId])
+  }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, ctaValue, post?.cta_text, selectedAspectRatio, post?.aspect_ratio, customTemplates, orgId])
 
   useEffect(() => { setOverlayRendered(false); renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
 
@@ -372,12 +381,20 @@ export default function PostDetailPage() {
     setActionLoading(false)
   }
 
-  const saveHeadlineSubtitle = async (field: 'headline' | 'subtitle', value: string) => {
+  const saveHeadlineSubtitle = async (field: 'headline' | 'subtitle' | 'cta_text', value: string) => {
     if (!post) return
     await supabase.from('social_posts').update({ [field]: value }).eq('id', post.id)
     setPost({ ...post, [field]: value })
     if (field === 'headline') setEditingHeadline(false)
-    else setEditingSubtitle(false)
+    else if (field === 'subtitle') setEditingSubtitle(false)
+    else if (field === 'cta_text') setEditingCTA(false)
+  }
+
+  const saveAspectRatio = async (ratio: string) => {
+    setSelectedAspectRatio(ratio)
+    if (!post) return
+    await supabase.from('social_posts').update({ aspect_ratio: ratio }).eq('id', post.id)
+    setPost({ ...post, aspect_ratio: ratio })
   }
 
   const [overlaySaved, setOverlaySaved] = useState(false)
@@ -553,6 +570,50 @@ export default function PostDetailPage() {
                   </button>
                 )}
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-1 block">CTA-knapp (overlay)</label>
+                {editingCTA ? (
+                  <div className="flex gap-2">
+                    <input type="text" value={ctaValue} onChange={e => setCtaValue(e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="F.eks. 'Les mer', 'Bestill nå'"
+                      autoFocus onKeyDown={e => { if (e.key === 'Enter') saveHeadlineSubtitle('cta_text', ctaValue); if (e.key === 'Escape') setEditingCTA(false) }} />
+                    <button onClick={() => saveHeadlineSubtitle('cta_text', ctaValue)} className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs hover:bg-indigo-100"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEditingCTA(false)} className="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-xs hover:bg-slate-100"><XIcon className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setCtaValue(post.cta_text || ''); setEditingCTA(true) }}
+                    className="text-sm text-slate-800 hover:bg-slate-50 px-3 py-1.5 rounded-lg w-full text-left flex items-center gap-2 transition-colors border border-transparent hover:border-slate-200">
+                    {post.cta_text || <span className="text-slate-400 italic">Klikk for å legge til CTA-knapp</span>}
+                    <Pencil className="w-3 h-3 text-slate-400 ml-auto flex-shrink-0" />
+                  </button>
+                )}
+              </div>
+
+              {/* Aspect Ratio */}
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-1 block">Format (aspect ratio)</label>
+                <div className="flex gap-2">
+                  {Object.entries(ASPECT_RATIO_DIMENSIONS).map(([key, dim]) => (
+                    <button
+                      key={key}
+                      onClick={() => saveAspectRatio(key)}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${
+                        selectedAspectRatio === key
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <div className={`border border-current rounded-sm ${
+                          key === '1:1' ? 'w-4 h-4' : key === '16:9' ? 'w-6 h-3' : key === '9:16' ? 'w-3 h-6' : 'w-4 h-5'
+                        }`} />
+                        <span className="text-[10px]">{dim.label}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {post.ai_generated && (
@@ -578,9 +639,9 @@ export default function PostDetailPage() {
               {/* Overlay canvas */}
               {post.content_image_url && (
                 <div className="space-y-3">
-                  <canvas ref={canvasRef} className={`w-full rounded-xl shadow-sm border border-slate-200 ${!overlayRendered ? 'hidden' : ''}`} style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
+                  <canvas ref={canvasRef} className={`w-full rounded-xl shadow-sm border border-slate-200 ${!overlayRendered ? 'hidden' : ''}`} style={{ aspectRatio: `${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).width}/${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).height}` }} />
                   {!overlayRendered && post.content_image_url && (
-                    <img src={post.content_image_url} alt="Post" className="w-full rounded-xl shadow-sm border border-slate-200 object-cover" style={{ aspectRatio: `${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).width}/${(PLATFORM_DIMENSIONS[post.platform] || PLATFORM_DIMENSIONS.instagram).height}` }} />
+                    <img src={post.content_image_url} alt="Post" className="w-full rounded-xl shadow-sm border border-slate-200 object-cover" style={{ aspectRatio: `${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).width}/${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).height}` }} />
                   )}
 
                   {/* Overlay selector — custom templates first, then standard */}

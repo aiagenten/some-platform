@@ -132,6 +132,7 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
     let imageSuggestion: string | null = null
     let generatedHeadline: string | null = null
     let generatedSubtitle: string | null = null
+    let generatedCTA: string | null = null
 
     if (!regenerate_image) {
       const platformRules: Record<string, string> = {
@@ -172,6 +173,7 @@ Returner dette JSON-formatet:
   "text": "Selve post-teksten klar til posting. Ingen hashtags her.",
   "headline": "Kort, fengende overskrift for bildet (maks 6-8 ord). Skal oppsummere kjernebudskapet.",
   "subtitle": "Én kort setning som utdyper overskriften (maks 15 ord).",
+  "cta_text": "Kort CTA-tekst for knapp (2-4 ord, f.eks. 'Les mer', 'Bestill nå', 'Se tilbudet'). Tilpass til innholdet.",
   "hashtags": ["#hashtag1", "#hashtag2"],
   "best_time": "Tirsdag-torsdag kl 08-10 eller 17-19",
   "image_suggestion": "Kort beskrivelse av hvilket bilde som vil fungere godt"
@@ -253,6 +255,7 @@ Returner dette JSON-formatet:
             imageSuggestion = (parsed.image_suggestion as string) || null
             generatedHeadline = (parsed.headline as string) || null
             generatedSubtitle = (parsed.subtitle as string) || null
+            generatedCTA = (parsed.cta_text as string) || null
           } else {
             generatedText = extractCaption(fullText)
             generatedCaption = generatedText
@@ -490,6 +493,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           caption: generatedCaption,
           headline: generatedHeadline,
           subtitle: generatedSubtitle,
+          cta_text: generatedCTA,
           hashtags: generatedHashtags,
           image_url: null,
           image_error: null,
@@ -526,6 +530,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         updates.hashtags = generatedHashtags
         updates.headline = generatedHeadline
         updates.subtitle = generatedSubtitle
+        updates.cta_text = generatedCTA
         updates.suggested_time = suggestedTime
         if (scheduledFor) updates.scheduled_for = scheduledFor
       }
@@ -562,6 +567,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           content_image_url: imageUrl,
           headline: generatedHeadline,
           subtitle: generatedSubtitle,
+          cta_text: generatedCTA,
           suggested_time: suggestedTime,
           scheduled_for: scheduledFor,
           selected_overlay: selected_overlay || null,
@@ -618,6 +624,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         caption: generatedCaption,
         headline: generatedHeadline,
         subtitle: generatedSubtitle,
+        cta_text: generatedCTA,
         hashtags: generatedHashtags,
         image_url: imageUrl,
         image_error: imageError,

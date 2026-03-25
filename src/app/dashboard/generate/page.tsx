@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User, Upload, Film } from 'lucide-react'
-import { OVERLAY_TEMPLATES, getOverlayTemplate } from '@/lib/overlay-templates'
+import { OVERLAY_TEMPLATES, getOverlayTemplate, ASPECT_RATIO_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
 import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
@@ -41,6 +41,7 @@ type GeneratedContent = {
   caption: string | null
   headline: string | null
   subtitle: string | null
+  cta_text: string | null
   hashtags: string[]
   image_url: string | null
   image_error: string | null
@@ -134,6 +135,8 @@ export default function GeneratePage() {
   const [manualCaption, setManualCaption] = useState('')
   const [manualHeadline, setManualHeadline] = useState('')
   const [manualSubtitle, setManualSubtitle] = useState('')
+  const [manualCTA, setManualCTA] = useState('')
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   const [dragOver, setDragOver] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -259,9 +262,9 @@ export default function GeneratePage() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const size = 1080
-    canvas.width = size
-    canvas.height = size
+    const dims = ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']
+    canvas.width = dims.width
+    canvas.height = dims.height
 
     const loadImage = (src: string): Promise<HTMLImageElement> => {
       return new Promise((resolve, reject) => {
@@ -287,7 +290,9 @@ export default function GeneratePage() {
 
       const resolvedStyle = resolveOverlayStyle(brand.visual_style as BrandVisualStyle | null)
       const options: OverlayOptions = {
-        size,
+        size: dims.width,
+        width: dims.width,
+        height: dims.height,
         baseImage,
         logo,
         headline: getHeadline(),
@@ -298,6 +303,7 @@ export default function GeneratePage() {
         headingFont,
         bodyFont,
         visualStyle: resolvedStyle,
+        ctaText: manualCTA || generated?.cta_text || '',
       }
 
       // Check if it's a custom template
@@ -311,7 +317,7 @@ export default function GeneratePage() {
     } catch (err) {
       console.error('Overlay render error:', err)
     }
-  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle, selectedOverlay, customTemplates])
+  }, [generated?.image_url, brand, orgName, getHeadline, getSubtitle, selectedOverlay, customTemplates, selectedAspectRatio, manualCTA, generated?.cta_text])
 
   // Re-render overlay when image, brand, or template changes
   useEffect(() => {
@@ -415,6 +421,7 @@ export default function GeneratePage() {
           caption: regenerateText ? data.generated.caption : (prev?.caption || null),
           headline: regenerateText ? data.generated.headline : (prev?.headline || null),
           subtitle: regenerateText ? data.generated.subtitle : (prev?.subtitle || null),
+          cta_text: regenerateText ? (data.generated.cta_text || null) : (prev?.cta_text || null),
           hashtags: regenerateText ? data.generated.hashtags : (prev?.hashtags || []),
           image_url: regenerateImage ? data.generated.image_url : (prev?.image_url || null),
           image_error: regenerateImage ? (data.generated.image_error || null) : (prev?.image_error || null),
@@ -509,6 +516,8 @@ export default function GeneratePage() {
         caption: manualCaption || '',
         headline: manualHeadline || null,
         subtitle: manualSubtitle || null,
+        cta_text: manualCTA || null,
+        aspect_ratio: selectedAspectRatio,
         status: 'pending_approval',
         ai_generated: false,
         media_type: uploadType,
@@ -533,6 +542,7 @@ export default function GeneratePage() {
           caption: manualCaption,
           headline: manualHeadline || null,
           subtitle: manualSubtitle || null,
+          cta_text: manualCTA || null,
           hashtags: [],
           image_url: uploadType === 'image' ? uploadedUrl : null,
           image_error: null,
@@ -574,6 +584,7 @@ export default function GeneratePage() {
         setManualCaption(data.generated.caption || data.generated.text || '')
         if (data.generated.headline) setManualHeadline(data.generated.headline)
         if (data.generated.subtitle) setManualSubtitle(data.generated.subtitle)
+        if (data.generated.cta_text) setManualCTA(data.generated.cta_text)
       }
     } catch {
       setError('Nettverksfeil ved AI-tekstgenerering.')
@@ -660,6 +671,28 @@ export default function GeneratePage() {
                     }`}
                   >
                     {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Aspect Ratio */}
+              <div className="flex gap-2 mt-3">
+                {Object.entries(ASPECT_RATIO_DIMENSIONS).map(([key, dim]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedAspectRatio(key)}
+                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
+                      selectedAspectRatio === key
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={`border border-current rounded-sm ${
+                        key === '1:1' ? 'w-5 h-5' : key === '16:9' ? 'w-7 h-4' : key === '9:16' ? 'w-4 h-7' : 'w-5 h-6'
+                      }`} />
+                      <span className="text-xs">{dim.label}</span>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -775,6 +808,16 @@ export default function GeneratePage() {
                             value={manualSubtitle}
                             onChange={(e) => setManualSubtitle(e.target.value)}
                             placeholder="Undertekst på bildet..."
+                            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">CTA-knapp</label>
+                          <input
+                            type="text"
+                            value={manualCTA}
+                            onChange={(e) => setManualCTA(e.target.value)}
+                            placeholder="F.eks. 'Les mer', 'Bestill nå'"
                             className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                           />
                         </div>
@@ -1154,7 +1197,7 @@ export default function GeneratePage() {
                     <canvas
                       ref={canvasRef}
                       className="w-full rounded-xl shadow-sm border border-slate-200"
-                      style={{ aspectRatio: '1/1' }}
+                      style={{ aspectRatio: `${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).width}/${(ASPECT_RATIO_DIMENSIONS[selectedAspectRatio] || ASPECT_RATIO_DIMENSIONS['1:1']).height}` }}
                     />
 
                     {/* Overlay template selector */}

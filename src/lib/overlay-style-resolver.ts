@@ -57,6 +57,8 @@ export type ResolvedOverlayStyle = {
   // Overall feel
   isMinimal: boolean
   isBold: boolean
+  // Button style
+  buttonIsOutlined: boolean
 }
 
 /** Default style — matches the original hardcoded values exactly */
@@ -78,6 +80,7 @@ const DEFAULT_STYLE: ResolvedOverlayStyle = {
   useRoundedElements: false,
   isMinimal: false,
   isBold: false,
+  buttonIsOutlined: false,
 }
 
 function parseBorderRadius(br?: string): { radius: number; rounded: boolean } {
@@ -123,6 +126,9 @@ export function resolveOverlayStyle(visualStyle?: BrandVisualStyle | null): Reso
     style.textShadowEnabled = true
     style.textShadowBlur = 4
   }
+
+  // --- Button outlined ---
+  style.buttonIsOutlined = visualStyle.button_style?.is_outlined ?? false
 
   // --- Gradient ---
   style.colorBlockHasGradient = visualStyle.button_style?.has_gradient ?? false
