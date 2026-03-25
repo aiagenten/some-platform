@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight, Palette, Share2 } from 'lucide-react'
+import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight } from 'lucide-react'
 
 type OnboardingStatus = {
   hasBrand: boolean
@@ -75,50 +75,23 @@ export default function DashboardPage() {
       </div>
 
       {/* Onboarding banner */}
-      {onboarding && (!onboarding.hasBrand || !onboarding.hasSocial) && (
+      {onboarding && !onboarding.hasBrand && (
         <div className="mb-6 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex items-start gap-4">
+          <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
               <Rocket className="w-6 h-6" />
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-bold mb-1">Kom i gang med SoMe-plattformen!</h2>
-              <p className="text-white/80 text-sm mb-4">Fullfør oppsett for å begynne å lage innhold automatisk.</p>
-              
-              <div className="space-y-2">
-                {!onboarding.hasBrand && (
-                  <button
-                    onClick={() => router.push('/onboarding')}
-                    className="flex items-center gap-3 w-full bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-all duration-200 cursor-pointer group"
-                  >
-                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                      <Palette className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="font-semibold text-sm">Sett opp merkevaren din</p>
-                      <p className="text-xs text-white/60">Logo, farger, tone of voice og målgruppe</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 opacity-60 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                )}
-                
-                {onboarding.hasBrand && !onboarding.hasSocial && (
-                  <button
-                    onClick={() => router.push('/dashboard/settings')}
-                    className="flex items-center gap-3 w-full bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-all duration-200 cursor-pointer group"
-                  >
-                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                      <Share2 className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="font-semibold text-sm">Koble til sosiale medier</p>
-                      <p className="text-xs text-white/60">Facebook, Instagram, LinkedIn og mer</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 opacity-60 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                )}
-              </div>
+              <p className="text-white/80 text-sm">Sett opp merkevaren din, koble til sosiale medier og begynn å lage innhold.</p>
             </div>
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="flex items-center gap-2 bg-white text-indigo-600 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-white/90 transition-all duration-200 cursor-pointer flex-shrink-0"
+            >
+              Fullfør oppsett
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
