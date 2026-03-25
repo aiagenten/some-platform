@@ -34,8 +34,18 @@ export default function DashboardPage() {
         .eq('org_id', profile.org_id)
         .single()
 
-      // Show banner if no progress row exists OR if completed_at is null
-      setShowOnboardingBanner(!progress || !progress.completed_at)
+      if (progress?.completed_at) {
+        setShowOnboardingBanner(false)
+      } else {
+        // Fallback: if brand_profiles exists with data, onboarding was completed via old flow
+        const { data: brand } = await supabase
+          .from('brand_profiles')
+          .select('id, tone, colors')
+          .eq('org_id', profile.org_id)
+          .single()
+        const hasCompletedOldFlow = brand && (brand.tone || (brand.colors && (brand.colors as unknown[]).length > 0))
+        setShowOnboardingBanner(!hasCompletedOldFlow)
+      }
 
       // Load post stats
       const { data: posts } = await supabase

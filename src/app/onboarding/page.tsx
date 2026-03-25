@@ -931,8 +931,8 @@ function OnboardingPage() {
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          {/* Step labels */}
-          <div className="flex justify-between mt-2">
+          {/* Step labels — hidden on small screens, shown on md+ */}
+          <div className="hidden md:flex justify-between mt-2">
             {STEPS.map((s) => (
               <span
                 key={s.num}
@@ -943,6 +943,12 @@ function OnboardingPage() {
                 {s.label}
               </span>
             ))}
+          </div>
+          {/* Mobile: show only current step name */}
+          <div className="flex md:hidden mt-2">
+            <span className="text-xs font-medium text-indigo-600">
+              {STEPS.find(s => s.num === step)?.label}
+            </span>
           </div>
         </div>
       </div>
@@ -2024,10 +2030,11 @@ function OnboardingPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Stemmebeskrivelse</label>
-                  <input
+                  <textarea
                     value={brandProfile.voice_description || ''}
                     onChange={(e) => updateBrandField('voice_description', e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900"
+                    rows={2}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 resize-y"
                   />
                 </div>
               </div>
@@ -2062,10 +2069,11 @@ function OnboardingPage() {
                 </div>
                 {brandProfile.do_list.map((item, i) => (
                   <div key={i} className="flex gap-2 mb-2">
-                    <input
+                    <textarea
                       value={item}
                       onChange={(e) => updateListItem('do_list', i, e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      rows={1}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none resize-y min-h-[38px]"
                     />
                     <button onClick={() => removeListItem('do_list', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
                       <X className="w-4 h-4" />
@@ -2084,10 +2092,11 @@ function OnboardingPage() {
                 </div>
                 {brandProfile.dont_list.map((item, i) => (
                   <div key={i} className="flex gap-2 mb-2">
-                    <input
+                    <textarea
                       value={item}
                       onChange={(e) => updateListItem('dont_list', i, e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      rows={1}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none resize-y min-h-[38px]"
                     />
                     <button onClick={() => removeListItem('dont_list', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
                       <X className="w-4 h-4" />
@@ -2109,20 +2118,22 @@ function OnboardingPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Målgruppe</label>
-                  <input
+                  <textarea
                     value={brandProfile.target_audience || ''}
                     onChange={(e) => updateBrandField('target_audience', e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900"
+                    rows={2}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 resize-y"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Nøkkelmeldinger</label>
                   {brandProfile.key_messages.map((msg, i) => (
                     <div key={i} className="flex gap-2 mb-2">
-                      <input
+                      <textarea
                         value={msg}
                         onChange={(e) => updateListItem('key_messages', i, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        rows={1}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none resize-y min-h-[38px]"
                       />
                       <button onClick={() => removeListItem('key_messages', i)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
                         <X className="w-4 h-4" />
