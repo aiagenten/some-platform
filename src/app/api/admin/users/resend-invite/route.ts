@@ -30,23 +30,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Generate a new magic link for the user
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: 'invite',
-      email,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://some.aiagenten.no'}/auth/callback`,
-        data: { org_id, role },
-      },
-    })
-
-    if (error) {
-      console.error('Resend invite error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    // Send the invite email via Resend (or use Supabase's built-in if SMTP is configured)
-    // Since we have SMTP configured, we can use inviteUserByEmail which sends the email
+    // Send the invite email via Supabase (uses configured SMTP/Resend)
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://some.aiagenten.no'}/auth/callback`,
       data: { org_id, role },
