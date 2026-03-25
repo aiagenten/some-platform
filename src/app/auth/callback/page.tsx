@@ -54,12 +54,41 @@ function AuthCallbackInner() {
 
         // Check hash fragment for access_token (implicit flow)
         if (hash && hash.includes('access_token')) {
-          // Supabase client should auto-detect and set session from hash
-          // Wait a moment for it to process
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          
+          if (accessToken && refreshToken) {
+            // Manually set session from hash tokens (fixes iOS in-app browser issues)
+            const { data: { session: manualSession }, error: setError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+
+            if (setError) {
+              console.error('Set session error:', setError)
+              setDebugInfo(`setSession: ${setError.message}`)
+              setStatus('error')
+              return
+            }
+
+            if (manualSession) {
+              const { data: profile } = await supabase
+                .from('users')
+                .select('org_id')
+                .eq('id', manualSession.user.id)
+                .single()
+
+              if (profile?.org_id) {
+                router.replace('/dashboard')
+              } else {
+                router.replace('/onboarding')
+              }
+              return
+            }
+          }
         }
 
-        // Try getting the session (works if hash was processed or cookie exists)
+        // Try getting the session (works if cookie exists)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
         if (sessionError) {
