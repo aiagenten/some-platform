@@ -275,6 +275,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
     }
 
+    // Sort by engagement (likes + comments + shares) descending, limit to 30
+    posts.sort((a, b) => {
+      const engA = ((a.likes as number) || 0) + ((a.comments as number) || 0) + ((a.shares as number) || 0)
+      const engB = ((b.likes as number) || 0) + ((b.comments as number) || 0) + ((b.shares as number) || 0)
+      return engB - engA
+    })
+    posts = posts.slice(0, 30)
+
     // Save imported posts to database if org_id is provided
     if (org_id && posts.length > 0) {
       const adminClient = createAdminClient()

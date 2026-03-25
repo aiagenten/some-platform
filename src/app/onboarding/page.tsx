@@ -269,6 +269,7 @@ function OnboardingPage() {
   const [selectedMetaPageId, setSelectedMetaPageId] = useState<string | null>(null)
   const [brandTag, setBrandTag] = useState('')
   const [initialLoading, setInitialLoading] = useState(true)
+  const [visiblePostCount, setVisiblePostCount] = useState(12)
 
   // Load org + check onboarding progress (resume or redirect)
   useEffect(() => {
@@ -491,7 +492,10 @@ function OnboardingPage() {
         }
       }
 
+      // Sort by engagement (likes) descending so best posts show first
+      allPosts.sort((a, b) => (b.likes || 0) - (a.likes || 0))
       setSocialPosts(allPosts)
+      setVisiblePostCount(12)
 
       // Default all imported posts to selected as learning material
       const selections: Record<string, boolean> = {}
@@ -1460,7 +1464,7 @@ function OnboardingPage() {
                   </div>
 
                   <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                    {socialPosts.map((post) => {
+                    {socialPosts.slice(0, visiblePostCount).map((post) => {
                       const selected = importedPostSelections[post.id] ?? true
                       const pConfig = PLATFORM_CONFIG[post.platform] || PLATFORM_CONFIG.facebook
                       const PlatformIcon = pConfig.icon
@@ -1472,11 +1476,13 @@ function OnboardingPage() {
                             selected ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white opacity-60'
                           }`}
                         >
-                          {/* Post thumbnail — proxied to avoid CORS */}
+                          {/* Post thumbnail — proxied to avoid CORS, lazy loaded */}
                           {post.image_url ? (
                             <img
                               src={`/api/proxy-image?url=${encodeURIComponent(post.image_url)}`}
                               alt=""
+                              loading="lazy"
+                              decoding="async"
                               className="w-12 h-12 rounded-lg object-cover shrink-0"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
@@ -1503,6 +1509,14 @@ function OnboardingPage() {
                         </button>
                       )
                     })}
+                    {socialPosts.length > visiblePostCount && (
+                      <button
+                        onClick={() => setVisiblePostCount(prev => prev + 12)}
+                        className="w-full py-2.5 text-sm text-indigo-600 font-medium bg-indigo-50/50 rounded-xl border border-indigo-100 hover:bg-indigo-100 transition-all"
+                      >
+                        Vis flere ({socialPosts.length - visiblePostCount} gjenstår)
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
