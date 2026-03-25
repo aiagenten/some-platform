@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense, memo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { getOnboardingProgress, saveOnboardingStep, completeOnboarding } from '@/lib/onboarding-progress'
 import { Linkedin, Facebook, Instagram, Check, Loader2, PartyPopper, Palette, Type, MessageSquare, Target, ShieldCheck, ShieldX, Plus, X, Link2, Sparkles, CheckSquare, Square, ChevronDown, Upload, Image as ImageIcon, AlertTriangle } from 'lucide-react'
 
 type ColorRole = 'primary' | 'secondary' | 'accent' | 'neutral_dark' | 'neutral_light' | ''
@@ -267,15 +268,94 @@ function OnboardingPage() {
   // Meta page selection state
   const [selectedMetaPageId, setSelectedMetaPageId] = useState<string | null>(null)
   const [brandTag, setBrandTag] = useState('')
+  const [initialLoading, setInitialLoading] = useState(true)
 
+  // Load org + check onboarding progress (resume or redirect)
   useEffect(() => {
-    async function getOrg() {
+    async function initOnboarding() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data } = await supabase.from('users').select('org_id').eq('id', user.id).single()
-      if (data) setOrgId(data.org_id)
+      const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
+      if (!profile) return
+      const currentOrgId = profile.org_id
+      setOrgId(currentOrgId)
+
+      // Check onboarding progress
+      const progress = await getOnboardingProgress(supabase, currentOrgId)
+      if (progress?.completed_at) {
+        router.push('/dashboard')
+        return
+      }
+
+      // Resume from saved step — load existing data
+      if (progress && progress.current_step > 1) {
+        // Load saved brand profile
+        const { data: savedBrand } = await supabase
+          .from('brand_profiles')
+          .select('*')
+          .eq('org_id', currentOrgId)
+          .single()
+        if (savedBrand) {
+          setBrandProfile({
+            colors: savedBrand.colors || [],
+            fonts: savedBrand.fonts || [],
+            logo_url: savedBrand.logo_url,
+            tone: savedBrand.tone || '',
+            voice_description: savedBrand.voice_description || '',
+            tone_keywords: savedBrand.tone_keywords || [],
+            tagline: savedBrand.tagline || '',
+            description: savedBrand.description || '',
+            target_audience: savedBrand.target_audience || '',
+            do_list: savedBrand.do_list || [],
+            dont_list: savedBrand.dont_list || [],
+            key_messages: savedBrand.key_messages || [],
+            industry: savedBrand.industry || '',
+          })
+          if (savedBrand.source_url) setWebsiteUrl(savedBrand.source_url)
+          if (savedBrand.logo_url) setLogoPreview(savedBrand.logo_url)
+        }
+
+        // Load saved social accounts
+        const { data: savedAccounts } = await supabase
+          .from('social_accounts')
+          .select('platform, account_name, account_id')
+          .eq('org_id', currentOrgId)
+        if (savedAccounts && savedAccounts.length > 0) {
+          const accounts: ConnectedAccount[] = savedAccounts.map(a => ({
+            platform: a.platform,
+            name: a.account_name || a.account_id,
+            account_id: a.account_id,
+            access_token: '', // Token not stored in DB, will need re-auth for actions
+          }))
+          setConnectedAccounts(accounts)
+          setSelectedPlatforms(prev => {
+            const platforms = new Set([...prev, ...savedAccounts.map(a => a.platform)])
+            return Array.from(platforms)
+          })
+        }
+
+        // Load saved content goals
+        const { data: savedGoals } = await supabase
+          .from('weekly_posting_goals')
+          .select('platform, weekly_target')
+          .eq('org_id', currentOrgId)
+        if (savedGoals && savedGoals.length > 0) {
+          const goals: Record<string, number> = {}
+          savedGoals.forEach(g => { goals[g.platform] = g.weekly_target })
+          setContentGoals(goals)
+        }
+
+        // Don't skip past the callback handling — only set step if no OAuth redirect
+        const fbConnected = searchParams.get('fb_connected')
+        const liConnected = searchParams.get('li_connected')
+        if (!fbConnected && !liConnected) {
+          setStep(progress.current_step)
+        }
+      }
+
+      setInitialLoading(false)
     }
-    getOrg()
+    initOnboarding()
   }, [])
 
   // Persist connected accounts to localStorage
@@ -587,6 +667,27 @@ function OnboardingPage() {
       }
 
       setBrandProfile(data)
+      // Save brand profile immediately after scrape
+      if (orgId) {
+        await supabase.from('brand_profiles').upsert({
+          org_id: orgId,
+          source_url: websiteUrl,
+          colors: data.colors,
+          fonts: data.fonts,
+          logo_url: data.logo_url,
+          tagline: data.tagline,
+          description: data.description,
+          tone: data.tone,
+          voice_description: data.voice_description,
+          tone_keywords: data.tone_keywords,
+          target_audience: data.target_audience,
+          key_messages: data.key_messages,
+          do_list: data.do_list,
+          dont_list: data.dont_list,
+          last_scraped_at: new Date().toISOString(),
+        }, { onConflict: 'org_id' })
+        await saveOnboardingStep(supabase, orgId, 4)
+      }
       setStep(4)
     } catch {
       setScrapeError('Nettverksfeil. Prøv igjen.')
@@ -594,9 +695,9 @@ function OnboardingPage() {
     setScraping(false)
   }
 
-  const handleFinish = async () => {
+  // Save brand profile data to DB (used after step 3→4 scrape and step 4→5 edit)
+  const saveBrandProfile = useCallback(async () => {
     if (!orgId || !brandProfile) return
-    setSaving(true)
     await supabase.from('brand_profiles').upsert({
       org_id: orgId,
       source_url: websiteUrl,
@@ -614,17 +715,25 @@ function OnboardingPage() {
       dont_list: brandProfile.dont_list,
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: 'org_id' })
+  }, [orgId, brandProfile, websiteUrl, supabase])
 
+  // Save social accounts to DB (used after step 2→3)
+  const saveSocialAccounts = useCallback(async () => {
+    if (!orgId) return
     for (const platform of selectedPlatforms) {
+      const connected = connectedAccounts.find(a => a.platform === platform)
       await supabase.from('social_accounts').upsert({
         org_id: orgId,
         platform,
-        account_name: `${platform}-pending`,
-        account_id: `pending-${platform}-${orgId}`,
+        account_name: connected?.name || `${platform}-pending`,
+        account_id: connected?.account_id || `pending-${platform}-${orgId}`,
       }, { onConflict: 'org_id,platform,account_id' })
     }
+  }, [orgId, selectedPlatforms, connectedAccounts, supabase])
 
-    // Save content goals
+  // Save content goals to DB (used after step 5→6)
+  const saveContentGoals = useCallback(async () => {
+    if (!orgId) return
     for (const platform of selectedPlatforms) {
       const weekly_target = contentGoals[platform] ?? 3
       await fetch('/api/weekly-goals', {
@@ -633,6 +742,53 @@ function OnboardingPage() {
         body: JSON.stringify({ org_id: orgId, platform, weekly_target }),
       })
     }
+  }, [orgId, selectedPlatforms, contentGoals])
+
+  // Navigate to next step with progressive save
+  const goToStep = useCallback(async (nextStep: number) => {
+    if (!orgId) { setStep(nextStep); return }
+    const currentStep = step
+
+    // Save data based on which step we're leaving
+    try {
+      if (currentStep === 1) {
+        // Platforms selected — save progress
+        await saveOnboardingStep(supabase, orgId, Math.max(nextStep, 2))
+      } else if (currentStep === 2) {
+        // SoMe accounts connected — save accounts + progress
+        await saveSocialAccounts()
+        await saveOnboardingStep(supabase, orgId, Math.max(nextStep, 3))
+      } else if (currentStep === 3) {
+        // Website scraped — brand profile saved after scrape, just update progress
+        if (brandProfile) await saveBrandProfile()
+        await saveOnboardingStep(supabase, orgId, Math.max(nextStep, 4))
+      } else if (currentStep === 4) {
+        // Brand profile edited — save brand profile + progress
+        await saveBrandProfile()
+        await saveOnboardingStep(supabase, orgId, Math.max(nextStep, 5))
+      } else if (currentStep === 5) {
+        // Content goals set — save goals + progress
+        await saveContentGoals()
+        await saveOnboardingStep(supabase, orgId, Math.max(nextStep, 6))
+      }
+    } catch (err) {
+      console.error('Failed to save onboarding progress:', err)
+    }
+
+    setStep(nextStep)
+  }, [orgId, step, supabase, saveBrandProfile, saveSocialAccounts, saveContentGoals, brandProfile])
+
+  const handleFinish = async () => {
+    if (!orgId || !brandProfile) return
+    setSaving(true)
+
+    // Final save of all data
+    await saveBrandProfile()
+    await saveSocialAccounts()
+    await saveContentGoals()
+
+    // Mark onboarding as completed
+    await completeOnboarding(supabase, orgId)
 
     setSaving(false)
     try {
@@ -745,6 +901,14 @@ function OnboardingPage() {
 
   const hasFacebookOrInstagram = selectedPlatforms.includes('facebook') || selectedPlatforms.includes('instagram')
 
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header with progress */}
@@ -814,7 +978,7 @@ function OnboardingPage() {
             </div>
             <div className="max-w-md mx-auto mt-8">
               <button
-                onClick={() => setStep(2)}
+                onClick={() => goToStep(2)}
                 disabled={selectedPlatforms.length === 0}
                 className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
               >
@@ -1437,7 +1601,7 @@ function OnboardingPage() {
                       }
                       setSavingSelections(false)
                     }
-                    setStep(3)
+                    goToStep(3)
                   }}
                   disabled={
                     fetchingPosts || analyzingTone || extractingImageColors || savingSelections ||
@@ -1967,7 +2131,7 @@ function OnboardingPage() {
                 Tilbake
               </button>
               <button
-                onClick={() => setStep(5)}
+                onClick={() => goToStep(5)}
                 className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/20"
               >
                 Neste
@@ -2044,7 +2208,7 @@ function OnboardingPage() {
                 Tilbake
               </button>
               <button
-                onClick={() => setStep(6)}
+                onClick={() => goToStep(6)}
                 className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/20"
               >
                 Neste

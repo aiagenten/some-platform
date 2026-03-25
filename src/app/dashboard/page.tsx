@@ -5,16 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight } from 'lucide-react'
 
-type OnboardingStatus = {
-  hasBrand: boolean
-  hasSocial: boolean
-  hasPosts: boolean
-}
-
 export default function DashboardPage() {
   const [stats, setStats] = useState({ total: 0, draft: 0, pending: 0, approved: 0, published: 0 })
   const [orgName, setOrgName] = useState('')
-  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null)
+  const [showOnboardingBanner, setShowOnboardingBanner] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -33,27 +27,29 @@ export default function DashboardPage() {
       // @ts-expect-error - joined query
       setOrgName(profile.organizations?.name || '')
 
-      // Check onboarding status
-      const [brandRes, socialRes, postsRes] = await Promise.all([
-        supabase.from('brand_profiles').select('id').eq('org_id', profile.org_id).limit(1),
-        supabase.from('social_accounts').select('id').eq('org_id', profile.org_id).limit(1),
-        supabase.from('social_posts').select('status').eq('org_id', profile.org_id),
-      ])
+      // Check onboarding completion via onboarding_progress
+      const { data: progress } = await supabase
+        .from('onboarding_progress')
+        .select('completed_at')
+        .eq('org_id', profile.org_id)
+        .single()
 
-      const posts = postsRes.data || []
-      
-      setOnboarding({
-        hasBrand: (brandRes.data?.length || 0) > 0,
-        hasSocial: (socialRes.data?.length || 0) > 0,
-        hasPosts: posts.length > 0,
-      })
+      // Show banner if no progress row exists OR if completed_at is null
+      setShowOnboardingBanner(!progress || !progress.completed_at)
 
+      // Load post stats
+      const { data: posts } = await supabase
+        .from('social_posts')
+        .select('status')
+        .eq('org_id', profile.org_id)
+
+      const postList = posts || []
       setStats({
-        total: posts.length,
-        draft: posts.filter(p => p.status === 'draft').length,
-        pending: posts.filter(p => p.status === 'pending_approval').length,
-        approved: posts.filter(p => p.status === 'approved' || p.status === 'scheduled').length,
-        published: posts.filter(p => p.status === 'published').length,
+        total: postList.length,
+        draft: postList.filter(p => p.status === 'draft').length,
+        pending: postList.filter(p => p.status === 'pending_approval').length,
+        approved: postList.filter(p => p.status === 'approved' || p.status === 'scheduled').length,
+        published: postList.filter(p => p.status === 'published').length,
       })
     }
     load()
@@ -75,7 +71,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Onboarding banner */}
-      {onboarding && !onboarding.hasBrand && (
+      {showOnboardingBanner && (
         <div className="mb-6 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-6 text-white shadow-lg">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
