@@ -43,7 +43,6 @@ export default function ArticleEditorPage() {
   const [showExport, setShowExport] = useState(false)
   const [exportHtml, setExportHtml] = useState('')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
-  const editorRef = useRef<{ insertImage: (url: string) => void } | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {

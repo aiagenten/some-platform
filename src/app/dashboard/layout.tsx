@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon, Users, Activity, Building2, X } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon, Users, Activity, Building2, X, BookOpen, Globe } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 type NavItem = { href: string; label: string; icon: typeof BarChart3 }
@@ -23,6 +23,7 @@ const NAV_SECTIONS: NavSection[] = [
     section: 'Innlegg',
     items: [
       { href: '/dashboard/posts', label: 'Innlegg', icon: FileText },
+      { href: '/dashboard/articles', label: 'Artikler', icon: BookOpen },
       { href: '/dashboard/approval', label: 'Godkjenning', icon: CheckCircle2 },
     ],
   },
@@ -48,6 +49,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/dashboard/brand', label: 'Merkevare', icon: Palette },
       { href: '/dashboard/imported-posts', label: 'Importerte poster', icon: Download },
       { href: '/dashboard/overlay-editor', label: 'Overlay-maler', icon: Layers },
+      { href: '/dashboard/settings/website', label: 'Nettside', icon: Globe },
       { href: '/dashboard/settings', label: 'Innstillinger', icon: Settings },
     ],
   },
