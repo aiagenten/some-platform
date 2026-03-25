@@ -735,7 +735,7 @@ function OnboardingPage() {
   // Save brand profile data to DB (used after step 3→4 scrape and step 4→5 edit)
   const saveBrandProfile = useCallback(async () => {
     if (!orgId || !brandProfile) return
-    await supabase.from('brand_profiles').upsert({
+    const brandData: Record<string, unknown> = {
       org_id: orgId,
       source_url: websiteUrl,
       colors: brandProfile.colors,
@@ -751,7 +751,15 @@ function OnboardingPage() {
       do_list: brandProfile.do_list,
       dont_list: brandProfile.dont_list,
       last_scraped_at: new Date().toISOString(),
-    }, { onConflict: 'org_id' })
+    }
+    // Preserve visual_style if it exists in state (set by visual-capture)
+    if (brandProfile.visual_style) {
+      brandData.visual_style = brandProfile.visual_style
+    }
+    if (brandProfile.website_screenshot_url) {
+      brandData.website_screenshot_url = brandProfile.website_screenshot_url
+    }
+    await supabase.from('brand_profiles').upsert(brandData, { onConflict: 'org_id' })
   }, [orgId, brandProfile, websiteUrl, supabase])
 
   // Save social accounts to DB (used after step 2→3)

@@ -45,7 +45,14 @@ export const ASPECT_RATIO_DIMENSIONS: Record<string, { width: number; height: nu
 function getDimensions(opts: OverlayOptions): { w: number; h: number; scale: number } {
   const w = opts.width || opts.size
   const h = opts.height || opts.size
-  const scale = w / 1080 // reference width = 1080
+  // Scale based on the SMALLER dimension relative to 1080 reference
+  // This ensures text stays readable on tall portrait formats (9:16)
+  const refDim = Math.min(w, h)
+  const baseScale = refDim / 1080
+  // For portrait formats, boost text size proportionally to aspect ratio
+  const aspectRatio = h / w
+  const portraitBoost = aspectRatio > 1.1 ? 1 + (aspectRatio - 1) * 0.35 : 1
+  const scale = baseScale * portraitBoost
   return { w, h, scale }
 }
 
@@ -155,9 +162,9 @@ function drawCTAButton(
 ): number {
   if (!text) return 0
 
-  const fontSize = Math.round(22 * scale)
-  const paddingX = Math.round(32 * scale)
-  const paddingY = Math.round(14 * scale)
+  const fontSize = Math.round(28 * scale)
+  const paddingX = Math.round(38 * scale)
+  const paddingY = Math.round(18 * scale)
 
   ctx.font = `600 ${fontSize}px '${bodyFont}', sans-serif`
   const textWidth = ctx.measureText(text).width
@@ -206,7 +213,7 @@ const modernDark: OverlayTemplate = {
   name: 'Moderne mørk',
   description: 'Mørkt overlay med stor overskrift og logo øverst',
   render: async (ctx, opts) => {
-    const { baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = opts
+    const { baseImage, logo, headline, subtitle, primaryColor, accentColor, headingFont, bodyFont } = opts
     const { w, h, scale } = getDimensions(opts)
     const s = getStyle(opts)
     const pad = sp(Math.round(60 * scale), s)
@@ -217,28 +224,20 @@ const modernDark: OverlayTemplate = {
     ctx.fillStyle = `rgba(0, 0, 0, ${s.overlayOpacity})`
     ctx.fillRect(0, 0, w, h)
 
-    // Logo + brand name top-left
-    const logoH = Math.round(50 * scale)
+    // Logo top-left
+    const logoH = Math.round(70 * scale)
     let logoBottom = pad + sp(Math.round(30 * scale), s)
     const logoW = drawLogo(ctx, logo, pad, pad, logoH)
-    ctx.font = `600 ${Math.round(24 * scale)}px '${headingFont}', sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.textBaseline = 'middle'
-    applyTextShadow(ctx, s)
     if (logoW > 0) {
-      ctx.fillText(brandName, pad + logoW + sp(Math.round(16 * scale), s), pad + logoH / 2)
       logoBottom = pad + logoH + sp(Math.round(20 * scale), s)
     } else {
-      ctx.textBaseline = 'top'
-      ctx.fillText(brandName, pad, pad)
       logoBottom = pad + sp(Math.round(40 * scale), s)
     }
-    resetShadow(ctx)
 
     // Big headline
     if (headline) {
-      const fontSize = Math.round(72 * scale)
-      const lineH = sp(Math.round(86 * scale), s)
+      const fontSize = Math.round(88 * scale)
+      const lineH = sp(Math.round(106 * scale), s)
       ctx.font = `bold ${fontSize}px '${headingFont}', sans-serif`
       ctx.fillStyle = '#ffffff'
       ctx.textBaseline = 'top'
@@ -263,14 +262,14 @@ const modernDark: OverlayTemplate = {
       // Subtitle
       let subtitleBottomY = accentY + sp(Math.round(30 * scale), s)
       if (subtitle) {
-        ctx.font = `400 ${Math.round(28 * scale)}px '${bodyFont}', sans-serif`
+        ctx.font = `400 ${Math.round(38 * scale)}px '${bodyFont}', sans-serif`
         ctx.fillStyle = 'rgba(255,255,255,0.75)'
         applyTextShadow(ctx, s)
         const subLines = wrapText(ctx, subtitle, w - pad * 2)
         subLines.slice(0, 2).forEach((line, i) => {
-          ctx.fillText(line, pad, accentY + sp(Math.round(30 * scale), s) + i * sp(Math.round(36 * scale), s))
+          ctx.fillText(line, pad, accentY + sp(Math.round(30 * scale), s) + i * sp(Math.round(46 * scale), s))
         })
-        subtitleBottomY = accentY + sp(Math.round(30 * scale), s) + Math.min(subLines.length, 2) * sp(Math.round(36 * scale), s)
+        subtitleBottomY = accentY + sp(Math.round(30 * scale), s) + Math.min(subLines.length, 2) * sp(Math.round(46 * scale), s)
         resetShadow(ctx)
       }
 
@@ -296,7 +295,7 @@ const gradientBanner: OverlayTemplate = {
   name: 'Gradient banner',
   description: 'Bilde med gradient-banner nederst',
   render: async (ctx, opts) => {
-    const { baseImage, logo, headline, subtitle, brandName, accentColor, headingFont, bodyFont } = opts
+    const { baseImage, logo, headline, subtitle, accentColor, headingFont, bodyFont } = opts
     const { w, h, scale } = getDimensions(opts)
     const s = getStyle(opts)
     const pad = sp(Math.round(50 * scale), s)
@@ -316,14 +315,14 @@ const gradientBanner: OverlayTemplate = {
     if (logo) {
       ctx.save()
       ctx.globalAlpha = 0.8
-      drawLogo(ctx, logo, pad, pad, Math.round(40 * scale))
+      drawLogo(ctx, logo, pad, pad, Math.round(60 * scale))
       ctx.restore()
     }
 
     // Headline in bottom area
     if (headline) {
-      const fontSize = Math.round(56 * scale)
-      const lineH = sp(Math.round(68 * scale), s)
+      const fontSize = Math.round(68 * scale)
+      const lineH = sp(Math.round(82 * scale), s)
       ctx.font = `bold ${fontSize}px '${headingFont}', sans-serif`
       ctx.fillStyle = '#ffffff'
       ctx.textBaseline = 'bottom'
@@ -338,7 +337,7 @@ const gradientBanner: OverlayTemplate = {
 
     // Subtitle
     if (subtitle) {
-      ctx.font = `400 ${Math.round(24 * scale)}px '${bodyFont}', sans-serif`
+      ctx.font = `400 ${Math.round(34 * scale)}px '${bodyFont}', sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.7)'
       ctx.textBaseline = 'bottom'
       applyTextShadow(ctx, s)
@@ -352,16 +351,6 @@ const gradientBanner: OverlayTemplate = {
       const variant = s.buttonIsOutlined ? 'outlined' : 'filled'
       drawCTAButton(ctx, opts.ctaText, pad, ctaY, scale, s, accentColor, bodyFont, variant)
     }
-
-    // Brand name bottom-right
-    ctx.font = `500 ${Math.round(20 * scale)}px '${bodyFont}', sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
-    ctx.textBaseline = 'bottom'
-    ctx.textAlign = 'right'
-    applyTextShadow(ctx, s)
-    ctx.fillText(brandName, w - pad, h - pad)
-    resetShadow(ctx)
-    ctx.textAlign = 'left'
 
     // Accent line
     const accentH = Math.round(s.accentLineThickness * scale * 0.8) // slightly thinner for banner
@@ -382,7 +371,7 @@ const colorSidebar: OverlayTemplate = {
   name: 'Farge-sidebar',
   description: 'Bilde i full størrelse med farget semi-transparent sidebar til venstre',
   render: async (ctx, opts) => {
-    const { baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = opts
+    const { baseImage, logo, headline, subtitle, primaryColor, accentColor, headingFont, bodyFont } = opts
     const { w, h, scale } = getDimensions(opts)
     const s = getStyle(opts)
     const panelW = Math.floor(w * 0.4)
@@ -413,23 +402,14 @@ const colorSidebar: OverlayTemplate = {
     // Logo at top of panel
     let contentY = pad + sp(Math.round(20 * scale), s)
     if (logo) {
-      drawLogo(ctx, logo, pad, pad, Math.round(45 * scale))
-      contentY = pad + sp(Math.round(65 * scale), s)
+      drawLogo(ctx, logo, pad, pad, Math.round(65 * scale))
+      contentY = pad + sp(Math.round(85 * scale), s)
     }
-
-    // Brand name
-    ctx.font = `600 ${Math.round(20 * scale)}px '${headingFont}', sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'
-    ctx.textBaseline = 'top'
-    applyTextShadow(ctx, s)
-    ctx.fillText(brandName, pad, contentY)
-    resetShadow(ctx)
-    contentY += sp(Math.round(50 * scale), s)
 
     // Headline
     if (headline) {
-      const fontSize = Math.round(40 * scale)
-      const lineH = sp(Math.round(50 * scale), s)
+      const fontSize = Math.round(50 * scale)
+      const lineH = sp(Math.round(60 * scale), s)
       ctx.font = `bold ${fontSize}px '${headingFont}', sans-serif`
       ctx.fillStyle = '#ffffff'
       applyTextShadow(ctx, s)
@@ -453,12 +433,12 @@ const colorSidebar: OverlayTemplate = {
 
     // Subtitle
     if (subtitle) {
-      ctx.font = `400 ${Math.round(22 * scale)}px '${bodyFont}', sans-serif`
+      ctx.font = `400 ${Math.round(32 * scale)}px '${bodyFont}', sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.7)'
       applyTextShadow(ctx, s)
       const subLines = wrapText(ctx, subtitle, panelW - pad * 2)
       subLines.slice(0, 3).forEach((line, i) => {
-        ctx.fillText(line, pad, contentY + i * sp(Math.round(30 * scale), s))
+        ctx.fillText(line, pad, contentY + i * sp(Math.round(40 * scale), s))
       })
       resetShadow(ctx)
     }
@@ -473,7 +453,7 @@ const minimalist: OverlayTemplate = {
   name: 'Minimalistisk',
   description: 'Rent og enkelt — kun tekst og logo',
   render: async (ctx, opts) => {
-    const { baseImage, logo, headline, brandName, primaryColor, accentColor, headingFont, bodyFont } = opts
+    const { baseImage, logo, headline, primaryColor, accentColor, headingFont } = opts
     const { w, h, scale } = getDimensions(opts)
     const s = getStyle(opts)
     const pad = sp(Math.round(60 * scale), s)
@@ -487,8 +467,8 @@ const minimalist: OverlayTemplate = {
 
     // Centered headline
     if (headline) {
-      const fontSize = Math.round(64 * scale)
-      const lineH = sp(Math.round(80 * scale), s)
+      const fontSize = Math.round(80 * scale)
+      const lineH = sp(Math.round(96 * scale), s)
       ctx.font = `bold ${fontSize}px '${headingFont}', sans-serif`
       ctx.fillStyle = '#ffffff'
       ctx.textBaseline = 'middle'
@@ -516,7 +496,7 @@ const minimalist: OverlayTemplate = {
 
     // Logo bottom-center
     if (logo) {
-      const logoH = Math.round(35 * scale)
+      const logoH = Math.round(55 * scale)
       const logoRatio = logo.width / logo.height
       const logoW = logoH * logoRatio
       ctx.save()
@@ -524,16 +504,6 @@ const minimalist: OverlayTemplate = {
       ctx.drawImage(logo, w / 2 - logoW / 2, h - pad - logoH, logoW, logoH)
       ctx.restore()
     }
-
-    // Brand name below or if no logo
-    ctx.font = `500 ${Math.round(18 * scale)}px '${bodyFont}', sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
-    ctx.textBaseline = 'bottom'
-    ctx.textAlign = 'center'
-    applyTextShadow(ctx, s)
-    ctx.fillText(brandName, w / 2, h - sp(Math.round(20 * scale), s))
-    resetShadow(ctx)
-    ctx.textAlign = 'left'
 
     // Top + bottom accent lines
     const lineThick = Math.round(s.accentLineThickness * scale * 0.8)
@@ -551,7 +521,7 @@ const boldBlock: OverlayTemplate = {
   name: 'Bold fargeblokk',
   description: 'Stor farget blokk med tekst over bildet',
   render: async (ctx, opts) => {
-    const { baseImage, logo, headline, subtitle, brandName, primaryColor, accentColor, headingFont, bodyFont } = opts
+    const { baseImage, logo, headline, subtitle, primaryColor, accentColor, headingFont, bodyFont } = opts
     const { w, h, scale } = getDimensions(opts)
     const s = getStyle(opts)
     const pad = sp(Math.round(50 * scale), s)
@@ -559,7 +529,7 @@ const boldBlock: OverlayTemplate = {
     drawBaseImage(ctx, baseImage, w, h)
 
     // Large colored block in upper portion
-    const blockH = Math.floor(h * 0.45)
+    const blockH = Math.floor(h * 0.50)
     ctx.fillStyle = primaryColor
     ctx.globalAlpha = 0.92
     applyShadow(ctx, s)
@@ -571,32 +541,20 @@ const boldBlock: OverlayTemplate = {
     resetShadow(ctx)
     ctx.globalAlpha = 1
 
-    // Logo + brand in block
-    const logoSize = Math.round(40 * scale)
+    // Logo in block
+    const logoSize = Math.round(60 * scale)
     let contentY = pad
     if (logo) {
-      const logoW = drawLogo(ctx, logo, pad, pad, logoSize)
-      ctx.font = `600 ${Math.round(22 * scale)}px '${headingFont}', sans-serif`
-      ctx.fillStyle = '#ffffff'
-      ctx.textBaseline = 'middle'
-      applyTextShadow(ctx, s)
-      ctx.fillText(brandName, pad + logoW + sp(Math.round(14 * scale), s), pad + logoSize / 2)
-      resetShadow(ctx)
-      contentY = pad + sp(Math.round(60 * scale), s)
+      drawLogo(ctx, logo, pad, pad, logoSize)
+      contentY = pad + sp(Math.round(75 * scale), s)
     } else {
-      ctx.font = `600 ${Math.round(22 * scale)}px '${headingFont}', sans-serif`
-      ctx.fillStyle = '#ffffff'
-      ctx.textBaseline = 'top'
-      applyTextShadow(ctx, s)
-      ctx.fillText(brandName, pad, pad)
-      resetShadow(ctx)
-      contentY = pad + sp(Math.round(40 * scale), s)
+      contentY = pad + sp(Math.round(20 * scale), s)
     }
 
     // Headline in block
     if (headline) {
-      const fontSize = Math.round(52 * scale)
-      const lineH = sp(Math.round(64 * scale), s)
+      const fontSize = Math.round(64 * scale)
+      const lineH = sp(Math.round(78 * scale), s)
       ctx.font = `bold ${fontSize}px '${headingFont}', sans-serif`
       ctx.fillStyle = '#ffffff'
       ctx.textBaseline = 'top'
@@ -611,13 +569,13 @@ const boldBlock: OverlayTemplate = {
 
     // Subtitle in block
     if (subtitle && contentY < blockH - sp(Math.round(40 * scale), s)) {
-      ctx.font = `400 ${Math.round(24 * scale)}px '${bodyFont}', sans-serif`
+      ctx.font = `400 ${Math.round(34 * scale)}px '${bodyFont}', sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.8)'
       ctx.textBaseline = 'top'
       applyTextShadow(ctx, s)
       ctx.fillText(subtitle, pad, contentY)
       resetShadow(ctx)
-      contentY += sp(Math.round(36 * scale), s)
+      contentY += sp(Math.round(46 * scale), s)
     }
 
     // CTA button
