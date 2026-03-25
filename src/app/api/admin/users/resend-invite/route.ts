@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
 <tr><td style="background:linear-gradient(135deg,#7c3aed,#3b82f6);padding:32px;text-align:center">
-<img src="https://aiagenten.no/logo-white.png" alt="AI Agenten" height="36" style="height:36px">
+<img src="https://some.aiagenten.no/logo-icon.png" alt="AI Agenten" height="36" style="height:36px">
 <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px">SoMe-plattformen</p>
 </td></tr>
 <tr><td style="padding:40px 32px">
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
 <tr><td style="background:linear-gradient(135deg,#7c3aed,#3b82f6);padding:32px;text-align:center">
-<img src="https://aiagenten.no/logo-white.png" alt="AI Agenten" height="36" style="height:36px">
+<img src="https://some.aiagenten.no/logo-icon.png" alt="AI Agenten" height="36" style="height:36px">
 <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px">SoMe-plattformen</p>
 </td></tr>
 <tr><td style="padding:40px 32px">
