@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 // Verifies invite/magic link tokens server-side and redirects with session
 export async function GET(request: NextRequest) {
