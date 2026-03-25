@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -53,7 +53,7 @@ const SOURCE_TABS = [
   { value: 'onedrive', label: 'OneDrive', icon: FolderOpen },
 ]
 
-export default function MediaLibraryPage() {
+function MediaLibraryContent() {
   const [orgId, setOrgId] = useState<string | null>(null)
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [storageImages, setStorageImages] = useState<StorageImage[]>([])
@@ -670,5 +670,13 @@ export default function MediaLibraryPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function MediaLibraryPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
+      <MediaLibraryContent />
+    </Suspense>
   )
 }
