@@ -34,7 +34,7 @@ function rewriteSupabaseUrl(supabaseUrl: string): string {
   return supabaseUrl
 }
 
-function buildInviteHtml(rewriteSupabaseUrl(confirmUrl): string, orgName?: string) {
+function buildInviteHtml(confirmUrl: string, orgName?: string) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px"><tr><td align="center">
