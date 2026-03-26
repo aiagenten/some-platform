@@ -42,7 +42,9 @@ import promptBibliotek from '../../../../../content-templates/s2-some-prompt-bib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id, reference_image_url, selected_overlay, generate_text_only } = body
+    const { org_id, platform, format, topic, regenerate_text, regenerate_image, post_id, image_model, image_style_id, reference_image_url, selected_overlay, generate_text_only, slide_count: requestedSlideCount, carousel_slide_index } = body
+    const isCarousel = format === 'carousel' || format === 'karusell'
+    const slideCount = isCarousel ? Math.min(Math.max(requestedSlideCount || 5, 3), 10) : 1
 
     if (!org_id || !platform || !format) {
       return NextResponse.json(
@@ -133,6 +135,8 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
     let generatedHeadline: string | null = null
     let generatedSubtitle: string | null = null
     let generatedCTA: string | null = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let carouselSlides: any[] | null = null
 
     if (!regenerate_image) {
       const platformRules: Record<string, string> = {
@@ -177,7 +181,29 @@ Returner dette JSON-formatet:
   "hashtags": ["#hashtag1", "#hashtag2"],
   "best_time": "Tirsdag-torsdag kl 08-10 eller 17-19",
   "image_suggestion": "Kort beskrivelse av hvilket bilde som vil fungere godt"
-}`
+}` + (isCarousel && !carousel_slide_index ? `
+
+TILLEGG FOR KARUSELL: Dette er en karusell med ${slideCount} slides.
+Returner OGSÅ et "slides"-felt i JSON med en array på ${slideCount} objekter.
+Hver slide følger en storytelling-flyt: Hook → Verdi → Verdi → ... → CTA.
+
+Slide-struktur:
+{
+  "slides": [
+    {
+      "slide_index": 0,
+      "headline": "Fengende hook-overskrift (slide 1 = oppmerksomhet)",
+      "subtitle": "Kort undertekst",
+      "cta_text": "",
+      "text_content": "Kort tekst for denne sliden (1-2 setninger)",
+      "image_suggestion": "Beskrivelse av bilde for denne sliden"
+    },
+    ...siste slide skal ha CTA
+  ]
+}
+
+Slide 1 = Hook (fanger oppmerksomhet). Slides 2-${slideCount - 1} = Verdiinnhold. Slide ${slideCount} = CTA (oppfordring til handling).
+Hver slide skal ha unikt innhold som bygger på forrige.` : '')
 
       const textGenStart = Date.now()
       const textResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -256,6 +282,19 @@ Returner dette JSON-formatet:
             generatedHeadline = (parsed.headline as string) || null
             generatedSubtitle = (parsed.subtitle as string) || null
             generatedCTA = (parsed.cta_text as string) || null
+            // Extract carousel slides if present
+            if (isCarousel && Array.isArray(parsed.slides)) {
+              carouselSlides = parsed.slides.map((s: Record<string, unknown>, i: number) => ({
+                slide_index: (s.slide_index as number) ?? i,
+                headline: (s.headline as string) || '',
+                subtitle: (s.subtitle as string) || '',
+                cta_text: (s.cta_text as string) || '',
+                text_content: (s.text_content as string) || '',
+                image_suggestion: (s.image_suggestion as string) || '',
+                image_url: null,
+                overlay_image_url: null,
+              }))
+            }
           } else {
             generatedText = extractCaption(fullText)
             generatedCaption = generatedText
@@ -484,6 +523,105 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       }
     }
 
+    // Carousel: generate images for each slide in parallel
+    if (isCarousel && carouselSlides && !regenerate_text && !generate_text_only && typeof carousel_slide_index !== 'number') {
+      const brandColorDesc = brandProfile?.colors?.length
+        ? brandProfile.colors
+            .filter((c: { hex: string; role: string }) => c.role && c.role !== 'neutral_dark' && c.role !== 'neutral_light')
+            .map((c: { hex: string; role: string }) => `${c.role}: ${c.hex}`)
+            .join(', ')
+        : 'professional, clean colors'
+
+      const defaultStylePrompt = `Photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens. {situation}. Scandinavian setting: white walls, light wood, natural materials. Natural window light, golden hour warmth. Real skin texture, everyday clothing. Candid moment. Subtle film grain. Muted Scandinavian color palette. No text on screens. No watermarks.`
+      const styleToUse = image_style_id || activeStyleId
+      const activeStyle = imageStyles.find(s => s.id === styleToUse)
+      const stylePrompt = activeStyle?.prompt || defaultStylePrompt
+      const selectedImageModel = image_model || configuredImageModel
+
+      // Generate images for all slides concurrently
+      const slideImagePromises = carouselSlides.map(async (slide, idx) => {
+        try {
+          const slideContext = slide.image_suggestion || slide.text_content || slide.headline || `Slide ${idx + 1} of carousel`
+          const styledPrompt = stylePrompt.replace(/\{situation\}/g, slideContext)
+          const slideImagePrompt = `${styledPrompt}\n\nBrand colors for subtle accent/props: ${brandColorDesc}\nIndustry: ${brandProfile?.description || 'technology and business'}\n\nIMPORTANT: No text overlays, no UI elements, no logos. This is slide ${idx + 1} of ${carouselSlides!.length} in a cohesive carousel — keep a consistent visual style across all slides.`
+
+          let b64: string | null = null
+          let mimeType = 'image/png'
+          let slideImageUrl: string | null = null
+
+          if (selectedImageModel === 'gpt-image' && OPENAI_API_KEY) {
+            const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: 'gpt-image-1', prompt: `${slideImagePrompt}\n\nDO NOT include any text, watermarks, or logos in the image.`, n: 1, size: '1024x1024', quality: 'medium' }),
+            })
+            if (imageResponse.ok) {
+              const imageData = await imageResponse.json()
+              b64 = imageData.data?.[0]?.b64_json || null
+              if (!b64 && imageData.data?.[0]?.url) slideImageUrl = imageData.data[0].url
+            }
+          } else {
+            const imageResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://some.aiagenten.no' },
+              body: JSON.stringify({ model: 'google/gemini-2.5-flash-image', messages: [{ role: 'user', content: [{ type: 'text', text: `Generate an image for a social media post. DO NOT include any text in the image. Just the photograph.\n\n${slideImagePrompt}` }] }] }),
+            })
+            if (imageResponse.ok) {
+              const imageData = await imageResponse.json()
+              const message = imageData.choices?.[0]?.message
+              const images = message?.images || []
+              if (images.length > 0) {
+                const imgUrl = images[0]?.image_url?.url
+                if (imgUrl?.startsWith('data:')) {
+                  const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/)
+                  if (match) { mimeType = match[1]; b64 = match[2] }
+                } else if (imgUrl) { slideImageUrl = imgUrl }
+              }
+              if (!b64 && !slideImageUrl) {
+                const content = message?.content
+                if (Array.isArray(content)) {
+                  for (const part of content) {
+                    if (part.type === 'image_url' && part.image_url?.url?.startsWith('data:')) {
+                      const match = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+                      if (match) { mimeType = match[1]; b64 = match[2] }
+                    } else if (part.type === 'image_url' && part.image_url?.url) {
+                      slideImageUrl = part.image_url.url
+                    }
+                  }
+                } else if (typeof content === 'string') {
+                  const b64Match = content.match(/data:image\/([^;]+);base64,([A-Za-z0-9+/=]+)/)
+                  if (b64Match) { mimeType = `image/${b64Match[1]}`; b64 = b64Match[2] }
+                }
+              }
+            }
+          }
+
+          // Upload to Supabase
+          if (b64 && !slideImageUrl) {
+            const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
+            const fileName = `generated/${org_id}/${Date.now()}-slide${idx}.${ext}`
+            const buffer = Buffer.from(b64, 'base64')
+            const { data: uploadData, error: uploadError } = await supabase.storage.from('post-images').upload(fileName, buffer, { contentType: mimeType, upsert: false })
+            if (!uploadError && uploadData) {
+              const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(fileName)
+              slideImageUrl = urlData.publicUrl
+            }
+          }
+          return slideImageUrl
+        } catch (err) {
+          console.error(`Carousel slide ${idx} image error:`, err)
+          return null
+        }
+      })
+
+      const slideImages = await Promise.all(slideImagePromises)
+      for (let i = 0; i < carouselSlides.length; i++) {
+        carouselSlides[i].image_url = slideImages[i] || null
+      }
+      // Use first slide image as the main post image
+      imageUrl = slideImages.find(u => u !== null) || imageUrl
+    }
+
     // If text-only mode (for manual uploads), return generated text without saving
     if (generate_text_only) {
       return NextResponse.json({
@@ -499,6 +637,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           image_error: null,
           best_time: bestTime,
           image_suggestion: imageSuggestion,
+          carousel_slides: carouselSlides,
         },
       })
     }
@@ -540,6 +679,10 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       if (selected_overlay) {
         updates.selected_overlay = selected_overlay
       }
+      if (carouselSlides) {
+        updates.carousel_slides = carouselSlides
+        updates.slide_count = carouselSlides.length
+      }
 
       const { data, error } = await supabase
         .from('social_posts')
@@ -555,9 +698,8 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       postData = data
     } else {
       // Create new draft
-      const { data, error } = await supabase
-        .from('social_posts')
-        .insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const insertData: any = {
           org_id,
           platform,
           format,
@@ -574,7 +716,14 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
           status: 'draft',
           ai_generated: true,
           ai_prompt: topic || topicText,
-        })
+      }
+      if (carouselSlides) {
+        insertData.carousel_slides = carouselSlides
+        insertData.slide_count = carouselSlides.length
+      }
+      const { data, error } = await supabase
+        .from('social_posts')
+        .insert(insertData)
         .select()
         .single()
 
@@ -630,6 +779,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         image_error: imageError,
         best_time: suggestedTime || bestTime,
         image_suggestion: imageSuggestion,
+        carousel_slides: carouselSlides,
       },
     })
   } catch (err) {

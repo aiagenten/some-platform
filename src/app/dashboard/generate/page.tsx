@@ -11,6 +11,9 @@ import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
 import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
+import CarouselEditor from '@/components/CarouselEditor'
+import type { CarouselSlide } from '@/components/CarouselEditor'
+import CarouselPreview from '@/components/CarouselPreview'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -47,6 +50,7 @@ type GeneratedContent = {
   image_error: string | null
   best_time: string | null
   image_suggestion: string | null
+  carousel_slides?: CarouselSlide[] | null
 }
 
 type ImageStyleOption = {
@@ -138,6 +142,12 @@ export default function GeneratePage() {
   const [manualCTA, setManualCTA] = useState('')
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   const [dragOver, setDragOver] = useState(false)
+  // Carousel state
+  const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
+  const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
+  const [carouselSlideCount, setCarouselSlideCount] = useState(5)
+  const [regeneratingSlide, setRegeneratingSlide] = useState<number | null>(null)
+  const isCarousel = format === 'carousel'
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
@@ -407,6 +417,7 @@ export default function GeneratePage() {
           image_style_id: selectedStyle,
           reference_image_url: referenceImageUrl || undefined,
           selected_overlay: selectedOverlay,
+          slide_count: isCarousel ? carouselSlideCount : undefined,
         }),
       })
       const data = await res.json()
@@ -427,10 +438,18 @@ export default function GeneratePage() {
           image_error: regenerateImage ? (data.generated.image_error || null) : (prev?.image_error || null),
           best_time: regenerateText ? (data.generated.best_time || null) : (prev?.best_time || null),
           image_suggestion: regenerateText ? (data.generated.image_suggestion || null) : (prev?.image_suggestion || null),
+          carousel_slides: prev?.carousel_slides,
         }))
       } else {
         setGenerated(data.generated)
         setBulkResults([])
+        // Set carousel slides from response
+        if (data.generated.carousel_slides?.length) {
+          setCarouselSlides(data.generated.carousel_slides)
+          setActiveCarouselSlide(0)
+        } else {
+          setCarouselSlides([])
+        }
       }
     } catch {
       setError('Nettverksfeil. Prøv igjen.')
@@ -446,6 +465,54 @@ export default function GeneratePage() {
     if (generated?.image_url) {
       setReferenceImageUrl(generated.image_url)
       handleGenerate(false, true)
+    }
+  }
+
+  // Regenerate a single carousel slide image
+  const handleRegenerateSlideImage = async (slideIndex: number) => {
+    if (!orgId || !postId) return
+    setRegeneratingSlide(slideIndex)
+    try {
+      const res = await fetch('/api/posts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          platform,
+          format,
+          topic: carouselSlides[slideIndex]?.image_suggestion || carouselSlides[slideIndex]?.headline || topic || undefined,
+          regenerate_image: true,
+          post_id: postId,
+          image_style_id: selectedStyle,
+          carousel_slide_index: slideIndex,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.generated?.image_url) {
+        const updated = carouselSlides.map((s, i) =>
+          i === slideIndex ? { ...s, image_url: data.generated.image_url } : s
+        )
+        setCarouselSlides(updated)
+        // Also update the post's carousel_slides in DB
+        const supabaseClient = createClient()
+        await supabaseClient.from('social_posts').update({ carousel_slides: updated }).eq('id', postId)
+      }
+    } catch (err) {
+      console.error('Slide image regeneration error:', err)
+    }
+    setRegeneratingSlide(null)
+  }
+
+  // Handle carousel slides change (reorder, edit, add, remove)
+  const handleCarouselSlidesChange = async (newSlides: CarouselSlide[]) => {
+    setCarouselSlides(newSlides)
+    // Persist to DB if we have a postId
+    if (postId) {
+      const supabaseClient = createClient()
+      await supabaseClient.from('social_posts').update({
+        carousel_slides: newSlides,
+        slide_count: newSlides.length,
+      }).eq('id', postId)
     }
   }
 
@@ -968,8 +1035,30 @@ export default function GeneratePage() {
               </div>
             )}
 
-            {/* Variant count - AI mode only */}
-            {contentMode === 'ai' && (
+            {/* Carousel slide count - AI carousel mode only */}
+            {contentMode === 'ai' && isCarousel && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Antall slides</label>
+                <div className="flex gap-2">
+                  {[3, 5, 7, 10].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setCarouselSlideCount(n)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        carouselSlideCount === n
+                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {n} slides
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Variant count - AI mode only (not for carousel) */}
+            {contentMode === 'ai' && !isCarousel && (
               <div className="mb-5">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Antall varianter</label>
                 <div className="flex gap-2">
@@ -1054,9 +1143,9 @@ export default function GeneratePage() {
                 <Bot className="w-8 h-8 text-indigo-600" />
               </div>
               <p className="text-slate-500">
-                {bulkLoading ? `Genererer ${variantCount} varianter parallelt...` : 'Genererer tekst og bilde...'}
+                {bulkLoading ? `Genererer ${variantCount} varianter parallelt...` : isCarousel ? `Genererer karusell med ${carouselSlideCount} slides...` : 'Genererer tekst og bilde...'}
               </p>
-              <p className="text-xs text-slate-400 mt-1">Dette kan ta 10-30 sekunder</p>
+              <p className="text-xs text-slate-400 mt-1">{isCarousel ? 'Dette kan ta 30-60 sekunder (flere bilder)' : 'Dette kan ta 10-30 sekunder'}</p>
             </div>
           )}
 
@@ -1262,6 +1351,30 @@ export default function GeneratePage() {
                   </div>
                 )}
               </div>
+
+              {/* Carousel Editor + Preview */}
+              {isCarousel && carouselSlides.length > 0 && (
+                <>
+                  <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+                    <CarouselEditor
+                      slides={carouselSlides}
+                      onSlidesChange={handleCarouselSlidesChange}
+                      activeSlide={activeCarouselSlide}
+                      onActiveSlideChange={setActiveCarouselSlide}
+                      onRegenerateSlideImage={handleRegenerateSlideImage}
+                      regeneratingSlide={regeneratingSlide}
+                    />
+                  </div>
+
+                  <CarouselPreview
+                    slides={carouselSlides}
+                    caption={generated?.text || generated?.caption || ''}
+                    brandName={orgName}
+                    brandLogo={brand?.logo_url}
+                    onSlideChange={setActiveCarouselSlide}
+                  />
+                </>
+              )}
 
               {/* Actions */}
               {postId && (

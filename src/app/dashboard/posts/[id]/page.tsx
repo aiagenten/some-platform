@@ -12,6 +12,9 @@ import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
 import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
 import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
+import CarouselEditor from '@/components/CarouselEditor'
+import type { CarouselSlide } from '@/components/CarouselEditor'
+import CarouselPreview from '@/components/CarouselPreview'
 
 type Post = {
   id: string
@@ -40,6 +43,8 @@ type Post = {
   aspect_ratio: string | null
   selected_overlay: string | null
   suggested_time: string | null
+  carousel_slides: CarouselSlide[] | null
+  slide_count: number | null
 }
 
 type Feedback = {
@@ -148,6 +153,10 @@ export default function PostDetailPage() {
   const [showCopyMenu, setShowCopyMenu] = useState(false)
   const [copyLoading, setCopyLoading] = useState(false)
   const [overlayRendered, setOverlayRendered] = useState(false)
+  // Carousel state
+  const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
+  const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
+  const [regeneratingSlide, setRegeneratingSlide] = useState<number | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -199,6 +208,7 @@ export default function PostDetailPage() {
         if (postData.subtitle) setSubtitleValue(postData.subtitle)
         if (postData.cta_text) setCtaValue(postData.cta_text)
         if (postData.aspect_ratio) setSelectedAspectRatio(postData.aspect_ratio)
+        if (postData.carousel_slides?.length) setCarouselSlides(postData.carousel_slides)
         // Pre-fill schedule from scheduled_for or suggested_time
         if (postData.scheduled_for) {
           const d = new Date(postData.scheduled_for)
@@ -463,6 +473,47 @@ export default function PostDetailPage() {
     } finally {
       setCopyLoading(false)
     }
+  }
+
+  const isCarousel = post?.format === 'carousel'
+
+  const handleCarouselSlidesChange = async (newSlides: CarouselSlide[]) => {
+    setCarouselSlides(newSlides)
+    await supabase.from('social_posts').update({
+      carousel_slides: newSlides,
+      slide_count: newSlides.length,
+    }).eq('id', postId)
+  }
+
+  const handleRegenerateSlideImage = async (slideIndex: number) => {
+    if (!orgId) return
+    setRegeneratingSlide(slideIndex)
+    try {
+      const res = await fetch('/api/posts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          platform: post?.platform,
+          format: 'carousel',
+          topic: carouselSlides[slideIndex]?.image_suggestion || carouselSlides[slideIndex]?.headline || post?.ai_prompt || undefined,
+          regenerate_image: true,
+          post_id: postId,
+          carousel_slide_index: slideIndex,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.generated?.image_url) {
+        const updated = carouselSlides.map((s, i) =>
+          i === slideIndex ? { ...s, image_url: data.generated.image_url } : s
+        )
+        setCarouselSlides(updated)
+        await supabase.from('social_posts').update({ carousel_slides: updated }).eq('id', postId)
+      }
+    } catch (err) {
+      console.error('Slide image regeneration error:', err)
+    }
+    setRegeneratingSlide(null)
   }
 
   if (loading) return <div className="text-center py-12 text-slate-400">Laster...</div>
@@ -737,7 +788,32 @@ export default function PostDetailPage() {
             </div>
           )}
 
-          {(post.caption || post.content_text) && (
+          {/* Carousel Editor + Preview (for carousel posts) */}
+          {isCarousel && carouselSlides.length > 0 && (
+            <>
+              <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+                <CarouselEditor
+                  slides={carouselSlides}
+                  onSlidesChange={handleCarouselSlidesChange}
+                  activeSlide={activeCarouselSlide}
+                  onActiveSlideChange={setActiveCarouselSlide}
+                  onRegenerateSlideImage={handleRegenerateSlideImage}
+                  regeneratingSlide={regeneratingSlide}
+                />
+              </div>
+
+              <CarouselPreview
+                slides={carouselSlides}
+                caption={post.caption || post.content_text || ''}
+                brandName={orgName}
+                brandLogo={orgLogo}
+                onSlideChange={setActiveCarouselSlide}
+              />
+            </>
+          )}
+
+          {/* Standard platform preview (for non-carousel or fallback) */}
+          {(post.caption || post.content_text) && (!isCarousel || carouselSlides.length === 0) && (
             <PlatformPreview caption={post.caption || post.content_text || ''} imageUrl={post.content_image_url} platform={post.platform} brandName={orgName} brandLogo={orgLogo} overlayId={selectedOverlay} headline={headlineValue || post.headline} subtitle={subtitleValue || post.subtitle} brandColors={brandColors} brandFonts={brandFonts} brandLogoUrl={brandLogoUrl} customTemplates={customTemplates} />
           )}
         </div>
