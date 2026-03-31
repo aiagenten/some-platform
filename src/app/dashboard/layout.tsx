@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon, Users, Activity, Building2, X, BookOpen, Globe } from 'lucide-react'
+import { BarChart3, TrendingUp, Calendar, FileText, Sparkles, Video, Palette, Settings, LogOut, Download, Layers, Image as ImageIcon, CheckCircle2, Shield, User, Snowflake, Film, VideoIcon, Users, Activity, Building2, X, BookOpen, Globe, Package } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 type NavItem = { href: string; label: string; icon: typeof BarChart3 }
@@ -34,6 +34,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/dashboard/digital-twin', label: 'Digital tvilling', icon: User },
       { href: '/dashboard/video', label: 'Video', icon: Video },
       { href: '/dashboard/video-editor-v2', label: 'Video Studio', icon: Film },
+      { href: '/dashboard/product-placement', label: 'Produktplassering', icon: Package },
     ],
   },
   {
