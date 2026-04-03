@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Plus, Search, Trash2, Loader2, Globe, Clock, Edit3 } from 'lucide-react'
+import { FileText, Plus, Search, Trash2, Loader2, Globe, Clock, Edit3, Sparkles } from 'lucide-react'
+import ArticleGenerateModal from '@/components/ArticleGenerateModal'
 
 type Article = {
   id: string
@@ -35,6 +36,7 @@ export default function ArticlesPage() {
   const [filter, setFilter] = useState('all')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showGenerate, setShowGenerate] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -86,13 +88,22 @@ export default function ArticlesPage() {
           <h1 className="text-2xl font-bold text-slate-900">Artikler</h1>
           <p className="text-sm text-slate-500 mt-1">Skriv og publiser artikler til din nettside</p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Ny artikkel
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGenerate(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-sm font-medium hover:from-purple-700 hover:to-pink-700 transition-all shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generer med AI
+          </button>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Ny artikkel
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -217,6 +228,11 @@ export default function ArticlesPage() {
           ))}
         </div>
       )}
+      {/* AI Generate Modal */}
+      <ArticleGenerateModal
+        open={showGenerate}
+        onClose={() => setShowGenerate(false)}
+      />
     </div>
   )
 }
