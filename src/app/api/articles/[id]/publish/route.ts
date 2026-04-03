@@ -66,6 +66,34 @@ export async function POST(
     excerpt: article.excerpt || '',
   }
 
+  // ── SEO metadata for WordPress (Yoast / Rank Math) ──────────────────────
+  const seoMeta: Record<string, string> = {}
+  if (article.meta_title) {
+    seoMeta['yoast_wpseo_title'] = article.meta_title
+    seoMeta['rank_math_title'] = article.meta_title
+  }
+  if (article.meta_description) {
+    seoMeta['yoast_wpseo_metadesc'] = article.meta_description
+    seoMeta['rank_math_description'] = article.meta_description
+  }
+  if (article.target_keyword) {
+    seoMeta['yoast_wpseo_focuskw'] = article.target_keyword
+    seoMeta['rank_math_focus_keyword'] = article.target_keyword
+  }
+
+  // Send SEO meta as WordPress meta fields
+  if (Object.keys(seoMeta).length > 0) {
+    wpPayload.meta = seoMeta
+  }
+
+  // Include Schema.org JSON-LD as custom field if AEO data exists
+  if (article.aeo_schema?.schema_json_ld) {
+    wpPayload.meta = {
+      ...(wpPayload.meta as Record<string, string> || {}),
+      seo_schema_json_ld: JSON.stringify(article.aeo_schema.schema_json_ld),
+    }
+  }
+
   // If updating existing WP post
   const endpoint = article.wordpress_post_id
     ? `${wpUrl}/wp-json/wp/v2/posts/${article.wordpress_post_id}`
