@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import MediaPickerModal from '@/components/MediaPickerModal'
+import ArticleGenerateModal from '@/components/ArticleGenerateModal'
 import {
   ArrowLeft, Save, Loader2, Globe, Download, Image as ImageIcon,
-  FileText, Clock, Eye, Trash2, X
+  FileText, Clock, Eye, Trash2, X, Sparkles, Wand2
 } from 'lucide-react'
 
 const ArticleEditor = dynamic(() => import('@/components/ArticleEditor'), { ssr: false })
@@ -43,6 +44,8 @@ export default function ArticleEditorPage() {
   const [showExport, setShowExport] = useState(false)
   const [exportHtml, setExportHtml] = useState('')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [generatingImage, setGeneratingImage] = useState(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -148,6 +151,28 @@ ${html}
     }
   }
 
+  const handleGenerateFeaturedImage = async () => {
+    if (!article) return
+    setGeneratingImage(true)
+    try {
+      const res = await fetch('/api/articles/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, title: article.title }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        setArticle(prev => prev ? { ...prev, featured_image_url: data.url } : prev)
+        save({ featured_image_url: data.url })
+      } else {
+        alert(data.error || 'Kunne ikke generere bilde')
+      }
+    } catch {
+      alert('Nettverksfeil ved bildegenerering')
+    }
+    setGeneratingImage(false)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -188,6 +213,13 @@ ${html}
               Lagrer...
             </span>
           )}
+          <button
+            onClick={() => setShowGenerate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-xs font-medium hover:from-purple-700 hover:to-pink-700 transition-all shadow-sm"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Generer med AI
+          </button>
         </div>
       </div>
 
@@ -315,16 +347,35 @@ ${html}
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => {
-                  setMediaPickerMode('featured')
-                  setShowMediaPicker(true)
-                }}
-                className="w-full aspect-video rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
-              >
-                <ImageIcon className="w-8 h-8 mb-2" />
-                <span className="text-xs font-medium">Velg bilde</span>
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setMediaPickerMode('featured')
+                    setShowMediaPicker(true)
+                  }}
+                  className="w-full aspect-video rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+                >
+                  <ImageIcon className="w-8 h-8 mb-2" />
+                  <span className="text-xs font-medium">Velg bilde</span>
+                </button>
+                <button
+                  onClick={handleGenerateFeaturedImage}
+                  disabled={generatingImage}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 text-purple-700 rounded-xl text-xs font-medium hover:from-purple-100 hover:to-pink-100 transition-all disabled:opacity-50"
+                >
+                  {generatingImage ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Genererer bilde...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Generer forsidebilde med AI
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
 
@@ -370,6 +421,12 @@ ${html}
         open={showMediaPicker}
         onClose={() => setShowMediaPicker(false)}
         onSelect={handleImageSelect}
+      />
+
+      {/* AI Generate Modal */}
+      <ArticleGenerateModal
+        open={showGenerate}
+        onClose={() => setShowGenerate(false)}
       />
 
       {/* Export HTML Modal */}

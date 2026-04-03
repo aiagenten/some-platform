@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight, Target, Settings as SettingsIcon, Minus, Plus, GripVertical } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, ChevronLeft, ChevronRight, Target, Settings as SettingsIcon, Minus, Plus, GripVertical, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
 type Post = {
@@ -51,12 +51,14 @@ const PLATFORM_BAR_COLORS: Record<string, string> = {
   instagram: 'bg-gradient-to-r from-pink-500 to-purple-500',
   facebook: 'bg-blue-500',
   linkedin: 'bg-sky-600',
+  blog: 'bg-gradient-to-r from-emerald-500 to-teal-500',
 }
 
 const PLATFORMS_LIST = [
   { key: 'instagram', label: 'Instagram', icon: Instagram },
   { key: 'facebook', label: 'Facebook', icon: Facebook },
   { key: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+  { key: 'blog', label: 'Artikler', icon: BookOpen },
 ]
 
 const DAYS_NO = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
@@ -112,6 +114,7 @@ export default function CalendarPage() {
   const [unscheduledPosts, setUnscheduledPosts] = useState<Post[]>([])
   const [goals, setGoals] = useState<WeeklyGoal[]>([])
   const [showGoalSettings, setShowGoalSettings] = useState(false)
+  const [weekArticleCount, setWeekArticleCount] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
@@ -155,6 +158,15 @@ export default function CalendarPage() {
       .gte('created_at', monday.toISOString())
       .lte('created_at', sunday.toISOString())
     if (weekPosts) setAllPosts(weekPosts)
+
+    // Count articles this week for blog goal
+    const { data: weekArticles } = await supabase
+      .from('articles')
+      .select('id', { count: 'exact' })
+      .eq('org_id', orgId)
+      .gte('created_at', monday.toISOString())
+      .lte('created_at', sunday.toISOString())
+    setWeekArticleCount(weekArticles?.length || 0)
   }, [orgId, currentDate])
 
   const loadGoals = useCallback(async () => {
@@ -200,7 +212,10 @@ export default function CalendarPage() {
 
   // Weekly goals progress
   const getGoalForPlatform = (platform: string) => goals.find(g => g.platform === platform)?.weekly_target || 0
-  const getPostCountForPlatform = (platform: string) => allPosts.filter(p => p.platform === platform).length
+  const getPostCountForPlatform = (platform: string) => {
+    if (platform === 'blog') return weekArticleCount
+    return allPosts.filter(p => p.platform === platform).length
+  }
 
   const updateGoal = async (platform: string, target: number) => {
     if (!orgId || target < 0) return
