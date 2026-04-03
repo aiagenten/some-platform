@@ -5,6 +5,10 @@ import { useRouter, useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import MediaPickerModal from '@/components/MediaPickerModal'
 import ArticleGenerateModal from '@/components/ArticleGenerateModal'
+import SEOAnalysisPanel from '@/components/seo/SEOAnalysisPanel'
+import SEOMetaFields from '@/components/seo/SEOMetaFields'
+import AEOPanel from '@/components/seo/AEOPanel'
+import SERPPreview from '@/components/seo/SERPPreview'
 import {
   ArrowLeft, Save, Loader2, Globe, Download, Image as ImageIcon,
   FileText, Clock, Eye, Trash2, X, Sparkles, Wand2
@@ -22,6 +26,12 @@ type Article = {
   status: string
   wordpress_post_id: number | null
   metadata: Record<string, unknown>
+  target_keyword: string | null
+  meta_title: string | null
+  meta_description: string | null
+  seo_score: number | null
+  seo_data: Record<string, unknown>
+  aeo_schema: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -48,6 +58,11 @@ export default function ArticleEditorPage() {
   const [generatingImage, setGeneratingImage] = useState(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // SEO fields as local state (debounced save)
+  const [targetKeyword, setTargetKeyword] = useState('')
+  const [metaTitle, setMetaTitle] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
+
   useEffect(() => {
     async function load() {
       const [articleRes, integrationRes] = await Promise.all([
@@ -56,7 +71,12 @@ export default function ArticleEditorPage() {
       ])
       const articleData = await articleRes.json()
       const integrationData = await integrationRes.json()
-      if (articleData.id) setArticle(articleData)
+      if (articleData.id) {
+        setArticle(articleData)
+        setTargetKeyword(articleData.target_keyword || '')
+        setMetaTitle(articleData.meta_title || '')
+        setMetaDescription(articleData.meta_description || '')
+      }
       if (integrationData?.platform) setIntegration(integrationData)
       setLoading(false)
     }
@@ -90,10 +110,71 @@ export default function ArticleEditorPage() {
     debouncedSave({ content: json })
   }, [article, debouncedSave])
 
+  // SEO field change handlers with debounced save
+  const handleKeywordChange = useCallback((v: string) => {
+    setTargetKeyword(v)
+    debouncedSave({ target_keyword: v } as Partial<Article>)
+  }, [debouncedSave])
+
+  const handleMetaTitleChange = useCallback((v: string) => {
+    setMetaTitle(v)
+    debouncedSave({ meta_title: v } as Partial<Article>)
+  }, [debouncedSave])
+
+  const handleMetaDescriptionChange = useCallback((v: string) => {
+    setMetaDescription(v)
+    debouncedSave({ meta_description: v } as Partial<Article>)
+  }, [debouncedSave])
+
+  const handleSlugChange = useCallback((v: string) => {
+    setArticle(prev => prev ? { ...prev, slug: v } : prev)
+    debouncedSave({ slug: v })
+  }, [debouncedSave])
+
+  const handleAEOGenerated = useCallback((aeo: Record<string, unknown>) => {
+    setArticle(prev => prev ? { ...prev, aeo_schema: aeo } : prev)
+  }, [])
+
+  const handleInsertFAQ = useCallback((faqs: { question: string; answer: string }[]) => {
+    if (!article?.content) return
+    // Build TipTap JSON nodes for FAQ section
+    const faqNodes: Record<string, unknown>[] = [
+      {
+        type: 'heading',
+        attrs: { level: 2 },
+        content: [{ type: 'text', text: 'Ofte stilte spørsmål' }],
+      },
+    ]
+    for (const faq of faqs) {
+      faqNodes.push({
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: faq.question }],
+      })
+      faqNodes.push({
+        type: 'paragraph',
+        content: [{ type: 'text', text: faq.answer }],
+      })
+    }
+    const existingContent = (article.content as { type: string; content?: unknown[] }) || { type: 'doc', content: [] }
+    const newContent = {
+      ...existingContent,
+      content: [...(existingContent.content || []), ...faqNodes],
+    }
+    setArticle(prev => prev ? { ...prev, content: newContent } : prev)
+    save({ content: newContent } as Partial<Article>)
+  }, [article, save])
+
   const handlePublishToWordPress = async () => {
     if (!article) return
-    // Save first
-    await save({ content: article.content, title: article.title, excerpt: article.excerpt })
+    await save({
+      content: article.content,
+      title: article.title,
+      excerpt: article.excerpt,
+      target_keyword: targetKeyword,
+      meta_title: metaTitle,
+      meta_description: metaDescription,
+    } as Partial<Article>)
     setPublishing(true)
     const res = await fetch(`/api/articles/${id}/publish`, { method: 'POST' })
     const data = await res.json()
@@ -107,9 +188,7 @@ export default function ArticleEditorPage() {
   }
 
   const handleExportHtml = async () => {
-    // Save first, then fetch HTML from server
-    await save({ content: article?.content, title: article?.title })
-    // Generate HTML client-side from the content
+    await save({ content: article?.content, title: article?.title } as Partial<Article>)
     const { generateHTML } = await import('@tiptap/html')
     const StarterKit = (await import('@tiptap/starter-kit')).default
     const ImageExt = (await import('@tiptap/extension-image')).default
@@ -141,10 +220,8 @@ ${html}
       setArticle(prev => prev ? { ...prev, featured_image_url: url } : prev)
       save({ featured_image_url: url })
     } else {
-      // Insert into editor - use the editor API
       const editorEl = document.querySelector('.ProseMirror') as HTMLElement | null
       if (editorEl) {
-        // Dispatch a custom event the editor can listen to
         const event = new CustomEvent('insert-image', { detail: { url } })
         editorEl.dispatchEvent(event)
       }
@@ -259,6 +336,26 @@ ${html}
               setShowMediaPicker(true)
             }}
           />
+
+          {/* SEO & Meta Fields — collapsible section below editor */}
+          <SEOMetaFields
+            targetKeyword={targetKeyword}
+            metaTitle={metaTitle}
+            metaDescription={metaDescription}
+            slug={article.slug || ''}
+            title={article.title}
+            onChangeKeyword={handleKeywordChange}
+            onChangeMetaTitle={handleMetaTitleChange}
+            onChangeMetaDescription={handleMetaDescriptionChange}
+            onChangeSlug={handleSlugChange}
+          />
+
+          {/* SERP Preview */}
+          <SERPPreview
+            metaTitle={metaTitle || article.title}
+            metaDescription={metaDescription}
+            slug={article.slug || ''}
+          />
         </div>
 
         {/* Sidebar */}
@@ -293,7 +390,10 @@ ${html}
                 excerpt: article.excerpt,
                 featured_image_url: article.featured_image_url,
                 metadata: article.metadata,
-              })}
+                target_keyword: targetKeyword,
+                meta_title: metaTitle,
+                meta_description: metaDescription,
+              } as Partial<Article>)}
               disabled={saving}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors"
             >
@@ -379,40 +479,22 @@ ${html}
             )}
           </div>
 
-          {/* SEO Metadata */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <Eye className="w-4 h-4 text-slate-400" />
-              SEO
-            </h3>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Slug</label>
-              <input
-                type="text"
-                value={article.slug || ''}
-                onChange={e => {
-                  setArticle(prev => prev ? { ...prev, slug: e.target.value } : prev)
-                  debouncedSave({ slug: e.target.value })
-                }}
-                placeholder="artikkel-url-sti"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Meta-beskrivelse</label>
-              <textarea
-                value={(article.metadata as { meta_description?: string })?.meta_description || ''}
-                onChange={e => {
-                  const newMeta = { ...article.metadata, meta_description: e.target.value }
-                  setArticle(prev => prev ? { ...prev, metadata: newMeta } : prev)
-                  debouncedSave({ metadata: newMeta })
-                }}
-                placeholder="Kort beskrivelse for søkemotorer..."
-                rows={3}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 resize-none"
-              />
-            </div>
-          </div>
+          {/* SEO Analysis Panel */}
+          <SEOAnalysisPanel
+            content={article.content}
+            title={article.title}
+            targetKeyword={targetKeyword}
+            metaTitle={metaTitle}
+            metaDescription={metaDescription}
+          />
+
+          {/* AEO Panel */}
+          <AEOPanel
+            articleId={article.id}
+            aeoData={article.aeo_schema as never}
+            onAEOGenerated={handleAEOGenerated}
+            onInsertFAQ={handleInsertFAQ}
+          />
         </div>
       </div>
 
