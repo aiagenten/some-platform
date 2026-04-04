@@ -5,6 +5,7 @@ import * as fabric from 'fabric'
 import type { OverlayElement, CanvasBackground, CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import { ElementToolbar } from './ElementToolbar'
 import { PropertyPanel } from './PropertyPanel'
+import { AiPromptBar } from './AiPromptBar'
 import { Save, Undo2, Redo2, Layers, Grid3x3, ImageIcon } from 'lucide-react'
 
 type BrandProfile = {
@@ -571,6 +572,28 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
     return elements
   }
 
+  // Apply AI-edited elements: clear canvas and reload
+  const applyAiElements = useCallback((newElements: OverlayElement[]) => {
+    const canvas = fabricRef.current
+    if (!canvas) return
+    // Save current state to history before applying
+    saveToHistory()
+    // Clear and reload
+    skipHistoryRef.current = true
+    canvas.clear()
+    canvas.backgroundColor = 'transparent'
+    // Re-apply current background
+    applyBackground(canvas, canvasBackground)
+    loadElements(canvas, newElements)
+    skipHistoryRef.current = false
+    // Save new state to history
+    saveToHistory()
+    canvas.discardActiveObject()
+    canvas.renderAll()
+    setSelectedObject(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasBackground, saveToHistory])
+
   const handleSave = async () => {
     const canvas = fabricRef.current
     if (!canvas) return
@@ -707,7 +730,7 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
         </div>
 
         {/* Canvas area */}
-        <div className="flex-1 flex items-center justify-center bg-slate-900 overflow-auto p-8 relative">
+        <div className="flex-1 flex items-center justify-center bg-slate-900 overflow-auto p-8 pb-24 relative">
           {/* Canvas toggles */}
           <div className="absolute top-4 right-4 flex gap-2">
             <button onClick={() => setShowSampleBg(!showSampleBg)} className={`p-2 rounded-lg transition-colors ${showSampleBg ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`} title="Vis/skjul eksempelbakgrunn">
@@ -752,6 +775,16 @@ export function OverlayEditor({ brand, template, onSave, onClose }: Props) {
               className="relative z-[5] rounded-lg shadow-2xl"
             />
           </div>
+
+          {/* AI Prompt Bar */}
+          <AiPromptBar
+            elements={extractElements()}
+            canvasSize={{ w: CANVAS_SIZE, h: CANVAS_SIZE }}
+            brandColors={brand.colors.map(c => c.hex)}
+            onApply={applyAiElements}
+            onUndo={undo}
+            canUndo={historyIndex > 0}
+          />
         </div>
 
         {/* Right sidebar - Properties */}
