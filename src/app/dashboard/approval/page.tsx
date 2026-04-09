@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar, XCircle, Target, MessageSquare } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar, XCircle, Target, MessageSquare, FileText } from 'lucide-react'
 import { getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
@@ -25,6 +25,16 @@ type Post = {
   scheduled_for: string | null
   headline: string | null
   subtitle: string | null
+}
+
+type Article = {
+  id: string
+  title: string
+  content: string | null
+  status: string
+  org_id: string
+  featured_image_url: string | null
+  created_at: string
 }
 
 const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -158,6 +168,7 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
 
 export default function ApprovalPage() {
   const [posts, setPosts] = useState<Post[]>([])
+  const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -209,6 +220,16 @@ export default function ApprovalPage() {
       .order('created_at', { ascending: false })
 
     setPosts(data || [])
+
+    // Load draft articles for approval
+    const { data: articleData } = await supabase
+      .from('articles')
+      .select('id, title, content, status, org_id, featured_image_url, created_at')
+      .eq('org_id', profile.org_id)
+      .eq('status', 'draft')
+      .order('created_at', { ascending: false })
+
+    setArticles(articleData || [])
 
     // Load weekly goals
     const { data: goals } = await supabase
@@ -303,6 +324,13 @@ export default function ApprovalPage() {
     setEditingDateId(null)
   }
 
+  const handleApproveArticle = async (articleId: string) => {
+    setActionLoadingId(articleId)
+    await supabase.from('articles').update({ status: 'approved' }).eq('id', articleId)
+    setArticles(prev => prev.filter(a => a.id !== articleId))
+    setActionLoadingId(null)
+  }
+
   const startEditDate = (post: Post) => {
     const existing = post.scheduled_for ? new Date(post.scheduled_for) : null
     setEditDate(existing ? existing.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10))
@@ -324,8 +352,8 @@ export default function ApprovalPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Godkjenning</h1>
           <p className="text-slate-500 text-sm mt-1">
-            {posts.length > 0
-              ? `${posts.length} innlegg venter på gjennomgang`
+            {(posts.length + articles.length) > 0
+              ? `${posts.length + articles.length} element${posts.length + articles.length !== 1 ? 'er' : ''} venter på gjennomgang`
               : 'Ingen innlegg å gjennomgå'}
           </p>
         </div>
@@ -361,7 +389,7 @@ export default function ApprovalPage() {
         </div>
       )}
 
-      {posts.length === 0 ? (
+      {posts.length === 0 && articles.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 shadow-sm">
           <PartyPopper className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <p className="text-lg font-medium text-slate-600">Ingen innlegg venter på godkjenning 🎉</p>
@@ -526,6 +554,91 @@ export default function ApprovalPage() {
               </div>
             )
           })}
+
+          {/* Articles section separator */}
+          {articles.length > 0 && (
+            <>
+              {posts.length > 0 && (
+                <div className="flex items-center gap-3 py-2">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="text-xs font-medium text-slate-500">Artikler</span>
+                  </div>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+              )}
+              {articles.map((article) => {
+                const isLoading = actionLoadingId === article.id
+                return (
+                  <div key={article.id} className="bg-white rounded-2xl border border-violet-200/60 shadow-sm overflow-hidden">
+                    <div className="flex flex-col sm:flex-row">
+                      {/* Featured image */}
+                      {article.featured_image_url && (
+                        <div className="sm:w-48 flex-shrink-0">
+                          <img
+                            src={article.featured_image_url}
+                            alt=""
+                            className="w-full h-36 sm:h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      {/* Content + Actions */}
+                      <div className="flex-1 p-6 flex flex-col">
+                        {/* Badge + title */}
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <FileText className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-violet-50 text-violet-700 border border-violet-100">
+                                Artikkel
+                              </span>
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-slate-100 text-slate-600">
+                                Utkast
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">
+                              {article.title || 'Uten tittel'}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Content preview */}
+                        {article.content && (
+                          <p className="text-xs text-slate-500 leading-relaxed line-clamp-3 mb-4">
+                            {article.content.replace(/<[^>]*>/g, '').substring(0, 200)}
+                          </p>
+                        )}
+
+                        <div className="flex-1" />
+
+                        {/* Actions */}
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => handleApproveArticle(article.id)}
+                            disabled={isLoading}
+                            className="w-full bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            Godkjenn artikkel
+                          </button>
+                          <Link
+                            href={`/dashboard/articles/${article.id}`}
+                            className="w-full flex items-center justify-center gap-1.5 py-2 text-sm text-slate-500 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all border border-slate-200"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Rediger artikkel
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
         </div>
       )}
     </div>

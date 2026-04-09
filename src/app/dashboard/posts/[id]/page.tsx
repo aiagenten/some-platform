@@ -15,6 +15,7 @@ import { renderCustomOverlay } from '@/lib/custom-overlay-renderer'
 import CarouselEditor from '@/components/CarouselEditor'
 import type { CarouselSlide } from '@/components/CarouselEditor'
 import CarouselPreview from '@/components/CarouselPreview'
+import MediaPickerModal from '@/components/MediaPickerModal'
 
 type Post = {
   id: string
@@ -153,6 +154,7 @@ export default function PostDetailPage() {
   const [showCopyMenu, setShowCopyMenu] = useState(false)
   const [copyLoading, setCopyLoading] = useState(false)
   const [overlayRendered, setOverlayRendered] = useState(false)
+  const [showMediaPicker, setShowMediaPicker] = useState(false)
   // Carousel state
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
   const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
@@ -246,6 +248,8 @@ export default function PostDetailPage() {
   const renderPostOverlay = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas || !post?.content_image_url || brandColors.length === 0) return
+    // When 'none' overlay is selected, skip rendering and show raw image
+    if (selectedOverlay === 'none') { setOverlayRendered(false); return }
     // For custom overlays, wait until customTemplates are loaded
     if (selectedOverlay.startsWith('custom-') && customTemplates.length === 0) return
     const ctx = canvas.getContext('2d')
@@ -429,6 +433,13 @@ export default function PostDetailPage() {
     setActionLoading(false)
   }
 
+  const handleSwapImage = async (newUrl: string) => {
+    if (!post) return
+    await supabase.from('social_posts').update({ content_image_url: newUrl }).eq('id', post.id)
+    setPost({ ...post, content_image_url: newUrl })
+    setShowMediaPicker(false)
+  }
+
   const handleDeletePost = async () => {
     if (!post) return
     setDeleteLoading(true)
@@ -585,6 +596,7 @@ export default function PostDetailPage() {
 
             {/* Inline headline/subtitle editing */}
             <div className="mt-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bildetekst</p>
               <div>
                 <label className="text-xs font-medium text-slate-500 mb-1 block">Overskrift (overlay)</label>
                 {editingHeadline ? (
@@ -664,6 +676,22 @@ export default function PostDetailPage() {
                     </button>
                   ))}
                 </div>
+                {/* Format warning for unusual platform/ratio combinations */}
+                {selectedAspectRatio === '16:9' && post.platform === 'instagram' && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mt-1.5">
+                    Liggende format er uvanlig for Instagram — stående (9:16) eller kvadrat (1:1) anbefales.
+                  </p>
+                )}
+                {selectedAspectRatio === '16:9' && post.platform === 'tiktok' && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mt-1.5">
+                    TikTok er optimalisert for stående format (9:16). Liggende kan kuttes i feeden.
+                  </p>
+                )}
+                {selectedAspectRatio === '9:16' && post.platform === 'linkedin' && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mt-1.5">
+                    Stående format er uvanlig for LinkedIn — kvadrat (1:1) eller liggende (16:9) anbefales.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -680,11 +708,18 @@ export default function PostDetailPage() {
             <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-slate-500">Bilde med merkevare</h3>
-                {post.content_image_url && (
-                  <button onClick={handleDownloadOverlay} className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 border border-emerald-100">
-                    <Download className="w-3 h-3" /> Last ned
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {post.content_image_url && (
+                    <button onClick={() => setShowMediaPicker(true)} className="text-xs px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors flex items-center gap-1 border border-slate-200">
+                      Bytt bilde
+                    </button>
+                  )}
+                  {post.content_image_url && (
+                    <button onClick={handleDownloadOverlay} className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 border border-emerald-100">
+                      <Download className="w-3 h-3" /> Last ned
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Overlay canvas */}
@@ -701,6 +736,12 @@ export default function PostDetailPage() {
                     {overlaySaved && (
                       <span className="text-xs text-emerald-600 font-medium animate-pulse">✓ Lagret</span>
                     )}
+                    {/* "No overlay" option — shows raw base image */}
+                    <button onClick={() => handleOverlayChange('none')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === 'none' ? 'bg-slate-200 text-slate-800 border border-slate-300' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                      Ingen
+                    </button>
+                    <span className="text-slate-300 text-xs">|</span>
                     {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
                       <button key={tmpl.id} onClick={() => handleOverlayChange(`custom-${tmpl.id}`)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${selectedOverlay === `custom-${tmpl.id}` ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-purple-50 text-purple-500 hover:bg-purple-100 border border-purple-200'}`}>
@@ -1062,6 +1103,13 @@ export default function PostDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Media picker modal for swapping post image */}
+      <MediaPickerModal
+        open={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={handleSwapImage}
+      />
     </div>
   )
 }

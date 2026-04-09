@@ -13,6 +13,7 @@ type Post = {
   status: string
   scheduled_for: string | null
   created_at: string
+  content_image_url: string | null
 }
 
 type WeeklyGoal = {
@@ -131,7 +132,7 @@ export default function CalendarPage() {
     if (!orgId) return
     const { data } = await supabase
       .from('social_posts')
-      .select('id, content_text, caption, platform, status, scheduled_for, created_at')
+      .select('id, content_text, caption, platform, status, scheduled_for, created_at, content_image_url')
       .eq('org_id', orgId)
       .in('status', ['approved', 'scheduled', 'published', 'draft', 'pending_approval'])
       .not('scheduled_for', 'is', null)
@@ -485,9 +486,17 @@ export default function CalendarPage() {
                   href={`/dashboard/posts/${post.id}`}
                   className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all duration-200"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-                    <PlatformIcon className="w-5 h-5 text-slate-500" />
-                  </div>
+                  {post.content_image_url ? (
+                    <img
+                      src={post.content_image_url}
+                      alt=""
+                      className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-100"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center flex-shrink-0">
+                      <PlatformIcon className="w-5 h-5 text-slate-500" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-slate-900 truncate font-medium">
                       {post.caption || post.content_text || 'Ingen innhold'}
