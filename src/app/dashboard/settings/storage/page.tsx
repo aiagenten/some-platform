@@ -22,6 +22,7 @@ type CloudFile = {
 
 export default function StorageSettings() {
   const [userId, setUserId] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [orgId, setOrgId] = useState<string | null>(null)
   const [cloudAccounts, setCloudAccounts] = useState<CloudAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<CloudAccount | null>(null)

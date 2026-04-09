@@ -142,7 +142,7 @@ export default function CalendarPage() {
     // Load unscheduled approved posts
     const { data: unscheduled } = await supabase
       .from('social_posts')
-      .select('id, content_text, caption, platform, status, scheduled_for, created_at')
+      .select('id, content_text, caption, platform, status, scheduled_for, created_at, content_image_url')
       .eq('org_id', orgId)
       .eq('status', 'approved')
       .is('scheduled_for', null)
@@ -153,7 +153,7 @@ export default function CalendarPage() {
     const { monday, sunday } = getWeekBounds(currentDate)
     const { data: weekPosts } = await supabase
       .from('social_posts')
-      .select('id, content_text, caption, platform, status, created_at, scheduled_for')
+      .select('id, content_text, caption, platform, status, created_at, scheduled_for, content_image_url')
       .eq('org_id', orgId)
       .in('status', ['approved', 'scheduled', 'published'])
       .gte('created_at', monday.toISOString())

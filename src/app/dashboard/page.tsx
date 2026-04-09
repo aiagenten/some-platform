@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight, Calendar, BookOpen, TrendingUp, Sparkles } from 'lucide-react'
+import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight, Calendar, BookOpen, Sparkles } from 'lucide-react'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({ total: 0, draft: 0, pending: 0, approved: 0, published: 0 })

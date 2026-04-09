@@ -10,6 +10,7 @@ export const maxDuration = 30
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(request: NextRequest) {
   // ── Auth ──
   const supabase = createClient()

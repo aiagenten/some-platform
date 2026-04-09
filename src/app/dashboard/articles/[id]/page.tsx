@@ -11,7 +11,7 @@ import AEOPanel from '@/components/seo/AEOPanel'
 import SERPPreview from '@/components/seo/SERPPreview'
 import {
   ArrowLeft, Save, Loader2, Globe, Download, Image as ImageIcon,
-  FileText, Clock, Eye, Trash2, X, Sparkles, Wand2
+  FileText, Clock, Trash2, X, Sparkles, Wand2
 } from 'lucide-react'
 
 const ArticleEditor = dynamic(() => import('@/components/ArticleEditor'), { ssr: false })

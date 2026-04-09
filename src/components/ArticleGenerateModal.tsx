@@ -26,6 +26,7 @@ const LENGTH_OPTIONS = [
   { value: 'long' as const, label: 'Lang', description: '1500–2500 ord', icon: BookOpen },
 ]
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function ArticleGenerateModal({ open, onClose, existingArticleId }: Props) {
   const router = useRouter()
   const [topic, setTopic] = useState('')
