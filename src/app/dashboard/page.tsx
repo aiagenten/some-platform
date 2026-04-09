@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
+import { FileText, FilePenLine, Clock, CheckCircle2, Send, Rocket, ArrowRight, Calendar, BookOpen, TrendingUp, Sparkles } from 'lucide-react'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({ total: 0, draft: 0, pending: 0, approved: 0, published: 0 })
   const [orgName, setOrgName] = useState('')
   const [showOnboardingBanner, setShowOnboardingBanner] = useState(false)
+  const [upcomingPosts, setUpcomingPosts] = useState<{ id: string; caption: string; platform: string; scheduled_for: string }[]>([])
+  const [recentArticles, setRecentArticles] = useState<{ id: string; title: string; status: string }[]>([])
   const router = useRouter()
   const supabase = createClient()
 
@@ -61,17 +64,47 @@ export default function DashboardPage() {
         approved: postList.filter(p => p.status === 'approved' || p.status === 'scheduled').length,
         published: postList.filter(p => p.status === 'published').length,
       })
+
+      // Load upcoming scheduled posts
+      const { data: upcoming } = await supabase
+        .from('social_posts')
+        .select('id, caption, content_text, platform, scheduled_for')
+        .eq('org_id', profile.org_id)
+        .in('status', ['approved', 'scheduled'])
+        .not('scheduled_for', 'is', null)
+        .gte('scheduled_for', new Date().toISOString())
+        .order('scheduled_for')
+        .limit(5)
+
+      if (upcoming) setUpcomingPosts(upcoming.map(p => ({ ...p, caption: p.caption || p.content_text || 'Ingen innhold' })))
+
+      // Load recent articles
+      const { data: articles } = await supabase
+        .from('articles')
+        .select('id, title, status')
+        .eq('org_id', profile.org_id)
+        .order('created_at', { ascending: false })
+        .limit(3)
+
+      if (articles) setRecentArticles(articles)
     }
     load()
   }, [])
 
   const cards = [
-    { label: 'Totalt', value: stats.total, icon: FileText, gradient: 'from-slate-600 to-slate-700', iconBg: 'bg-slate-500/20' },
-    { label: 'Utkast', value: stats.draft, icon: FilePenLine, gradient: 'from-slate-500 to-slate-600', iconBg: 'bg-slate-400/20' },
-    { label: 'Venter', value: stats.pending, icon: Clock, gradient: 'from-amber-500 to-orange-600', iconBg: 'bg-amber-400/20' },
-    { label: 'Godkjent', value: stats.approved, icon: CheckCircle2, gradient: 'from-emerald-500 to-emerald-600', iconBg: 'bg-emerald-400/20' },
-    { label: 'Publisert', value: stats.published, icon: Send, gradient: 'from-indigo-500 to-purple-600', iconBg: 'bg-indigo-400/20' },
+    { label: 'Totalt', value: stats.total, icon: FileText, bg: 'bg-purple-50', border: 'border-purple-100', iconColor: 'text-purple-600', iconBg: 'bg-purple-100', valueColor: 'text-purple-900' },
+    { label: 'Utkast', value: stats.draft, icon: FilePenLine, bg: 'bg-slate-50', border: 'border-slate-100', iconColor: 'text-slate-600', iconBg: 'bg-slate-100', valueColor: 'text-slate-900' },
+    { label: 'Venter', value: stats.pending, icon: Clock, bg: 'bg-amber-50', border: 'border-amber-100', iconColor: 'text-amber-600', iconBg: 'bg-amber-100', valueColor: 'text-amber-900' },
+    { label: 'Godkjent', value: stats.approved, icon: CheckCircle2, bg: 'bg-emerald-50', border: 'border-emerald-100', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-100', valueColor: 'text-emerald-900' },
+    { label: 'Publisert', value: stats.published, icon: Send, bg: 'bg-indigo-50', border: 'border-indigo-100', iconColor: 'text-indigo-600', iconBg: 'bg-indigo-100', valueColor: 'text-indigo-900' },
   ]
+
+  const PLATFORM_LABELS: Record<string, string> = {
+    instagram: 'Instagram',
+    facebook: 'Facebook',
+    linkedin: 'LinkedIn',
+    tiktok: 'TikTok',
+  }
 
   return (
     <div className="animate-fade-in-up">
@@ -102,22 +135,105 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* Stats cards - light theme with readable text */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
         {cards.map((c) => {
           const Icon = c.icon
           return (
             <div
               key={c.label}
-              className={`bg-gradient-to-br ${c.gradient} rounded-2xl p-5 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5`}
+              className={`${c.bg} border ${c.border} rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5`}
             >
               <div className={`w-10 h-10 ${c.iconBg} rounded-xl flex items-center justify-center mb-3`}>
-                <Icon className="w-5 h-5" />
+                <Icon className={`w-5 h-5 ${c.iconColor}`} />
               </div>
-              <div className="text-3xl font-bold">{c.value}</div>
-              <div className="text-sm mt-1 opacity-80">{c.label}</div>
+              <div className={`text-3xl font-bold ${c.valueColor}`}>{c.value}</div>
+              <div className="text-sm mt-1 text-slate-500">{c.label}</div>
             </div>
           )
         })}
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Link href="/dashboard/generate" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-200">
+          <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Generer innhold</p>
+            <p className="text-xs text-slate-500">Lag nytt bilde og innlegg</p>
+          </div>
+        </Link>
+        <Link href="/dashboard/approval" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-amber-200 transition-all duration-200">
+          <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+            <CheckCircle2 className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Godkjenningskø</p>
+            <p className="text-xs text-slate-500">{stats.pending} venter på gjennomgang</p>
+          </div>
+        </Link>
+        <Link href="/dashboard/calendar" className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-200">
+          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+            <Calendar className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Kalender</p>
+            <p className="text-xs text-slate-500">Se planlagte innlegg</p>
+          </div>
+        </Link>
+      </div>
+
+      {/* Upcoming posts and recent articles */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Upcoming scheduled posts */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-4 h-4 text-indigo-600" />
+            <h3 className="font-semibold text-slate-900">Kommende innlegg</h3>
+          </div>
+          {upcomingPosts.length > 0 ? (
+            <div className="space-y-3">
+              {upcomingPosts.map(post => (
+                <Link key={post.id} href={`/dashboard/posts/${post.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-800 truncate">{post.caption}</p>
+                    <p className="text-xs text-slate-400">
+                      {PLATFORM_LABELS[post.platform] || post.platform} — {new Date(post.scheduled_for).toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 py-4 text-center">Ingen planlagte innlegg</p>
+          )}
+        </div>
+
+        {/* Recent articles */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen className="w-4 h-4 text-emerald-600" />
+            <h3 className="font-semibold text-slate-900">Siste artikler</h3>
+          </div>
+          {recentArticles.length > 0 ? (
+            <div className="space-y-3">
+              {recentArticles.map(article => (
+                <Link key={article.id} href={`/dashboard/articles/${article.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-800 truncate">{article.title || 'Uten tittel'}</p>
+                    <p className="text-xs text-slate-400 capitalize">{article.status === 'published' ? 'Publisert' : article.status === 'draft' ? 'Utkast' : article.status}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 py-4 text-center">Ingen artikler ennå</p>
+          )}
+        </div>
       </div>
     </div>
   )

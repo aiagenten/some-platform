@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Instagram, Facebook, Linkedin, Music, Smartphone, CheckCircle2, Trash2, Pencil, Loader2, PartyPopper, Calendar, XCircle, Target, MessageSquare } from 'lucide-react'
-import { getOverlayTemplate } from '@/lib/overlay-templates'
+import { getOverlayTemplate, PLATFORM_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
 import type { BrandVisualStyle } from '@/lib/overlay-style-resolver'
@@ -60,7 +60,7 @@ function parseScheduledFromSuggested(timeStr: string): string | null {
   return null
 }
 
-// Full overlay preview rendered on canvas
+// Full overlay preview rendered on canvas — uses platform-correct aspect ratio
 function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, customTemplates }: {
   post: Post
   brandColors: Array<{ hex: string; role: string }>
@@ -71,16 +71,26 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
   customTemplates: CustomOverlayTemplate[]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const renderIdRef = useRef(0)
   const [rendered, setRendered] = useState(false)
+
+  // Determine correct dimensions based on platform
+  const platformDims = PLATFORM_DIMENSIONS[post.platform] || { width: 1080, height: 1080 }
+  const aspectRatio = `${platformDims.width}/${platformDims.height}`
 
   const render = useCallback(async () => {
     const canvas = canvasRef.current
     if (!canvas || !post.content_image_url) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const size = 1080
-    canvas.width = size
-    canvas.height = size
+
+    // Assign a render ID to detect stale renders
+    const thisRenderId = ++renderIdRef.current
+
+    const dims = PLATFORM_DIMENSIONS[post.platform] || { width: 1080, height: 1080 }
+    canvas.width = dims.width
+    canvas.height = dims.height
+    ctx.clearRect(0, 0, dims.width, dims.height)
 
     const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
       const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = src
@@ -88,8 +98,11 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
 
     try {
       const baseImage = await loadImage(post.content_image_url!)
+      if (renderIdRef.current !== thisRenderId) return // stale render, abort
+
       let logo: HTMLImageElement | null = null
       if (brandLogoUrl) { try { logo = await loadImage(brandLogoUrl) } catch { /* skip */ } }
+      if (renderIdRef.current !== thisRenderId) return
 
       const primaryColor = brandColors.find(c => c.role === 'primary')?.hex || '#9933ff'
       const accentColor = brandColors.find(c => c.role === 'accent')?.hex || primaryColor
@@ -103,7 +116,12 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
       const subtitle = post.subtitle || ''
 
       const resolvedStyle = resolveOverlayStyle(brandVisualStyle)
-      const options: OverlayOptions = { size, baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle }
+      const options: OverlayOptions = {
+        size: Math.min(dims.width, dims.height),
+        width: dims.width,
+        height: dims.height,
+        baseImage, logo, headline, subtitle, brandName: orgName, primaryColor, accentColor, headingFont, bodyFont, visualStyle: resolvedStyle
+      }
 
       const overlayId = post.selected_overlay || 'modern-dark'
       const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
@@ -112,11 +130,13 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
       } else {
         await getOverlayTemplate(overlayId).render(ctx, options)
       }
+
+      if (renderIdRef.current !== thisRenderId) return
       setRendered(true)
     } catch {
-      setRendered(false)
+      if (renderIdRef.current === thisRenderId) setRendered(false)
     }
-  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, customTemplates])
+  }, [post.content_image_url, post.selected_overlay, post.headline, post.subtitle, post.content_text, post.caption, post.platform, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, customTemplates])
 
   useEffect(() => { render() }, [render])
 
@@ -127,10 +147,10 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
       <canvas
         ref={canvasRef}
         className={`w-full ${rendered ? '' : 'hidden'}`}
-        style={{ aspectRatio: '1/1' }}
+        style={{ aspectRatio }}
       />
       {!rendered && (
-        <img src={post.content_image_url} alt="" className="w-full" style={{ aspectRatio: '1/1', objectFit: 'cover' }} />
+        <img src={post.content_image_url} alt="" className="w-full" style={{ aspectRatio, objectFit: 'cover' }} />
       )}
     </div>
   )

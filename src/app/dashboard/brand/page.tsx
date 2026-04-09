@@ -17,6 +17,24 @@ type BrandFont = {
   weight: number
 }
 
+type BrandVisualStyle = {
+  border_radius?: string
+  button_style?: {
+    border_radius?: string
+    has_shadow?: boolean
+    has_gradient?: boolean
+    is_outlined?: boolean
+  }
+  card_style?: {
+    border_radius?: string
+    has_shadow?: boolean
+  }
+  spacing_feel?: string
+  visual_weight?: string
+  layout_style?: string
+  overall_vibe?: string
+}
+
 type BrandProfile = {
   id: string
   org_id: string
@@ -33,6 +51,7 @@ type BrandProfile = {
   key_messages: string[]
   logo_url: string | null
   source_url: string | null
+  visual_style: BrandVisualStyle | null
 }
 
 type BrandAsset = {
@@ -73,6 +92,8 @@ export default function BrandPage() {
   const [toneInputType, setToneInputType] = useState<"text" | "url">("url")
   const [addingTone, setAddingTone] = useState(false)
   const [toneSamples, setToneSamples] = useState<{ id: string; source_url: string | null; content_preview: string; source_type: string; created_at: string }[]>([])
+  const [editingBorderRadius, setEditingBorderRadius] = useState(false)
+  const [borderRadiusValue, setBorderRadiusValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -361,6 +382,133 @@ export default function BrandPage() {
                     )
                   })}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Visual Style — Border Radius & Design Elements */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-900 mb-4">Designelementer</h2>
+
+            {/* Border Radius */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-slate-500">Kantstil (border-radius)</p>
+                <button
+                  onClick={() => {
+                    setEditingBorderRadius(!editingBorderRadius)
+                    setBorderRadiusValue(brand.visual_style?.border_radius || '')
+                  }}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  {editingBorderRadius ? 'Avbryt' : 'Rediger'}
+                </button>
+              </div>
+
+              {editingBorderRadius ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: 'Skarpe', value: 'none', radius: '0px' },
+                      { label: 'Litt avrundet', value: 'sm', radius: '8px' },
+                      { label: 'Avrundet', value: 'lg', radius: '16px' },
+                      { label: 'Veldig avrundet', value: '2xl', radius: '24px' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setBorderRadiusValue(opt.value)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                          borderRadiusValue === opt.value
+                            ? 'border-indigo-300 bg-indigo-50'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div
+                          className="w-12 h-8 bg-indigo-500"
+                          style={{ borderRadius: opt.radius }}
+                        />
+                        <span className="text-xs text-slate-600">{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!orgId || !brand) return
+                      const updatedStyle = { ...(brand.visual_style || {}), border_radius: borderRadiusValue }
+                      await supabase.from('brand_profiles').update({ visual_style: updatedStyle }).eq('id', brand.id)
+                      setBrand({ ...brand, visual_style: updatedStyle })
+                      setEditingBorderRadius(false)
+                      setMessage({ type: 'success', text: 'Kantstil oppdatert!' })
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all"
+                  >
+                    Lagre
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const br = brand.visual_style?.border_radius
+                    const labels: Record<string, string> = {
+                      none: 'Skarpe kanter', '0': 'Skarpe kanter',
+                      sm: 'Litt avrundede kanter', md: 'Avrundede kanter',
+                      lg: 'Avrundede kanter', xl: 'Veldig avrundede kanter',
+                      '2xl': 'Veldig avrundede kanter', '3xl': 'Pille-form',
+                      full: 'Pille-form',
+                    }
+                    const radiusMap: Record<string, string> = {
+                      none: '0px', '0': '0px', sm: '8px', md: '12px',
+                      lg: '16px', xl: '20px', '2xl': '24px', '3xl': '32px', full: '9999px',
+                    }
+                    const displayLabel = br ? (labels[br.toLowerCase()] || br) : 'Ikke definert'
+                    const displayRadius = br ? (radiusMap[br.toLowerCase()] || '8px') : '0px'
+                    return (
+                      <>
+                        <div
+                          className="w-16 h-10 bg-indigo-500 flex-shrink-0"
+                          style={{ borderRadius: displayRadius }}
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{displayLabel}</p>
+                          {brand.visual_style?.button_style?.border_radius && (
+                            <p className="text-xs text-slate-400">Knapper: {brand.visual_style.button_style.border_radius}</p>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Other visual style info */}
+            {brand.visual_style && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {brand.visual_style.layout_style && (
+                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium border border-slate-200 capitalize">
+                    {brand.visual_style.layout_style}
+                  </span>
+                )}
+                {brand.visual_style.visual_weight && (
+                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium border border-slate-200 capitalize">
+                    Visuell tyngde: {brand.visual_style.visual_weight}
+                  </span>
+                )}
+                {brand.visual_style.spacing_feel && (
+                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium border border-slate-200 capitalize">
+                    Spacing: {brand.visual_style.spacing_feel}
+                  </span>
+                )}
+                {brand.visual_style.button_style?.has_shadow && (
+                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium border border-slate-200">
+                    Skygge på knapper
+                  </span>
+                )}
+                {brand.visual_style.button_style?.is_outlined && (
+                  <span className="px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium border border-slate-200">
+                    Outline-knapper
+                  </span>
+                )}
               </div>
             )}
           </div>

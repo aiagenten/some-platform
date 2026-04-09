@@ -235,14 +235,38 @@ export default function ImportedPostsPage() {
                     post.is_learning_material ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-slate-200/60'
                   }`}
                 >
-                  {/* Image thumbnail */}
+                  {/* Image/Video thumbnail */}
                   {post.image_urls && post.image_urls.length > 0 && post.image_urls[0] && (
                     <div className="h-40 bg-slate-100 overflow-hidden">
-                      <img
-                        src={post.image_urls[0]}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+                      {/\.(mp4|mov|webm|avi)(\?|$)/i.test(post.image_urls[0]) ? (
+                        <video
+                          src={post.image_urls[0]}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-cover"
+                          onMouseEnter={(e) => e.currentTarget.play()}
+                          onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0 }}
+                        />
+                      ) : (
+                        <img
+                          src={post.image_urls[0]}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback: try as video if image fails to load
+                            const parent = e.currentTarget.parentElement
+                            if (!parent) return
+                            const video = document.createElement('video')
+                            video.src = post.image_urls[0]
+                            video.muted = true
+                            video.playsInline = true
+                            video.preload = 'metadata'
+                            video.className = 'w-full h-full object-cover'
+                            parent.replaceChild(video, e.currentTarget)
+                          }}
+                        />
+                      )}
                     </div>
                   )}
 
