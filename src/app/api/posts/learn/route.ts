@@ -134,8 +134,36 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, learning: learningData })
       }
 
+      case 'manual': {
+        // When user manually adds a learning
+        const { rule, learning_type } = body
+        if (!rule || !learning_type) {
+          return NextResponse.json({ error: 'rule and learning_type are required for manual' }, { status: 400 })
+        }
+
+        const { data: learningData, error: learningError } = await supabase
+          .from('brand_learnings')
+          .insert({
+            org_id,
+            learning_type,
+            rule,
+            source: 'manual',
+            confidence: 1.0,
+            active: true,
+          })
+          .select()
+          .single()
+
+        if (learningError) {
+          console.error('Manual learning insert error:', learningError)
+          return NextResponse.json({ error: 'Failed to save learning' }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true, learning: learningData })
+      }
+
       default:
-        return NextResponse.json({ error: 'Invalid action. Use: rejection, edit, high_engagement' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid action. Use: rejection, edit, high_engagement, manual' }, { status: 400 })
     }
   } catch (err) {
     console.error('Learn error:', err)
@@ -200,6 +228,34 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, learning: data })
   } catch (err) {
     console.error('Patch learning error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// DELETE: Remove a learning by id
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { learning_id } = body
+
+    if (!learning_id) {
+      return NextResponse.json({ error: 'learning_id is required' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
+    const { error } = await supabase
+      .from('brand_learnings')
+      .delete()
+      .eq('id', learning_id)
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete learning' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Delete learning error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

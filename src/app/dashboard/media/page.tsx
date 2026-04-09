@@ -506,13 +506,17 @@ function MediaLibraryContent() {
                     <div className="flex items-center gap-1 mt-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
                         asset.source === 'ai_generated' ? 'bg-purple-50 text-purple-600' :
+                        asset.source === 'digital-twin' ? 'bg-violet-50 text-violet-600' :
                         asset.source === 'upload' ? 'bg-blue-50 text-blue-600' :
                         asset.source === 'google_drive' ? 'bg-green-50 text-green-600' :
-                        'bg-sky-50 text-sky-600'
+                        asset.source === 'onedrive' ? 'bg-sky-50 text-sky-600' :
+                        'bg-slate-50 text-slate-500'
                       }`}>
                         {asset.source === 'ai_generated' ? 'AI' :
+                         asset.source === 'digital-twin' ? 'Digital Twin' :
                          asset.source === 'upload' ? 'Opplastet' :
-                         asset.source === 'google_drive' ? 'Drive' : 'OneDrive'}
+                         asset.source === 'google_drive' ? 'Drive' :
+                         asset.source === 'onedrive' ? 'OneDrive' : asset.source}
                       </span>
                       {asset.tags.length > 0 && (
                         <span className="text-[10px] text-slate-400">{asset.tags.length} tags</span>

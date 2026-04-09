@@ -25,12 +25,13 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/dashboard/posts', label: 'Innlegg', icon: FileText },
       { href: '/dashboard/articles', label: 'Artikler', icon: BookOpen },
       { href: '/dashboard/approval', label: 'Godkjenning', icon: CheckCircle2 },
+      { href: '/dashboard/generate', label: 'Generer innlegg', icon: Sparkles },
     ],
   },
   {
     section: 'Generer',
     items: [
-      { href: '/dashboard/generate', label: 'Bilde', icon: Sparkles },
+      { href: '/dashboard/generate?mode=image', label: 'Generer bilde', icon: ImageIcon },
       { href: '/dashboard/digital-twin', label: 'Digital tvilling', icon: User },
       { href: '/dashboard/video', label: 'Video', icon: Video },
       { href: '/dashboard/video-editor-v2', label: 'Video Studio', icon: Film },

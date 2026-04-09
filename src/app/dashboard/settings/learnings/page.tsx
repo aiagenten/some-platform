@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { BookOpen, X, Pencil, TrendingUp, User, FileText } from 'lucide-react'
+import { BookOpen, X, Pencil, TrendingUp, User, FileText, Trash2, Plus } from 'lucide-react'
 
 type BrandLearning = {
   id: string
@@ -15,10 +15,18 @@ type BrandLearning = {
   created_at: string
 }
 
+const LEARNING_TYPES = ['style', 'tone', 'topic', 'format', 'timing'] as const
+type LearningType = typeof LEARNING_TYPES[number]
+
 export default function LearningsSettings() {
   const [learnings, setLearnings] = useState<BrandLearning[]>([])
+  const [orgId, setOrgId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [newRule, setNewRule] = useState('')
+  const [newType, setNewType] = useState<LearningType>('style')
+  const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -34,6 +42,8 @@ export default function LearningsSettings() {
         .single()
 
       if (!profile) return
+
+      setOrgId(profile.org_id)
 
       const res = await fetch(`/api/posts/learn?org_id=${profile.org_id}`)
       if (res.ok) {
@@ -56,6 +66,43 @@ export default function LearningsSettings() {
       setLearnings(prev => prev.map(l => l.id === learningId ? { ...l, active: !currentActive } : l))
     }
     setToggling(null)
+  }
+
+  const handleDelete = async (learningId: string) => {
+    setDeleting(learningId)
+    const res = await fetch('/api/posts/learn', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learning_id: learningId }),
+    })
+    if (res.ok) {
+      setLearnings(prev => prev.filter(l => l.id !== learningId))
+    }
+    setDeleting(null)
+  }
+
+  const handleAddManual = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newRule.trim() || !orgId) return
+    setSubmitting(true)
+    const res = await fetch('/api/posts/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'manual',
+        org_id: orgId,
+        rule: newRule.trim(),
+        learning_type: newType,
+      }),
+    })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.learning) {
+        setLearnings(prev => [json.learning, ...prev])
+      }
+      setNewRule('')
+    }
+    setSubmitting(false)
   }
 
   const sourceIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -87,6 +134,34 @@ export default function LearningsSettings() {
           {learnings.filter(l => l.active).length} aktive
         </span>
       </div>
+
+      {/* Manual entry form */}
+      <form onSubmit={handleAddManual} className="flex gap-2 mb-5">
+        <select
+          value={newType}
+          onChange={e => setNewType(e.target.value as LearningType)}
+          className="text-xs border border-slate-200 rounded-lg px-2 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-shrink-0"
+        >
+          {LEARNING_TYPES.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={newRule}
+          onChange={e => setNewRule(e.target.value)}
+          placeholder="Legg til en læringsregel manuelt..."
+          className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        />
+        <button
+          type="submit"
+          disabled={submitting || !newRule.trim()}
+          className="flex items-center gap-1.5 text-sm bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          {submitting ? 'Legger til...' : 'Legg til'}
+        </button>
+      </form>
 
       {learnings.length === 0 ? (
         <div className="text-center py-8">
@@ -122,17 +197,27 @@ export default function LearningsSettings() {
                     <span className="text-xs text-slate-400">· {new Date(learning.created_at).toLocaleDateString('nb-NO')}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleToggle(learning.id, learning.active)}
-                  disabled={toggling === learning.id}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
-                    learning.active ? 'bg-indigo-600' : 'bg-slate-200'
-                  }`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
-                    learning.active ? 'translate-x-5' : 'translate-x-0'
-                  }`} />
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleToggle(learning.id, learning.active)}
+                    disabled={toggling === learning.id}
+                    className={`relative inline-flex h-6 w-11 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                      learning.active ? 'bg-indigo-600' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
+                      learning.active ? 'translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(learning.id)}
+                    disabled={deleting === learning.id}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    title="Slett"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )
           })}
