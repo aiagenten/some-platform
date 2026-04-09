@@ -584,12 +584,20 @@ export default function PostDetailPage() {
                 </div>
               )}
               {post.hashtags && post.hashtags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {post.hashtags.map((tag, i) => (
-                    <span key={i} className="text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                      {tag.startsWith('#') ? tag : `#${tag}`}
-                    </span>
-                  ))}
+                <div className="mt-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <h3 className="text-xs font-medium text-slate-400">Hashtags</h3>
+                    {(post.platform === 'linkedin' || post.platform === 'facebook') && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">Anbefales uten for {post.platform === 'linkedin' ? 'LinkedIn' : 'Facebook'}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {post.hashtags.map((tag, i) => (
+                      <span key={i} className="text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                        {tag.startsWith('#') ? tag : `#${tag}`}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

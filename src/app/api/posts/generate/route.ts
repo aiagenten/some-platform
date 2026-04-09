@@ -140,24 +140,24 @@ const promptTemplate = (promptBibliotek as Record<string, any>).prompts[promptKe
 
     if (!regenerate_image) {
       const platformRules: Record<string, string> = {
-        instagram: `INSTAGRAM-REGLER:
+        instagram: `INSTAGRAM-REGLER (2025/2026 best practices):
 - Tekst: 150-300 ord. Hook i første linje (vises uten "mer"-klikk).
 - Emojier: bruk sparsomt og naturlig, aldri på rad.
-- Hashtags: IKKE i selve teksten — de returneres separat i "hashtags"-feltet.
+- Hashtags: 3-5 relevante hashtags MAKS. Returneres separat i "hashtags"-feltet, ALDRI i selve teksten. Hvis innholdet er selvforklarende, dropp hashtags helt — algoritmen prioriterer innhold over hashtags.
 - Ingen lenker i teksten (Instagram klikker ikke dem).
 - Avslutt med en CTA eller spørsmål.`,
-        facebook: `FACEBOOK-REGLER:
-- Tekst: 100-250 ord. Kortere innlegg gir bedre rekkevidde i 2024/2025.
+        facebook: `FACEBOOK-REGLER (2025/2026 best practices):
+- Tekst: 100-250 ord. Kortere innlegg gir bedre rekkevidde.
 - Emojier: tillatt, men ikke overdrev.
-- Hashtags: 1-3 maks — Facebook er ikke hashtagdrevet. Returneres separat.
+- Hashtags: UNNGÅ hashtags på Facebook — de gir ingen rekkeviddefordel og ser usprofesjonelt ut. Returner tom "hashtags"-array.
 - Lenker fungerer, men begrens til én.
 - Personlig og konversasjonelt tone fungerer best.`,
-        linkedin: `LINKEDIN-REGLER (2024/2025 best practices):
+        linkedin: `LINKEDIN-REGLER (2025/2026 best practices):
 - Tekst: 150-300 ord. Første linje er avgjørende — vises uten "se mer".
 - Struktur: Hook → Verdi/innsikt → Avslutning med spørsmål/refleksjon.
 - INGEN emojier i starten av linjer (klisjé på LinkedIn).
 - Bruk linjeskift aktivt — korte avsnitt øker lesbarheten.
-- Hashtags: maks 3-5 relevante LinkedIn-hashtags. Returneres separat.
+- Hashtags: UNNGÅ hashtags på LinkedIn — best practice er nå uten. Returner tom "hashtags"-array. LinkedIn-algoritmen belønner innholdet, ikke hashtags.
 - Del personlige erfaringer og konkrete innsikter — ikke reklame.
 - Ingen klisjeer som "Spent to announce", "I'm humbled", "Game-changer".`,
       }
