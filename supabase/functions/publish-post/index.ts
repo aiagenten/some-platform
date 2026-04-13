@@ -248,12 +248,14 @@ async function publishIGSingleImage(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id: container.id,
+        share_to_feed: true,
         access_token: accessToken,
       }),
     }
   )
   const published = await publishRes.json()
   if (published.error) {
+    console.error('IG Publish failed:', JSON.stringify(published.error))
     throw new Error(`IG Publish: ${published.error.message}`)
   }
   return published
@@ -314,12 +316,14 @@ async function publishIGCarousel(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id: carousel.id,
+        share_to_feed: true,
         access_token: accessToken,
       }),
     }
   )
   const published = await publishRes.json()
   if (published.error) {
+    console.error('IG Carousel Publish failed:', JSON.stringify(published.error))
     throw new Error(`IG Carousel Publish: ${published.error.message}`)
   }
   return published
@@ -367,6 +371,9 @@ async function publishIGReel(
     throw new Error('Reel processing failed')
   }
 
+  // Grace delay after FINISHED — some Business accounts need a moment
+  await new Promise((r) => setTimeout(r, 3000))
+
   // Publish
   const publishRes = await fetch(
     `https://graph.facebook.com/v19.0/${igUserId}/media_publish`,
@@ -375,12 +382,14 @@ async function publishIGReel(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id: container.id,
+        share_to_feed: true,
         access_token: accessToken,
       }),
     }
   )
   const published = await publishRes.json()
   if (published.error) {
+    console.error('IG Reel Publish failed:', JSON.stringify(published.error))
     throw new Error(`IG Reel Publish: ${published.error.message}`)
   }
   return published
