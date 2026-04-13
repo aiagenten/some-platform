@@ -9,6 +9,7 @@ import {
   ArrowRight, Volume2, VolumeX, Film
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import MediaPickerModal from '@/components/MediaPickerModal'
 import { VIDEO_OVERLAY_TEMPLATES, type VideoOverlayConfig } from '@/lib/video-overlay-templates'
 
 const RemotionPreview = dynamic(
@@ -81,6 +82,7 @@ export default function VideoCreator() {
 
   // Step 2: End image
   const [endImageUrl, setEndImageUrl] = useState<string | null>(null)
+  const [showMediaPicker, setShowMediaPicker] = useState(false)
   const [anglePrompt, setAnglePrompt] = useState('')
   const [customAngle, setCustomAngle] = useState('')
   const [motionPrompt, setMotionPrompt] = useState('')
@@ -798,7 +800,7 @@ export default function VideoCreator() {
 
             {/* Upload end image option */}
             <div className="flex items-center gap-3 py-3 px-4 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-sm text-slate-600">Eller last opp eget sluttbilde:</span>
+              <span className="text-sm text-slate-600">Eller velg sluttbilde:</span>
               <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2">
                 <Upload className="w-4 h-4" />
                 Last opp
@@ -827,6 +829,13 @@ export default function VideoCreator() {
                   }}
                 />
               </label>
+              <button
+                onClick={() => setShowMediaPicker(true)}
+                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+              >
+                <ImageIcon className="w-4 h-4" />
+                Mediebibliotek
+              </button>
             </div>
 
             {/* Angle presets */}
@@ -1231,6 +1240,15 @@ export default function VideoCreator() {
           </button>
         )}
       </div>
+
+      <MediaPickerModal
+        open={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={(url) => {
+          setEndImageUrl(url)
+          setShowMediaPicker(false)
+        }}
+      />
     </div>
   )
 }

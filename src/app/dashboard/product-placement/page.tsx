@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Package, Upload, Trash2, Sparkles, Download, Image as ImageIcon, X, ChevronRight } from 'lucide-react'
+import MediaPickerModal from '@/components/MediaPickerModal'
 
 type Product = {
   id: string
@@ -51,7 +52,9 @@ export default function ProductPlacementPage() {
   const [newProductDescription, setNewProductDescription] = useState('')
   const [newProductFile, setNewProductFile] = useState<File | null>(null)
   const [newProductPreview, setNewProductPreview] = useState<string | null>(null)
+  const [newProductMediaUrl, setNewProductMediaUrl] = useState<string | null>(null)
   const [showUploadForm, setShowUploadForm] = useState(false)
+  const [showMediaPicker, setShowMediaPicker] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Generation state
@@ -119,22 +122,31 @@ export default function ProductPlacementPage() {
 
   // Upload product
   const handleUploadProduct = async () => {
-    if (!newProductFile || !newProductName.trim() || !orgId) return
+    if ((!newProductFile && !newProductMediaUrl) || !newProductName.trim() || !orgId) return
     setUploadingProduct(true)
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', newProductFile)
-      formData.append('org_id', orgId)
+      let imageUrl: string
 
-      const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      if (newProductMediaUrl) {
+        // Selected from media library — already uploaded
+        imageUrl = newProductMediaUrl
+      } else {
+        // Upload new file
+        const formData = new FormData()
+        formData.append('file', newProductFile!)
+        formData.append('org_id', orgId)
 
-      if (!uploadRes.ok) throw new Error('Opplasting feilet')
-      const uploadData = await uploadRes.json()
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!uploadRes.ok) throw new Error('Opplasting feilet')
+        const uploadData = await uploadRes.json()
+        imageUrl = uploadData.url
+      }
 
       const { error: insertError } = await supabase
         .from('products')
@@ -142,8 +154,8 @@ export default function ProductPlacementPage() {
           org_id: orgId,
           name: newProductName.trim(),
           description: newProductDescription.trim() || null,
-          image_url: uploadData.url,
-          thumbnail_url: uploadData.url,
+          image_url: imageUrl,
+          thumbnail_url: imageUrl,
         })
 
       if (insertError) throw new Error(insertError.message)
@@ -152,6 +164,7 @@ export default function ProductPlacementPage() {
       setNewProductDescription('')
       setNewProductFile(null)
       setNewProductPreview(null)
+      setNewProductMediaUrl(null)
       setShowUploadForm(false)
       setSuccess('Produkt lagt til!')
       setTimeout(() => setSuccess(null), 3000)
@@ -331,31 +344,40 @@ export default function ProductPlacementPage() {
                     <div className="relative">
                       <img src={newProductPreview} alt="Preview" className="w-full h-48 object-contain rounded-lg border border-slate-200 bg-slate-50" />
                       <button
-                        onClick={() => { setNewProductFile(null); setNewProductPreview(null) }}
+                        onClick={() => { setNewProductFile(null); setNewProductPreview(null); setNewProductMediaUrl(null) }}
                         className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-sm hover:bg-slate-100"
                       >
                         <X className="w-4 h-4 text-slate-500" />
                       </button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all">
-                      <ImageIcon className="w-8 h-8 text-slate-400 mb-2" />
-                      <span className="text-sm text-slate-500">Klikk for å velge bilde</span>
-                      <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-                    </label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all">
+                        <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                        <span className="text-sm text-slate-500">Last opp bilde</span>
+                        <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                      </label>
+                      <button
+                        onClick={() => setShowMediaPicker(true)}
+                        className="flex items-center justify-center gap-2 w-full py-2.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:border-indigo-300 transition-all"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                        Velg fra mediebibliotek
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleUploadProduct}
-                  disabled={!newProductFile || !newProductName.trim() || uploadingProduct}
+                  disabled={(!newProductFile && !newProductMediaUrl) || !newProductName.trim() || uploadingProduct}
                   className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {uploadingProduct ? 'Laster opp...' : 'Legg til produkt'}
                 </button>
                 <button
-                  onClick={() => { setShowUploadForm(false); setNewProductFile(null); setNewProductPreview(null); setNewProductName(''); setNewProductDescription('') }}
+                  onClick={() => { setShowUploadForm(false); setNewProductFile(null); setNewProductPreview(null); setNewProductMediaUrl(null); setNewProductName(''); setNewProductDescription('') }}
                   className="px-4 py-2 text-slate-600 hover:text-slate-800 text-sm font-medium"
                 >
                   Avbryt
@@ -561,6 +583,17 @@ export default function ProductPlacementPage() {
           </div>
         </div>
       )}
+
+      <MediaPickerModal
+        open={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={(url) => {
+          setNewProductMediaUrl(url)
+          setNewProductPreview(url)
+          setNewProductFile(null)
+          setShowMediaPicker(false)
+        }}
+      />
     </div>
   )
 }

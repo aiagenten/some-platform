@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Search, Star, Copy, User, Upload, Film } from 'lucide-react'
+import { Instagram, Facebook, Linkedin, Sparkles, Bot, RefreshCw, Paintbrush, Loader2, Clock, Image as ImageIcon, Download, Layout, Plus, X, Star, Copy, User, Upload, Film } from 'lucide-react'
 import { OVERLAY_TEMPLATES, getOverlayTemplate, ASPECT_RATIO_DIMENSIONS } from '@/lib/overlay-templates'
 import type { OverlayOptions } from '@/lib/overlay-templates'
 import { resolveOverlayStyle } from '@/lib/overlay-style-resolver'
@@ -14,6 +14,7 @@ import type { CustomOverlayTemplate } from '@/lib/custom-overlay-types'
 import CarouselEditor from '@/components/CarouselEditor'
 import type { CarouselSlide } from '@/components/CarouselEditor'
 import CarouselPreview from '@/components/CarouselPreview'
+import MediaPickerModal from '@/components/MediaPickerModal'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram', icon: Instagram },
@@ -79,16 +80,6 @@ type BrandProfile = {
   visual_style?: Record<string, unknown> | null
 }
 
-type MediaAsset = {
-  id: string
-  url: string
-  thumbnail_url: string | null
-  filename: string | null
-  source: string
-  is_favorite: boolean
-  tags: string[]
-}
-
 const VARIANT_OPTIONS = [
   { value: 1, label: '1 bilde' },
   { value: 3, label: '3 varianter' },
@@ -116,9 +107,6 @@ export default function GeneratePage() {
   // Reference image
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null)
   const [showMediaPicker, setShowMediaPicker] = useState(false)
-  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([])
-  const [mediaSearch, setMediaSearch] = useState('')
-  const [loadingMedia, setLoadingMedia] = useState(false)
   // Digital Twin
   const [digitalTwins, setDigitalTwins] = useState<{ id: string; name: string; trigger_word: string; status: string }[]>([])
   const [selectedTwin, setSelectedTwin] = useState<string | null>(null)
@@ -221,37 +209,8 @@ export default function GeneratePage() {
   }, [])
 
   // Load media library for picker
-  const loadMediaForPicker = async () => {
-    if (!orgId) return
-    setLoadingMedia(true)
-    try {
-      const res = await fetch(`/api/media?org_id=${orgId}`)
-      if (res.ok) {
-        const data = await res.json()
-        const allAssets: MediaAsset[] = [
-          ...(data.assets || []),
-          ...(data.storageImages || []).map((img: { url: string; name: string }) => ({
-            id: img.url,
-            url: img.url,
-            thumbnail_url: null,
-            filename: img.name,
-            source: 'ai_generated',
-            is_favorite: false,
-            tags: [],
-          })),
-        ]
-        setMediaAssets(allAssets)
-      }
-    } catch (err) {
-      console.error('Load media error:', err)
-    } finally {
-      setLoadingMedia(false)
-    }
-  }
-
   const openMediaPicker = () => {
     setShowMediaPicker(true)
-    loadMediaForPicker()
   }
 
   // Get the AI-generated headline
@@ -521,16 +480,6 @@ export default function GeneratePage() {
     }
   }
 
-  // Filter media for picker
-  const filteredMedia = mediaAssets.filter(a => {
-    if (!mediaSearch) return true
-    const q = mediaSearch.toLowerCase()
-    return (a.filename?.toLowerCase().includes(q)) || a.tags.some(t => t.toLowerCase().includes(q))
-  }).sort((a, b) => {
-    if (a.is_favorite && !b.is_favorite) return -1
-    if (!a.is_favorite && b.is_favorite) return 1
-    return 0
-  })
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -801,8 +750,14 @@ export default function GeneratePage() {
                       )}
                       <div className="flex items-center justify-center gap-2 text-sm text-slate-600">
                         {uploadType === 'video' ? <Film className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
-                        <span>{uploadFile?.name}</span>
-                        <span className="text-slate-400">({(uploadFile!.size / 1024 / 1024).toFixed(1)} MB)</span>
+                        {uploadFile ? (
+                          <>
+                            <span>{uploadFile.name}</span>
+                            <span className="text-slate-400">({(uploadFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-500">Valgt fra mediebibliotek</span>
+                        )}
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); setUploadFile(null); setUploadPreview(null); setUploadedUrl(null) }}
@@ -820,6 +775,16 @@ export default function GeneratePage() {
                     </div>
                   )}
                 </div>
+
+                {!uploadFile && !uploadedUrl && (
+                  <button
+                    onClick={() => setShowMediaPicker(true)}
+                    className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:border-indigo-300 transition-all"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    Velg fra mediebibliotek
+                  </button>
+                )}
 
                 {uploadFile && !uploadedUrl && (
                   <button
@@ -1416,65 +1381,20 @@ export default function GeneratePage() {
       </div>
 
       {/* Media Picker Modal */}
-      {showMediaPicker && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowMediaPicker(false)}>
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900">Velg referansebilde</h3>
-              <button onClick={() => setShowMediaPicker(false)} className="p-2 hover:bg-slate-100 rounded-lg">
-                <X className="w-5 h-5 text-slate-500" />
-              </button>
-            </div>
-            <div className="p-4 border-b border-slate-100">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={mediaSearch}
-                  onChange={e => setMediaSearch(e.target.value)}
-                  placeholder="Søk etter bilder..."
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
-              {loadingMedia ? (
-                <div className="text-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
-                </div>
-              ) : filteredMedia.length > 0 ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                  {filteredMedia.map((asset, i) => (
-                    <button
-                      key={asset.id || i}
-                      onClick={() => {
-                        setReferenceImageUrl(asset.url)
-                        setShowMediaPicker(false)
-                      }}
-                      className="relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 hover:border-indigo-400 transition-all group"
-                    >
-                      <img src={asset.thumbnail_url || asset.url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      {asset.is_favorite && (
-                        <div className="absolute top-1 left-1">
-                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 drop-shadow" />
-                        </div>
-                      )}
-                      <span className={`absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
-                        asset.source === 'ai_generated' ? 'bg-purple-500/80 text-white' :
-                        'bg-black/50 text-white'
-                      }`}>
-                        {asset.source === 'ai_generated' ? 'AI' : asset.source === 'upload' ? 'Opp.' : asset.source}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-sm text-slate-400 py-8">Ingen bilder funnet</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <MediaPickerModal
+        open={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={(url) => {
+          if (contentMode === 'upload') {
+            setUploadedUrl(url)
+            setUploadPreview(url)
+            setUploadFile(null)
+          } else {
+            setReferenceImageUrl(url)
+          }
+          setShowMediaPicker(false)
+        }}
+      />
     </div>
   )
 }
