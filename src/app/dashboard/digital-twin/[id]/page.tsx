@@ -112,8 +112,14 @@ export default function DigitalTwinDetailPage() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Generering feilet')
+        let errorMessage = 'Generering feilet'
+        try {
+          const data = await res.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          errorMessage = `Server-feil (${res.status}) — prøv igjen senere`
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await res.json()

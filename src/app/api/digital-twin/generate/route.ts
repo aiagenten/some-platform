@@ -235,6 +235,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Generation timed out' }, { status: 504 })
   } catch (err) {
     console.error('Digital twin generate error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: `Bildegenerering feilet: ${message}` }, { status: 500 })
   }
 }

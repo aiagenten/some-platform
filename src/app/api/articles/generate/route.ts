@@ -21,6 +21,7 @@ function slugify(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   // ── Auth ──
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -173,7 +174,16 @@ Svar KUN med gyldig JSON — ingen markdown, ingen kodeblokker, bare rå JSON.`
   if (!aiResponse.ok) {
     const errText = await aiResponse.text()
     console.error('[/api/articles/generate] AI API error:', aiResponse.status, errText)
-    return NextResponse.json({ error: 'AI-generering feilet' }, { status: 502 })
+    // Parse error detail from AI provider response
+    let detail = errText.slice(0, 200)
+    try {
+      const errJson = JSON.parse(errText)
+      detail = errJson.error?.message || errJson.error || detail
+    } catch { /* use raw text slice */ }
+    return NextResponse.json(
+      { error: `AI-generering feilet (${aiResponse.status}): ${detail}` },
+      { status: 502 }
+    )
   }
 
   // ── Parse AI response ──
@@ -245,4 +255,9 @@ Svar KUN med gyldig JSON — ingen markdown, ingen kodeblokker, bare rå JSON.`
   }
 
   return NextResponse.json(saved)
+  } catch (err) {
+    console.error('[/api/articles/generate] Unhandled error:', err)
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: `Artikkelgenerering feilet: ${message}` }, { status: 500 })
+  }
 }

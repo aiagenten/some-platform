@@ -136,8 +136,14 @@ export default function NewDigitalTwinPage() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Trening feilet')
+        let errorMessage = 'Trening feilet'
+        try {
+          const data = await res.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          errorMessage = `Server-feil (${res.status}) — prøv igjen senere`
+        }
+        throw new Error(errorMessage)
       }
 
       router.push(`/dashboard/digital-twin/${twinId}`)

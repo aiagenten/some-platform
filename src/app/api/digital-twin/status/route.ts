@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     console.error('Digital twin status error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: `Status-sjekk feilet: ${message}` }, { status: 500 })
   }
 }
