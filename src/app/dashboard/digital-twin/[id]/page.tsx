@@ -123,6 +123,8 @@ export default function DigitalTwinDetailPage() {
       }
 
       const data = await res.json()
+
+      // If images returned directly, display them
       if (data.images?.length) {
         const newImages = data.images.map((img: { url: string }) => ({
           url: img.url,
@@ -130,6 +132,47 @@ export default function DigitalTwinDetailPage() {
           created_at: new Date().toISOString(),
         }))
         setGeneratedImages(prev => [...newImages, ...prev])
+        return
+      }
+
+      // If queued, poll for result
+      if (data.queued && data.request_id) {
+        const maxAttempts = 60 // ~120 seconds with 2s interval
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 2000))
+
+          const params = new URLSearchParams({
+            request_id: data.request_id,
+            twin_id: twin.id,
+            prompt: resolvedPrompt,
+            num_images: '1',
+          })
+          const pollRes = await fetch(`/api/digital-twin/generate?${params}`)
+
+          if (!pollRes.ok) {
+            const pollErr = await pollRes.json().catch(() => ({}))
+            if (pollErr.status === 'failed') throw new Error('Generering feilet hos fal.ai')
+            continue
+          }
+
+          const pollData = await pollRes.json()
+
+          if (pollData.status === 'completed' && pollData.images?.length) {
+            const newImages = pollData.images.map((img: { url: string }) => ({
+              url: img.url,
+              prompt: resolvedPrompt,
+              created_at: new Date().toISOString(),
+            }))
+            setGeneratedImages(prev => [...newImages, ...prev])
+            return
+          }
+
+          if (pollData.status === 'failed') {
+            throw new Error('Generering feilet hos fal.ai')
+          }
+          // Still polling — continue loop
+        }
+        throw new Error('Generering tok for lang tid — prøv igjen')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Noe gikk galt'

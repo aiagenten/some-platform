@@ -9,10 +9,7 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# API routes need longer timeout for AI generation
-[functions."api-posts-generate-*"]
-  timeout = 60
-
-# Video generation routes need even longer (Kling video = 30-120s, music = 15-30s)
-[functions."api-video-*"]
+# @netlify/plugin-nextjs bundles all routes into a single function.
+# Per-route function names (e.g. "api-video-*") do NOT exist — only this one does.
+[functions."___netlify-server-handler"]
   timeout = 300

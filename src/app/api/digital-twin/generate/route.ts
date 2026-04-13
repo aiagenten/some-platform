@@ -37,6 +37,143 @@ function enhancePrompt(userPrompt: string): string {
   return `${photoPrefix} ${userPrompt}. ${skinRealism} ${lighting} ${style}`
 }
 
+/**
+ * GET: Poll for queued generation result.
+ * Called by frontend after POST returns { queued: true, request_id }.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
+    }
+
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
+    if (!profile) return NextResponse.json({ error: 'No org' }, { status: 400 })
+
+    const requestId = request.nextUrl.searchParams.get('request_id')
+    const twinId = request.nextUrl.searchParams.get('twin_id')
+    const prompt = request.nextUrl.searchParams.get('prompt') || ''
+    const numImages = parseInt(request.nextUrl.searchParams.get('num_images') || '1')
+
+    if (!requestId || !twinId) {
+      return NextResponse.json({ error: 'request_id and twin_id are required' }, { status: 400 })
+    }
+
+    const admin = createAdminClient()
+
+    // Verify twin belongs to org
+    const { data: twin } = await admin
+      .from('digital_twins')
+      .select('id, name')
+      .eq('id', twinId)
+      .eq('tenant_id', profile.org_id)
+      .single()
+
+    if (!twin) {
+      return NextResponse.json({ error: 'Twin not found' }, { status: 404 })
+    }
+
+    // Check fal.ai queue status
+    const statusResp = await fetch(
+      `https://queue.fal.run/fal-ai/flux-lora/requests/${requestId}/status`,
+      { headers: { 'Authorization': `Key ${FAL_KEY}` } }
+    )
+
+    if (!statusResp.ok) {
+      return NextResponse.json({ status: 'polling', fal_status: 'unknown' })
+    }
+
+    const statusData = await statusResp.json()
+
+    if (statusData.status === 'COMPLETED') {
+      const resultResp = await fetch(
+        `https://queue.fal.run/fal-ai/flux-lora/requests/${requestId}`,
+        { headers: { 'Authorization': `Key ${FAL_KEY}` } }
+      )
+
+      if (!resultResp.ok) {
+        return NextResponse.json({ error: 'Failed to fetch generation result' }, { status: 500 })
+      }
+
+      const resultData = await resultResp.json()
+
+      // Persist images to Supabase Storage
+      const saved = []
+      for (let i = 0; i < resultData.images.length; i++) {
+        const img = resultData.images[i]
+        try {
+          const imgResp = await fetch(img.url)
+          if (!imgResp.ok) { saved.push(img); continue }
+          const buffer = Buffer.from(await imgResp.arrayBuffer())
+          const filename = `digital-twin/${twinId}/${Date.now()}-${i}.jpg`
+          const { error: upErr } = await admin.storage
+            .from('post-images')
+            .upload(filename, buffer, { contentType: 'image/jpeg', upsert: true })
+          if (upErr) { saved.push(img); continue }
+          const { data: { publicUrl } } = admin.storage.from('post-images').getPublicUrl(filename)
+          await admin.from('media_assets').insert({
+            org_id: profile.org_id,
+            url: publicUrl,
+            filename: filename.split('/').pop(),
+            mime_type: 'image/jpeg',
+            source: 'digital-twin',
+            tags: ['digital-twin', twin.name],
+            metadata: { twin_id: twinId, twin_name: twin.name, prompt, width: img.width, height: img.height, original_url: img.url },
+          }).then(() => {}, (e: unknown) => console.error('media_assets insert error:', e))
+          saved.push({ ...img, url: publicUrl, persisted: true })
+        } catch (e) {
+          console.error('Persist image error:', e)
+          saved.push(img)
+        }
+      }
+
+      logUsage({
+        org_id: profile.org_id,
+        type: 'image_generation',
+        provider: 'fal',
+        model: 'flux-lora',
+        success: true,
+        cost_estimate: 0.05 * numImages,
+        metadata: { twin_id: twinId },
+      })
+
+      await logAudit({
+        action: 'digital_twin.image_generated',
+        resourceType: 'digital_twin',
+        resourceId: twinId,
+        resourceTitle: twin.name,
+        metadata: { num_images: saved.length, prompt },
+      })
+
+      return NextResponse.json({
+        success: true,
+        status: 'completed',
+        images: saved,
+      })
+    }
+
+    if (statusData.status === 'FAILED') {
+      logUsage({ org_id: profile.org_id, type: 'image_generation', provider: 'fal', model: 'flux-lora', success: false })
+      return NextResponse.json({ status: 'failed', error: 'Generation failed' }, { status: 500 })
+    }
+
+    // Still in queue
+    return NextResponse.json({
+      status: 'polling',
+      fal_status: statusData.status,
+      queue_position: statusData.queue_position,
+    })
+  } catch (err) {
+    console.error('Digital twin generate poll error:', err)
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: `Polling feilet: ${message}` }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!FAL_KEY) {
@@ -137,8 +274,7 @@ export async function POST(request: NextRequest) {
       return saved
     }
 
-    // If queued, we need to poll — but flux-lora via queue returns request_id
-    // Check if we got images directly or a request_id
+    // If fal.ai returned images directly (rare), persist and return
     if (genData.images) {
       const persistedImages = await persistImages(genData.images)
 
@@ -167,72 +303,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Queued — poll for result
+    // Queued — return request_id so frontend can poll via GET
     const requestId = genData.request_id
     if (!requestId) {
       return NextResponse.json({ error: 'No images or request_id returned' }, { status: 500 })
     }
 
-    // Poll up to 120 seconds
-    const maxWait = 120_000
-    const pollInterval = 3_000
-    const deadline = Date.now() + maxWait
-
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, pollInterval))
-
-      const statusResp = await fetch(
-        `https://queue.fal.run/fal-ai/flux-lora/requests/${requestId}/status`,
-        { headers: { 'Authorization': `Key ${FAL_KEY}` } }
-      )
-      if (!statusResp.ok) continue
-
-      const statusData = await statusResp.json()
-
-      if (statusData.status === 'COMPLETED') {
-        const resultResp = await fetch(
-          `https://queue.fal.run/fal-ai/flux-lora/requests/${requestId}`,
-          { headers: { 'Authorization': `Key ${FAL_KEY}` } }
-        )
-
-        if (resultResp.ok) {
-          const resultData = await resultResp.json()
-          const persistedImages = await persistImages(resultData.images)
-
-          logUsage({
-            org_id: profile.org_id,
-            type: 'image_generation',
-            provider: 'fal',
-            model: 'flux-lora',
-            success: true,
-            duration_ms: Date.now() - startTime,
-            cost_estimate: 0.05 * (num_images || 1),
-            metadata: { twin_id },
-          })
-
-          await logAudit({
-            action: 'digital_twin.image_generated',
-            resourceType: 'digital_twin',
-            resourceId: twin_id,
-            resourceTitle: twin.name,
-            metadata: { num_images: persistedImages.length, prompt },
-          })
-
-          return NextResponse.json({
-            success: true,
-            images: persistedImages,
-          })
-        }
-      }
-
-      if (statusData.status === 'FAILED') {
-        logUsage({ org_id: profile.org_id, type: 'image_generation', provider: 'fal', model: 'flux-lora', success: false, duration_ms: Date.now() - startTime })
-        return NextResponse.json({ error: 'Generation failed' }, { status: 500 })
-      }
-    }
-
-    logUsage({ org_id: profile.org_id, type: 'image_generation', provider: 'fal', model: 'flux-lora', success: false, duration_ms: Date.now() - startTime })
-    return NextResponse.json({ error: 'Generation timed out' }, { status: 504 })
+    return NextResponse.json({
+      success: true,
+      queued: true,
+      request_id: requestId,
+      twin_id,
+    })
   } catch (err) {
     console.error('Digital twin generate error:', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
