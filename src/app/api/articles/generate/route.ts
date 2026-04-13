@@ -142,7 +142,7 @@ Svar KUN med gyldig JSON — ingen markdown, ingen kodeblokker, bare rå JSON.`
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         temperature: 0.7,
         system: systemPrompt,

@@ -258,7 +258,7 @@ export default function CalendarPage() {
               onDragStart={() => setDragPost(post.id)}
               className={`text-xs px-2 py-1 rounded-lg truncate cursor-move flex items-center gap-1.5 ${STATUS_COLORS[post.status] || 'bg-slate-100'}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PLATFORM_DOT_COLORS[post.platform] || 'bg-slate-400'}`} />
+              {(() => { const Icon = PLATFORM_ICONS[post.platform]; return Icon ? <Icon className="w-3 h-3 flex-shrink-0" /> : <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PLATFORM_DOT_COLORS[post.platform] || 'bg-slate-400'}`} /> })()}
               {(post.caption || post.content_text || '').slice(0, 25)}
             </div>
           ))}
