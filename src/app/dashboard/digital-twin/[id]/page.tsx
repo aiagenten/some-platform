@@ -39,6 +39,7 @@ export default function DigitalTwinDetailPage() {
   const [loading, setLoading] = useState(true)
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [pollingStatus, setPollingStatus] = useState<string | null>(null)
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -97,9 +98,12 @@ export default function DigitalTwinDetailPage() {
     const resolvedPrompt = finalPrompt.replace(/TRIGGER/g, triggerWords || twin.trigger_word)
 
     setGenerating(true)
+    setPollingStatus(null)
     setError(null)
 
     try {
+      setPollingStatus('Sender forespørsel til fal.ai...')
+
       const res = await fetch('/api/digital-twin/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,17 +141,19 @@ export default function DigitalTwinDetailPage() {
 
       // If queued, poll for result
       if (data.queued && data.request_id) {
+        setPollingStatus('Bildet genereres — dette tar vanligvis 15-30 sekunder...')
+
         const maxAttempts = 60 // ~120 seconds with 2s interval
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 2000))
 
-          const params = new URLSearchParams({
+          const pollParams = new URLSearchParams({
             request_id: data.request_id,
             twin_id: twin.id,
             prompt: resolvedPrompt,
             num_images: '1',
           })
-          const pollRes = await fetch(`/api/digital-twin/generate?${params}`)
+          const pollRes = await fetch(`/api/digital-twin/generate?${pollParams}`)
 
           if (!pollRes.ok) {
             const pollErr = await pollRes.json().catch(() => ({}))
@@ -158,6 +164,7 @@ export default function DigitalTwinDetailPage() {
           const pollData = await pollRes.json()
 
           if (pollData.status === 'completed' && pollData.images?.length) {
+            setPollingStatus('Lagrer bilde...')
             const newImages = pollData.images.map((img: { url: string }) => ({
               url: img.url,
               prompt: resolvedPrompt,
@@ -170,7 +177,14 @@ export default function DigitalTwinDetailPage() {
           if (pollData.status === 'failed') {
             throw new Error('Generering feilet hos fal.ai')
           }
-          // Still polling — continue loop
+
+          // Update polling status with elapsed time
+          const elapsed = (i + 1) * 2
+          if (pollData.queue_position) {
+            setPollingStatus(`I kø (posisjon ${pollData.queue_position})... ${elapsed}s`)
+          } else {
+            setPollingStatus(`Bildet genereres... ${elapsed}s`)
+          }
         }
         throw new Error('Generering tok for lang tid — prøv igjen')
       }
@@ -179,6 +193,7 @@ export default function DigitalTwinDetailPage() {
       setError(`${msg} — prøv igjen!`)
     } finally {
       setGenerating(false)
+      setPollingStatus(null)
     }
   }
 
@@ -378,10 +393,15 @@ export default function DigitalTwinDetailPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {generating && (
-                    <div className="aspect-video rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-2" />
-                        <p className="text-sm text-slate-500">Genererer bilde...</p>
+                    <div className="aspect-video rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200/60 flex items-center justify-center">
+                      <div className="text-center px-4">
+                        <div className="w-12 h-12 bg-white/80 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
+                          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                        </div>
+                        <p className="text-sm font-medium text-indigo-700 mb-1">
+                          {pollingStatus || 'Genererer bilde...'}
+                        </p>
+                        <p className="text-xs text-indigo-400">Ikke lukk denne siden</p>
                       </div>
                     </div>
                   )}
