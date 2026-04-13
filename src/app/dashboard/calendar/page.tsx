@@ -486,6 +486,9 @@ export default function CalendarPage() {
                   href={`/dashboard/posts/${post.id}`}
                   className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all duration-200"
                 >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${PLATFORM_DOT_COLORS[post.platform] || 'bg-slate-400'}`}>
+                    <PlatformIcon className="w-4 h-4 text-white" />
+                  </div>
                   {post.content_image_url ? (
                     <img
                       src={post.content_image_url}
@@ -501,6 +504,7 @@ export default function CalendarPage() {
                     <div className="text-sm text-slate-900 truncate font-medium">
                       {post.caption || post.content_text || 'Ingen innhold'}
                     </div>
+                    <div className="text-xs text-slate-400 capitalize">{post.platform}</div>
                   </div>
                   <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${STATUS_COLORS[post.status]}`}>
                     {post.status.replace('_', ' ')}

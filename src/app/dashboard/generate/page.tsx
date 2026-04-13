@@ -316,13 +316,18 @@ export default function GeneratePage() {
         ctaText: manualCTA || generated?.cta_text || '',
       }
 
-      // Check if it's a custom template
-      const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
-      if (customTmpl) {
-        await renderCustomOverlay(ctx, customTmpl, options)
+      // No overlay — just draw the base image
+      if (selectedOverlay === 'none') {
+        ctx.drawImage(baseImage, 0, 0, dims.width, dims.height)
       } else {
-        const template = getOverlayTemplate(selectedOverlay)
-        await template.render(ctx, options)
+        // Check if it's a custom template
+        const customTmpl = customTemplates.find(t => `custom-${t.id}` === selectedOverlay)
+        if (customTmpl) {
+          await renderCustomOverlay(ctx, customTmpl, options)
+        } else {
+          const template = getOverlayTemplate(selectedOverlay)
+          await template.render(ctx, options)
+        }
       }
     } catch (err) {
       console.error('Overlay render error:', err)
@@ -1296,6 +1301,18 @@ export default function GeneratePage() {
                         <span className="text-xs font-medium text-slate-600">Velg overlay</span>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        <button
+                          onClick={() => setSelectedOverlay('none')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                            selectedOverlay === 'none'
+                              ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                              : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                          title="Ingen overlay — vis kun bildet"
+                        >
+                          Ingen overlay
+                        </button>
+                        <span className="text-slate-300 text-xs self-center">|</span>
                         {customTemplates.filter(t => t.is_visible !== false).map((tmpl) => (
                           <button
                             key={tmpl.id}
