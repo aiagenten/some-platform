@@ -47,17 +47,32 @@ export async function POST(request: NextRequest) {
     // Step 1: Download all images, zip them, upload zip to Supabase Storage
     const startTime = Date.now()
 
-    // Create zip server-side by fetching images and bundling
-    const JSZip = (await import('jszip')).default
-    const zip = new JSZip()
-
+    // Fetch all images upfront. Fail fast if any image is missing —
+    // a partial zip would produce a corrupted LoRA training run.
+    const downloaded: ArrayBuffer[] = []
     for (let i = 0; i < trainingImages.length; i++) {
-      const imgResp = await fetch(trainingImages[i])
-      if (imgResp.ok) {
-        const buffer = await imgResp.arrayBuffer()
-        zip.file(`img_${String(i + 1).padStart(2, '0')}.jpeg`, buffer)
+      try {
+        const imgResp = await fetch(trainingImages[i], {
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (!imgResp.ok) {
+          await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
+          return NextResponse.json({ error: `Failed to download training image ${i + 1}` }, { status: 400 })
+        }
+        downloaded.push(await imgResp.arrayBuffer())
+      } catch (e) {
+        console.error(`Training image ${i + 1} fetch error:`, e)
+        await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
+        return NextResponse.json({ error: `Could not download training image ${i + 1}` }, { status: 400 })
       }
     }
+
+    // All images downloaded — build zip
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+    downloaded.forEach((buffer, i) => {
+      zip.file(`img_${String(i + 1).padStart(2, '0')}.jpeg`, buffer)
+    })
 
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' })
 

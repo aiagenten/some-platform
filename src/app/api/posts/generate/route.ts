@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logUsage } from '@/lib/usage'
 import { logAudit } from '@/lib/audit'
+import { requireOrgAccess } from '@/lib/auth'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+
+const ALLOWED_PLATFORMS = ['instagram', 'facebook', 'linkedin', 'tiktok']
+const ALLOWED_FORMATS = ['feed', 'carousel', 'karusell', 'reel', 'story', 'video', 'article', 'post']
+const MAX_TOPIC_LENGTH = 5000
 
 // Map format names to prompt-bibliotek keys
 const FORMAT_TO_PROMPT_KEY: Record<string, string> = {
@@ -51,6 +56,19 @@ export async function POST(request: NextRequest) {
         { error: 'org_id, platform, and format are required' },
         { status: 400 }
       )
+    }
+
+    const auth = await requireOrgAccess(org_id)
+    if (auth instanceof NextResponse) return auth
+
+    if (!ALLOWED_PLATFORMS.includes(platform)) {
+      return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })
+    }
+    if (!ALLOWED_FORMATS.includes(format)) {
+      return NextResponse.json({ error: 'Invalid format' }, { status: 400 })
+    }
+    if (topic && typeof topic === 'string' && topic.length > MAX_TOPIC_LENGTH) {
+      return NextResponse.json({ error: 'topic too long (max 5000 characters)' }, { status: 400 })
     }
 
     const supabase = createAdminClient()

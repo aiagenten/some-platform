@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/audit'
+import { requireUser } from '@/lib/auth'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireUser()
+    if (auth instanceof NextResponse) return auth
+
     const { post_id } = await request.json()
 
     if (!post_id) {
@@ -15,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Verify post exists and is approved
+    // Verify post exists and belongs to caller's org
     const { data: post, error: postError } = await supabase
       .from('social_posts')
       .select('id, status, org_id, platform')
@@ -24,6 +28,10 @@ export async function POST(request: NextRequest) {
 
     if (postError || !post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    if (post.org_id !== auth.orgId && !auth.isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (!['approved', 'scheduled'].includes(post.status)) {
