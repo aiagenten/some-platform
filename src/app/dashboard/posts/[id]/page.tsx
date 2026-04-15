@@ -162,6 +162,9 @@ export default function PostDetailPage() {
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
   const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
   const [regeneratingSlide, setRegeneratingSlide] = useState<number | null>(null)
+  // Brand profile selector (only shown when org has multiple profiles)
+  const [brandProfiles, setBrandProfiles] = useState<Array<{id: string; name: string; is_default: boolean}>>([])
+  const [selectedBrandProfileId, setSelectedBrandProfileId] = useState<string | null>(null)
   // Social account status (display only — accounts linked at brand profile level)
   const [availableAccounts, setAvailableAccounts] = useState<Array<{id: string; account_id: string; account_name?: string; is_default: boolean}>>([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
@@ -177,14 +180,17 @@ export default function PostDetailPage() {
         setOrgId(profile.org_id)
         const { data: org } = await supabase.from('organizations').select('name, logo_url').eq('id', profile.org_id).single()
         if (org) { setOrgName(org.name); setOrgLogo(org.logo_url) }
-        // Load brand profile for overlay
-        const { data: bp } = await supabase.from('brand_profiles').select('logo_url, colors, fonts, visual_style')
-          .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(1).single()
-        if (bp) {
+        // Load all brand profiles for org (selector shown only when > 1 exists)
+        const { data: allBps } = await supabase.from('brand_profiles').select('id, name, is_default, logo_url, colors, fonts, visual_style')
+          .eq('org_id', profile.org_id).order('is_default', { ascending: false }).order('created_at')
+        if (allBps && allBps.length > 0) {
+          setBrandProfiles(allBps.map(b => ({ id: b.id, name: b.name || 'Merkevare', is_default: b.is_default })))
+          const bp = allBps.find(b => b.is_default) || allBps[0]
+          setSelectedBrandProfileId(bp.id)
           setBrandColors(bp.colors || [])
           setBrandFonts(bp.fonts || [])
           setBrandLogoUrl(bp.logo_url)
-          setBrandVisualStyle(bp.visual_style as BrandVisualStyle | null)
+          setBrandVisualStyle(bp.visual_style)
         }
       }
 
@@ -210,60 +216,8 @@ export default function PostDetailPage() {
       if (postData) {
         setPost(postData)
 
-        // Load available accounts for this platform
-        setLoadingAccounts(true)
-        let accountsLoaded = false
-        let loadedAccounts: Array<{id: string; account_id: string; account_name: string; is_default: boolean}> = []
-
-        if (postData.brand_profile_id) {
-          const { data: junctionData } = await supabase
-            .from('brand_profile_social_accounts')
-            .select('social_account_id, is_default')
-            .eq('brand_profile_id', postData.brand_profile_id)
-            .eq('platform', postData.platform)
-
-          if (junctionData && junctionData.length > 0) {
-            const accountIds = junctionData.map(j => j.social_account_id)
-            const { data: accounts } = await supabase
-              .from('social_accounts')
-              .select('id, account_id, account_name, is_default')
-              .in('id', accountIds)
-
-            if (accounts && accounts.length > 0) {
-              loadedAccounts = accounts.map(a => ({
-                id: a.id,
-                account_id: a.account_id,
-                account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
-                is_default: junctionData.find(j => j.social_account_id === a.id)?.is_default || false
-              }))
-              setAvailableAccounts(loadedAccounts)
-              accountsLoaded = true
-            }
-          }
-        }
-
-        // Fallback to org-level accounts when junction has no results
-        if (!accountsLoaded && postData.org_id) {
-          const { data: accounts } = await supabase
-            .from('social_accounts')
-            .select('id, account_id, account_name, is_default, metadata')
-            .eq('org_id', postData.org_id)
-            .eq('platform', postData.platform)
-
-          if (accounts) {
-            type AccountRow = { id: string; account_id: string; account_name: string | null; is_default: boolean | null; metadata: Record<string, unknown> | null }
-            const filtered = (accounts as AccountRow[]).filter(a => !a.metadata?.for_refresh)
-            loadedAccounts = filtered.map(a => ({
-              id: a.id,
-              account_id: a.account_id,
-              account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
-              is_default: a.is_default || false
-            }))
-            setAvailableAccounts(loadedAccounts)
-          }
-        }
-
-        setLoadingAccounts(false)
+        // Load available accounts via shared helper (uses brand_profile_id if set, else org fallback)
+        await loadAccountsForBrandProfile(postData.brand_profile_id || null, postData.platform, postData.org_id)
 
         // Pre-select overlay from DB
         if (postData.selected_overlay) setSelectedOverlay(postData.selected_overlay)
@@ -380,6 +334,69 @@ export default function PostDetailPage() {
   }, [post?.content_image_url, post?.platform, brandColors, brandFonts, brandLogoUrl, brandVisualStyle, orgName, selectedOverlay, post?.content_text, post?.caption, post?.headline, post?.subtitle, headlineValue, subtitleValue, ctaValue, post?.cta_text, selectedAspectRatio, post?.aspect_ratio, customTemplates, orgId])
 
   useEffect(() => { setOverlayRendered(false); renderPostOverlay() }, [renderPostOverlay, selectedOverlay])
+
+  const loadAccountsForBrandProfile = async (brandProfileId: string | null, platform: string, orgIdVal: string) => {
+    setLoadingAccounts(true)
+    setAvailableAccounts([])
+    let loadedAccounts: Array<{id: string; account_id: string; account_name: string; is_default: boolean}> = []
+    let accountsLoaded = false
+
+    if (brandProfileId) {
+      const { data: junctionData } = await supabase
+        .from('brand_profile_social_accounts')
+        .select('social_account_id, is_default')
+        .eq('brand_profile_id', brandProfileId)
+        .eq('platform', platform)
+
+      if (junctionData && junctionData.length > 0) {
+        const accountIds = junctionData.map((j: {social_account_id: string; is_default: boolean}) => j.social_account_id)
+        const { data: accounts } = await supabase
+          .from('social_accounts')
+          .select('id, account_id, account_name, is_default')
+          .in('id', accountIds)
+
+        if (accounts && accounts.length > 0) {
+          loadedAccounts = accounts.map((a: {id: string; account_id: string; account_name: string | null; is_default: boolean | null}) => ({
+            id: a.id,
+            account_id: a.account_id,
+            account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
+            is_default: junctionData.find((j: {social_account_id: string}) => j.social_account_id === a.id)?.is_default || false,
+          }))
+          accountsLoaded = true
+        }
+      }
+    }
+
+    if (!accountsLoaded) {
+      const { data: accounts } = await supabase
+        .from('social_accounts')
+        .select('id, account_id, account_name, is_default, metadata')
+        .eq('org_id', orgIdVal)
+        .eq('platform', platform)
+      if (accounts) {
+        type AccountRow = { id: string; account_id: string; account_name: string | null; is_default: boolean | null; metadata: Record<string, unknown> | null }
+        const filtered = (accounts as AccountRow[]).filter(a => !a.metadata?.for_refresh)
+        loadedAccounts = filtered.map(a => ({
+          id: a.id,
+          account_id: a.account_id,
+          account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
+          is_default: a.is_default || false,
+        }))
+      }
+    }
+
+    setAvailableAccounts(loadedAccounts)
+    setLoadingAccounts(false)
+  }
+
+  const handleBrandProfileChange = async (newProfileId: string) => {
+    if (!post || !orgId) return
+    setSelectedBrandProfileId(newProfileId)
+    // Update post in DB
+    await supabase.from('social_posts').update({ brand_profile_id: newProfileId }).eq('id', post.id)
+    // Reload accounts for this brand profile
+    await loadAccountsForBrandProfile(newProfileId, post.platform, orgId)
+  }
 
   const handleDownloadOverlay = () => {
     const canvas = canvasRef.current
@@ -934,6 +951,23 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 mb-4">Handlinger</h3>
             <div className="space-y-2">
+              {/* Brand profile selector — only shown when org has multiple profiles */}
+              {brandProfiles.length > 1 && (
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Merkevare</label>
+                  <select
+                    value={selectedBrandProfileId || ""}
+                    onChange={(e) => handleBrandProfileChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    {brandProfiles.map((bp) => (
+                      <option key={bp.id} value={bp.id}>
+                        {bp.name}{bp.is_default ? ' (Standard)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {/* Account status — shows which account will be used (set at brand profile level) */}
               {availableAccounts.length > 0 && (() => {
                 const defaultAcc = availableAccounts.find(a => a.is_default) || availableAccounts[0]
