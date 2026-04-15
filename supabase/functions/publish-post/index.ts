@@ -1,12 +1,12 @@
 // Supabase Edge Function: publish-post
-// Publishes a social_post to Facebook or Instagram via Graph API
+// Publishes a social_post to Facebook, Instagram, or LinkedIn
 // NEVER publish from frontend — only via this Edge Function
 //
 // Key learnings:
-// - Use Page Access Token (NOT User Access Token) for publishing
+// - Use Page Access Token (NOT User Access Token) for FB/IG publishing
 // - IG carousel and reels have different endpoints
 // - Rate limit: 200 calls/user/hour
-// - LinkedIn: TODO — placeholder for now
+// - LinkedIn uses ugcPosts API with binary media upload
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -85,11 +85,8 @@ Deno.serve(async (req) => {
           result = await publishToInstagram(resolvedPost, publishAccount, accessToken)
           break
         case 'linkedin':
-          // TODO: Implement LinkedIn publishing
-          // LinkedIn uses a different OAuth flow and API structure
-          // Will need: Organization URN, ugcPosts endpoint, media upload
-          await failPost(post_id, post.org_id, 'LinkedIn publishing not yet implemented')
-          return errorResponse('LinkedIn publishing coming soon (TODO)', 501)
+          result = await publishToLinkedIn(resolvedPost, publishAccount, accessToken)
+          break
         default:
           await failPost(post_id, post.org_id, 'Unsupported platform: ' + post.platform)
           return errorResponse('Unsupported platform', 400)
@@ -400,6 +397,178 @@ async function publishIGReel(
     throw new Error(`IG Reel Publish: ${published.error.message}`)
   }
   return published
+}
+
+// ============================================================
+// LINKEDIN PUBLISHING
+// Uses ugcPosts API with binary media upload
+// Supports: text-only, image, video (with optional thumbnail)
+// ============================================================
+
+async function publishToLinkedIn(
+  post: any,
+  account: any,
+  accessToken: string
+): Promise<any> {
+  const meta = account.metadata as any
+  const accountType = meta?.account_type || 'organization'
+
+  let authorUrn: string
+  if (accountType === 'personal') {
+    authorUrn = `urn:li:person:${meta?.user_id}`
+  } else {
+    const organizationUrn = meta?.organization_urn
+    if (!organizationUrn) {
+      throw new Error('Organization URN not found in account metadata')
+    }
+    authorUrn = organizationUrn
+  }
+
+  const text = post.caption || post.content_text || ''
+
+  let mediaAsset: string | null = null
+  let mediaCategory: 'NONE' | 'IMAGE' | 'VIDEO' = 'NONE'
+  let thumbnailAsset: string | null = null
+
+  async function registerAndUploadLinkedIn(
+    mediaUrl: string,
+    recipe: string,
+    mediaType: string
+  ): Promise<string> {
+    const mediaResponse = await fetch(mediaUrl)
+    if (!mediaResponse.ok) {
+      throw new Error(`Failed to fetch ${mediaType}: ${mediaResponse.status}`)
+    }
+
+    const mediaBlob = await mediaResponse.blob()
+    const mediaBuffer = await mediaBlob.arrayBuffer()
+
+    const registerResponse = await fetch(
+      'https://api.linkedin.com/v2/assets?action=registerUpload',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Restli-Protocol-Version': '2.0.0',
+          'LinkedIn-Version': '202405',
+        },
+        body: JSON.stringify({
+          registerUploadRequest: {
+            recipes: [recipe],
+            owner: authorUrn,
+            serviceRelationships: [
+              {
+                relationshipType: 'OWNER',
+                identifier: 'urn:li:userGeneratedContent',
+              },
+            ],
+          },
+        }),
+      }
+    )
+
+    if (!registerResponse.ok) {
+      const errorText = await registerResponse.text()
+      console.error(`LinkedIn register ${mediaType} failed:`, errorText)
+      throw new Error(`Failed to register ${mediaType} upload`)
+    }
+
+    const registerData = await registerResponse.json()
+    const uploadUrl =
+      registerData.value.uploadMechanism[
+        'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+      ].uploadUrl
+    const asset = registerData.value.asset
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: mediaBuffer,
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Failed to upload ${mediaType} to LinkedIn`)
+    }
+
+    return asset
+  }
+
+  if (post.content_video_url) {
+    mediaAsset = await registerAndUploadLinkedIn(
+      post.content_video_url,
+      'urn:li:digitalmediaRecipe:feedshare-video',
+      'video'
+    )
+    mediaCategory = 'VIDEO'
+
+    if (post.content_image_url) {
+      try {
+        thumbnailAsset = await registerAndUploadLinkedIn(
+          post.content_image_url,
+          'urn:li:digitalmediaRecipe:feedshare-image',
+          'thumbnail'
+        )
+      } catch (thumbError) {
+        console.error('LinkedIn thumbnail upload failed, continuing without:', thumbError)
+      }
+    }
+  } else if (post.content_image_url) {
+    mediaAsset = await registerAndUploadLinkedIn(
+      post.content_image_url,
+      'urn:li:digitalmediaRecipe:feedshare-image',
+      'image'
+    )
+    mediaCategory = 'IMAGE'
+  }
+
+  const postContent: any = {
+    author: authorUrn,
+    lifecycleState: 'PUBLISHED',
+    specificContent: {
+      'com.linkedin.ugc.ShareContent': {
+        shareCommentary: { text },
+        shareMediaCategory: mediaCategory,
+      },
+    },
+    visibility: {
+      'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
+    },
+  }
+
+  if (mediaAsset) {
+    const mediaEntry: any = {
+      status: 'READY',
+      media: mediaAsset,
+    }
+    if (mediaCategory === 'VIDEO' && thumbnailAsset) {
+      mediaEntry.thumbnails = [{ url: thumbnailAsset }]
+    }
+    postContent.specificContent['com.linkedin.ugc.ShareContent'].media = [mediaEntry]
+  }
+
+  const postResponse = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Restli-Protocol-Version': '2.0.0',
+      'LinkedIn-Version': '202405',
+    },
+    body: JSON.stringify(postContent),
+  })
+
+  if (!postResponse.ok) {
+    const errorText = await postResponse.text()
+    console.error('LinkedIn API error:', errorText)
+    throw new Error(`LinkedIn API: ${errorText}`)
+  }
+
+  const postId = postResponse.headers.get('x-restli-id')
+  return { id: postId }
 }
 
 // ============================================================
