@@ -288,6 +288,10 @@ function OnboardingPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [visiblePostCount, setVisiblePostCount] = useState(12)
 
+  // Brand profile identity
+  const [brandProfileId, setBrandProfileId] = useState<string | null>(null)
+  const [brandProfileName, setBrandProfileName] = useState('')
+
   // Load org + check onboarding progress (resume or redirect)
   useEffect(() => {
     async function initOnboarding() {
@@ -312,8 +316,11 @@ function OnboardingPage() {
           .from('brand_profiles')
           .select('*')
           .eq('org_id', currentOrgId)
-          .single()
+          .eq('is_default', true)
+          .maybeSingle()
         if (savedBrand) {
+          setBrandProfileId(savedBrand.id)
+          setBrandProfileName(savedBrand.name || '')
           setBrandProfile({
             colors: savedBrand.colors || [],
             fonts: savedBrand.fonts || [],
@@ -690,8 +697,10 @@ function OnboardingPage() {
       setBrandProfile(data)
       // Save brand profile immediately after scrape
       if (orgId) {
-        await supabase.from('brand_profiles').upsert({
+        const brandData = {
           org_id: orgId,
+          name: brandProfileName || data.tagline || 'Standard',
+          is_default: true,
           source_url: websiteUrl,
           colors: data.colors,
           fonts: data.fonts,
@@ -706,7 +715,14 @@ function OnboardingPage() {
           do_list: data.do_list,
           dont_list: data.dont_list,
           last_scraped_at: new Date().toISOString(),
-        }, { onConflict: 'org_id' })
+        }
+        let savedId = brandProfileId
+        if (savedId) {
+          await supabase.from('brand_profiles').update(brandData).eq('id', savedId)
+        } else {
+          const { data: inserted } = await supabase.from('brand_profiles').insert(brandData).select('id').single()
+          if (inserted) { savedId = inserted.id; setBrandProfileId(inserted.id) }
+        }
         await saveOnboardingStep(supabase, orgId, 4)
 
         // Fire visual capture in parallel (non-blocking bonus feature)
@@ -737,6 +753,8 @@ function OnboardingPage() {
     if (!orgId || !brandProfile) return
     const brandData: Record<string, unknown> = {
       org_id: orgId,
+      name: brandProfileName || 'Standard',
+      is_default: true,
       source_url: websiteUrl,
       colors: brandProfile.colors,
       fonts: brandProfile.fonts,
@@ -752,15 +770,19 @@ function OnboardingPage() {
       dont_list: brandProfile.dont_list,
       last_scraped_at: new Date().toISOString(),
     }
-    // Preserve visual_style if it exists in state (set by visual-capture)
     if (brandProfile.visual_style) {
       brandData.visual_style = brandProfile.visual_style
     }
     if (brandProfile.website_screenshot_url) {
       brandData.website_screenshot_url = brandProfile.website_screenshot_url
     }
-    await supabase.from('brand_profiles').upsert(brandData, { onConflict: 'org_id' })
-  }, [orgId, brandProfile, websiteUrl, supabase])
+    if (brandProfileId) {
+      await supabase.from('brand_profiles').update(brandData).eq('id', brandProfileId)
+    } else {
+      const { data: inserted } = await supabase.from('brand_profiles').insert(brandData).select('id').single()
+      if (inserted) setBrandProfileId(inserted.id)
+    }
+  }, [orgId, brandProfile, brandProfileName, brandProfileId, websiteUrl, supabase])
 
   // Save social accounts to DB (used after step 2→3)
   const saveSocialAccounts = useCallback(async () => {
@@ -774,7 +796,27 @@ function OnboardingPage() {
         account_id: connected?.account_id || `pending-${platform}-${orgId}`,
       }, { onConflict: 'org_id,platform,account_id' })
     }
-  }, [orgId, selectedPlatforms, connectedAccounts, supabase])
+
+    // Link connected accounts to the brand profile
+    if (brandProfileId) {
+      const { data: orgAccounts } = await supabase
+        .from('social_accounts')
+        .select('id, platform')
+        .eq('org_id', orgId)
+      if (orgAccounts) {
+        const defaultPlatforms = new Set<string>()
+        for (const acc of orgAccounts) {
+          const isDefault = !defaultPlatforms.has(acc.platform)
+          if (isDefault) defaultPlatforms.add(acc.platform)
+          await supabase.from('brand_profile_social_accounts').upsert({
+            brand_profile_id: brandProfileId,
+            social_account_id: acc.id,
+            is_default: isDefault,
+          }, { onConflict: 'brand_profile_id,social_account_id' })
+        }
+      }
+    }
+  }, [orgId, selectedPlatforms, connectedAccounts, brandProfileId, supabase])
 
   // Save content goals to DB (used after step 5→6)
   const saveContentGoals = useCallback(async () => {
@@ -827,7 +869,6 @@ function OnboardingPage() {
     if (!orgId || !brandProfile) return
     setSaving(true)
 
-    // Final save of all data
     await saveBrandProfile()
     await saveSocialAccounts()
     await saveContentGoals()
@@ -1686,10 +1727,19 @@ function OnboardingPage() {
         {step === 3 && (
           <div className="animate-fade-in-up">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Din nettside</h2>
-              <p className="text-slate-500">Vi analyserer nettsiden din for å forstå merkevaren.</p>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Din merkevare</h2>
+              <p className="text-slate-500">Gi profilen et navn og legg inn nettsiden din.</p>
             </div>
             <div className="max-w-md mx-auto">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Profilnavn</label>
+              <input
+                type="text"
+                value={brandProfileName}
+                onChange={(e) => setBrandProfileName(e.target.value)}
+                placeholder="F.eks. bedriftsnavn eller personlig profil"
+                className="w-full px-4 py-3.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all duration-200 text-slate-900 placeholder:text-slate-400 mb-4"
+              />
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Nettside</label>
               <input
                 type="url"
                 value={websiteUrl}
@@ -1734,6 +1784,15 @@ function OnboardingPage() {
               <p className="text-slate-500">
                 Vi fant dette{toneProfile ? ' (inkl. tone fra SoMe-poster)' : ''}. Juster som du vil.
               </p>
+              <div className="max-w-md mx-auto mt-4">
+                <input
+                  type="text"
+                  value={brandProfileName}
+                  onChange={(e) => setBrandProfileName(e.target.value)}
+                  placeholder="F.eks. 'Min bedrift' eller 'Personal brand'"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all duration-200 text-sm text-slate-900 placeholder:text-slate-400"
+                />
+              </div>
             </div>
 
             {/* Live Brand Preview — Mock SoMe Post */}

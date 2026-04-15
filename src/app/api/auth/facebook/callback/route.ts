@@ -20,10 +20,12 @@ export async function GET(request: NextRequest) {
 
   let orgId: string
   let redirectTo: string
+  let brandProfileId: string | null = null
   try {
     const stateData = JSON.parse(Buffer.from(stateParam, 'base64').toString())
     orgId = stateData.org_id
     redirectTo = stateData.redirect_to || 'settings'
+    brandProfileId = stateData.brand_profile_id || null
   } catch {
     return NextResponse.redirect(`${APP_URL}/dashboard/settings?error=invalid_state`)
   }
@@ -146,9 +148,28 @@ export async function GET(request: NextRequest) {
       p_metadata: JSON.stringify({ type: 'user_token', for_refresh: true }),
     })
 
+    // Link accounts to brand profile if provided
+    if (brandProfileId) {
+      for (const acc of connectedAccounts) {
+        const { data: saRow } = await supabase
+          .from('social_accounts')
+          .select('id')
+          .eq('org_id', orgId)
+          .eq('platform', acc.platform)
+          .eq('account_id', acc.account_id)
+          .single()
+        if (saRow) {
+          await supabase.from('brand_profile_social_accounts').upsert({
+            brand_profile_id: brandProfileId,
+            social_account_id: saRow.id,
+            is_default: false,
+          }, { onConflict: 'brand_profile_id,social_account_id' })
+        }
+      }
+    }
+
     // Redirect based on context
     if (redirectTo === 'onboarding') {
-      // Encode connected accounts info so onboarding page can fetch posts
       const accountsParam = encodeURIComponent(JSON.stringify(connectedAccounts))
       return NextResponse.redirect(`${APP_URL}/onboarding?fb_connected=true&accounts=${accountsParam}&pages=${pages.length}`)
     }

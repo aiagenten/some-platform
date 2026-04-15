@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
   // Pass org_id and redirect_to through state parameter
   const orgId = searchParams.get('org_id') || ''
   const redirectTo = searchParams.get('redirect_to') || 'settings'
-  const state = Buffer.from(JSON.stringify({ org_id: orgId, redirect_to: redirectTo })).toString('base64')
+  const brandProfileId = searchParams.get('brand_profile_id') || ''
+  const state = Buffer.from(JSON.stringify({ org_id: orgId, redirect_to: redirectTo, brand_profile_id: brandProfileId })).toString('base64')
 
   const authUrl = new URL('https://www.linkedin.com/oauth/v2/authorization')
   authUrl.searchParams.set('response_type', 'code')

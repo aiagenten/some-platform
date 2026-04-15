@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       return errorResponse('Post not found', 404)
     }
 
-    // Find social account: prefer explicit social_account_id on post, then is_default, then first match
+    // Find social account: prefer explicit social_account_id on post, then is_default per brand_profile/platform, then first match
     let publishAccount: any = null
 
     if (post.social_account_id) {
@@ -51,17 +51,44 @@ Deno.serve(async (req) => {
     }
 
     if (!publishAccount) {
-      const { data: accounts } = await supabase
+      let query = supabase
         .from('social_accounts')
         .select('id, platform, account_id, metadata, is_default')
-        .eq('org_id', post.org_id)
         .eq('platform', post.platform)
+
+      // If post has a brand_profile, filter accounts via the junction table
+      if (post.brand_profile_id) {
+        const { data: junction } = await supabase
+          .from('brand_profile_social_accounts')
+          .select('social_account_id, is_default')
+          .eq('brand_profile_id', post.brand_profile_id)
+
+        if (junction && junction.length > 0) {
+          const accountIds = junction.map(j => j.social_account_id)
+          query = query.in('id', accountIds)
+        }
+      } else {
+        // Fallback to org-level accounts if no brand_profile
+        query = query.eq('org_id', post.org_id)
+      }
+
+      const { data: accounts } = await query
 
       const eligible = accounts?.filter(
         (a: any) => !(a.metadata as any)?.for_refresh
       ) || []
 
-      publishAccount = eligible.find((a: any) => a.is_default) || eligible[0]
+      // Prefer is_default from junction table if brand_profile filtering was used
+      if (post.brand_profile_id) {
+        const { data: junction } = await supabase
+          .from('brand_profile_social_accounts')
+          .select('social_account_id, is_default')
+          .eq('brand_profile_id', post.brand_profile_id)
+        const defaultAccountId = junction?.find(j => j.is_default)?.social_account_id
+        publishAccount = eligible.find((a: any) => a.id === defaultAccountId) || eligible[0]
+      } else {
+        publishAccount = eligible.find((a: any) => a.is_default) || eligible[0]
+      }
     }
 
     if (!publishAccount) {
