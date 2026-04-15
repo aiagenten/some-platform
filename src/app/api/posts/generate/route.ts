@@ -719,6 +719,7 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const insertData: any = {
           org_id,
+          brand_profile_id: brandProfile?.id || null,
           platform,
           format,
           content_text: generatedText,

@@ -162,9 +162,8 @@ export default function PostDetailPage() {
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
   const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
   const [regeneratingSlide, setRegeneratingSlide] = useState<number | null>(null)
-  // Social account selection
+  // Social account status (display only — accounts linked at brand profile level)
   const [availableAccounts, setAvailableAccounts] = useState<Array<{id: string; account_id: string; account_name?: string; is_default: boolean}>>([])
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [loadingAccounts, setLoadingAccounts] = useState(false)
 
   useEffect(() => {
@@ -210,7 +209,6 @@ export default function PostDetailPage() {
       const { data: postData } = await supabase.from('social_posts').select('*').eq('id', postId).single()
       if (postData) {
         setPost(postData)
-        setSelectedAccountId(postData.social_account_id)
 
         // Load available accounts for this platform
         setLoadingAccounts(true)
@@ -467,13 +465,6 @@ export default function PostDetailPage() {
     if (!post) return
     await supabase.from('social_posts').update({ aspect_ratio: ratio }).eq('id', post.id)
     setPost({ ...post, aspect_ratio: ratio })
-  }
-
-  const handleAccountChange = async (accountId: string | null) => {
-    setSelectedAccountId(accountId)
-    if (!post) return
-    await supabase.from('social_posts').update({ social_account_id: accountId }).eq('id', post.id)
-    setPost({ ...post, social_account_id: accountId })
   }
 
   const [overlaySaved, setOverlaySaved] = useState(false)
@@ -937,23 +928,20 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 mb-4">Handlinger</h3>
             <div className="space-y-2">
-              {/* Social Account Selector */}
-              {availableAccounts.length > 0 && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <label className="block text-xs font-medium text-slate-600 mb-2">Velg konto for publisering</label>
-                  <select
-                    value={selectedAccountId || ''}
-                    onChange={(e) => handleAccountChange(e.target.value || null)}
-                    disabled={loadingAccounts}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                  >
-                    <option value="">-- Velg konto --</option>
-                    {availableAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.account_name} {account.is_default ? '(Standard)' : ''}
-                      </option>
-                    ))}
-                  </select>
+              {/* Account status indicator — linked at brand profile level */}
+              {post.brand_profile_id && availableAccounts.length > 0 && (
+                <div className="mb-4 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <label className="block text-xs font-medium text-emerald-700 mb-2">📱 Publiseringskonto</label>
+                  <p className="text-xs text-emerald-600">
+                    {availableAccounts.find(a => a.is_default)?.account_name || availableAccounts[0]?.account_name}
+                    <span className="text-emerald-500 ml-1">(Standard for merkevaren)</span>
+                  </p>
+                </div>
+              )}
+              {!post.brand_profile_id && (
+                <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <label className="block text-xs font-medium text-amber-700 mb-2">⚠️ Uten merkevare</label>
+                  <p className="text-xs text-amber-600">Innlegget har ingen merkevare. Det kan være fra en eldre generering.</p>
                 </div>
               )}
 
