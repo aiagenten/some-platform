@@ -212,8 +212,10 @@ export default function PostDetailPage() {
 
         // Load available accounts for this platform
         setLoadingAccounts(true)
+        let accountsLoaded = false
+        let loadedAccounts: Array<{id: string; account_id: string; account_name: string; is_default: boolean}> = []
+
         if (postData.brand_profile_id) {
-          // Fetch accounts linked to this brand profile
           const { data: junctionData } = await supabase
             .from('brand_profile_social_accounts')
             .select('social_account_id, is_default')
@@ -224,39 +226,49 @@ export default function PostDetailPage() {
             const accountIds = junctionData.map(j => j.social_account_id)
             const { data: accounts } = await supabase
               .from('social_accounts')
-              .select('id, account_id, is_default')
+              .select('id, account_id, account_name, is_default')
               .in('id', accountIds)
 
-            if (accounts) {
-              const enriched = accounts.map(a => ({
+            if (accounts && accounts.length > 0) {
+              loadedAccounts = accounts.map(a => ({
                 id: a.id,
                 account_id: a.account_id,
-                account_name: a.account_id.split(':')[1] || a.account_id,
+                account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
                 is_default: junctionData.find(j => j.social_account_id === a.id)?.is_default || false
               }))
-              setAvailableAccounts(enriched)
+              setAvailableAccounts(loadedAccounts)
+              accountsLoaded = true
             }
           }
-        } else if (postData.org_id) {
-          // Fallback to org-level accounts
+        }
+
+        // Fallback to org-level accounts when junction has no results
+        if (!accountsLoaded && postData.org_id) {
           const { data: accounts } = await supabase
             .from('social_accounts')
-            .select('id, account_id, is_default')
+            .select('id, account_id, account_name, is_default, metadata')
             .eq('org_id', postData.org_id)
             .eq('platform', postData.platform)
 
           if (accounts) {
-            type AccountRow = { id: string; account_id: string; is_default: boolean | null; metadata: Record<string, unknown> | null }
+            type AccountRow = { id: string; account_id: string; account_name: string | null; is_default: boolean | null; metadata: Record<string, unknown> | null }
             const filtered = (accounts as AccountRow[]).filter(a => !a.metadata?.for_refresh)
-            const enriched = filtered.map(a => ({
+            loadedAccounts = filtered.map(a => ({
               id: a.id,
               account_id: a.account_id,
-              account_name: a.account_id.split(':')[1] || a.account_id,
+              account_name: a.account_name || a.account_id.split(':')[1] || a.account_id,
               is_default: a.is_default || false
             }))
-            setAvailableAccounts(enriched)
+            setAvailableAccounts(loadedAccounts)
           }
         }
+
+        // Auto-select: use post's saved account, or default, or first available
+        const autoId = postData.social_account_id
+          || loadedAccounts.find(a => a.is_default)?.id
+          || loadedAccounts[0]?.id
+          || null
+        setSelectedAccountId(autoId)
         setLoadingAccounts(false)
 
         // Pre-select overlay from DB
@@ -928,20 +940,38 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 mb-4">Handlinger</h3>
             <div className="space-y-2">
-              {/* Account status indicator — linked at brand profile level */}
-              {post.brand_profile_id && availableAccounts.length > 0 && (
+              {/* Account status — shows linked account or selector */}
+              {availableAccounts.length > 0 && (
                 <div className="mb-4 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                  <label className="block text-xs font-medium text-emerald-700 mb-2">📱 Publiseringskonto</label>
-                  <p className="text-xs text-emerald-600">
-                    {availableAccounts.find(a => a.is_default)?.account_name || availableAccounts[0]?.account_name}
-                    <span className="text-emerald-500 ml-1">(Standard for merkevaren)</span>
-                  </p>
+                  <label className="block text-xs font-medium text-emerald-700 mb-2">Publiseringskonto</label>
+                  {availableAccounts.length === 1 ? (
+                    <p className="text-xs text-emerald-600">
+                      {availableAccounts[0].account_name}
+                      {availableAccounts[0].is_default && <span className="text-emerald-500 ml-1">(Standard)</span>}
+                    </p>
+                  ) : (
+                    <select
+                      value={selectedAccountId || ''}
+                      onChange={(e) => handleAccountChange(e.target.value || null)}
+                      className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                    >
+                      <option value="">-- Velg konto --</option>
+                      {availableAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.account_name} {account.is_default ? '(Standard)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
-              {!post.brand_profile_id && (
+              {availableAccounts.length === 0 && !loadingAccounts && (
                 <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <label className="block text-xs font-medium text-amber-700 mb-2">⚠️ Uten merkevare</label>
-                  <p className="text-xs text-amber-600">Innlegget har ingen merkevare. Det kan være fra en eldre generering.</p>
+                  <label className="block text-xs font-medium text-amber-700 mb-1">Ingen konto koblet</label>
+                  <p className="text-xs text-amber-600">
+                    Koble en {post.platform}-konto til merkevaren i{' '}
+                    <a href="/dashboard/settings/brand-profiles" className="underline font-medium">Innstillinger &rarr; Merkevarer</a>.
+                  </p>
                 </div>
               )}
 

@@ -56,7 +56,9 @@ Deno.serve(async (req) => {
         .select('id, platform, account_id, metadata, is_default')
         .eq('platform', post.platform)
 
-      // If post has a brand_profile, filter accounts via the junction table
+      let junctionRows: any[] | null = null
+
+      // If post has a brand_profile, try junction table first
       if (post.brand_profile_id) {
         const { data: junction } = await supabase
           .from('brand_profile_social_accounts')
@@ -66,9 +68,12 @@ Deno.serve(async (req) => {
         if (junction && junction.length > 0) {
           const accountIds = junction.map(j => j.social_account_id)
           query = query.in('id', accountIds)
+          junctionRows = junction
+        } else {
+          // Junction empty — fall back to org-level
+          query = query.eq('org_id', post.org_id)
         }
       } else {
-        // Fallback to org-level accounts if no brand_profile
         query = query.eq('org_id', post.org_id)
       }
 
@@ -78,13 +83,8 @@ Deno.serve(async (req) => {
         (a: any) => !(a.metadata as any)?.for_refresh
       ) || []
 
-      // Prefer is_default from junction table if brand_profile filtering was used
-      if (post.brand_profile_id) {
-        const { data: junction } = await supabase
-          .from('brand_profile_social_accounts')
-          .select('social_account_id, is_default')
-          .eq('brand_profile_id', post.brand_profile_id)
-        const defaultAccountId = junction?.find(j => j.is_default)?.social_account_id
+      if (junctionRows && junctionRows.length > 0) {
+        const defaultAccountId = junctionRows.find(j => j.is_default)?.social_account_id
         publishAccount = eligible.find((a: any) => a.id === defaultAccountId) || eligible[0]
       } else {
         publishAccount = eligible.find((a: any) => a.is_default) || eligible[0]

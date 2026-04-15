@@ -35,7 +35,7 @@ export default function DashboardPage() {
         .from('onboarding_progress')
         .select('completed_at')
         .eq('org_id', profile.org_id)
-        .single()
+        .maybeSingle()
 
       if (progress?.completed_at) {
         setShowOnboardingBanner(false)

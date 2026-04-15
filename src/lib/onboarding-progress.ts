@@ -20,7 +20,7 @@ export async function getOnboardingProgress(
     .from('onboarding_progress')
     .select('*')
     .eq('org_id', orgId)
-    .single()
+    .maybeSingle()
   return data as OnboardingProgressRow | null
 }
 
@@ -67,6 +67,6 @@ export async function isOnboardingCompleted(
     .from('onboarding_progress')
     .select('completed_at')
     .eq('org_id', orgId)
-    .single()
+    .maybeSingle()
   return !!(data as OnboardingProgressRow | null)?.completed_at
 }

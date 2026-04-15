@@ -73,11 +73,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Fetch brand profile
+    // Fetch brand profile — prefer is_default, then most recent
     const { data: brandProfile } = await supabase
       .from('brand_profiles')
       .select('*')
       .eq('org_id', org_id)
+      .order('is_default', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
