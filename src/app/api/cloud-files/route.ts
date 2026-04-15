@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireUser } from '@/lib/auth'
 
 // List images from Google Drive or OneDrive
 export async function GET(request: NextRequest) {
+  const auth = await requireUser()
+  if (auth instanceof NextResponse) return auth
+
   const { searchParams } = new URL(request.url)
   const provider = searchParams.get('provider') // 'google_drive' | 'onedrive'
   const accountId = searchParams.get('account_id')
@@ -19,13 +16,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing provider or account_id' }, { status: 400 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const supabase = createAdminClient()
 
-  // Get the stored token
+  // Get the stored token — scoped to user's org
   const { data: account } = await supabase
     .from('social_accounts')
     .select('metadata')
     .eq('id', accountId)
+    .eq('org_id', auth.orgId)
     .single()
 
   if (!account?.metadata) {

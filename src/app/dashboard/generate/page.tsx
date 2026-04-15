@@ -98,6 +98,8 @@ export default function GeneratePage() {
   const [postId, setPostId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [brand, setBrand] = useState<BrandProfile | null>(null)
+  const [brandProfileId, setBrandProfileId] = useState<string | null>(null)
+  const [brandProfiles, setBrandProfiles] = useState<{ id: string; name: string; is_default: boolean }[]>([])
   const [orgName, setOrgName] = useState('')
   const [imageStyles, setImageStyles] = useState<ImageStyleOption[]>(DEFAULT_IMAGE_STYLES)
   const [selectedStyle, setSelectedStyle] = useState('scandinavian-photo')
@@ -152,14 +154,25 @@ export default function GeneratePage() {
         .single()
       if (profile) {
         setOrgId(profile.org_id)
-        // Load brand profile
+        // Load brand profiles for selector
+        const { data: allBps } = await supabase
+          .from('brand_profiles')
+          .select('id, name, is_default')
+          .eq('org_id', profile.org_id)
+          .order('is_default', { ascending: false })
+          .order('created_at')
+        if (allBps && allBps.length > 0) {
+          setBrandProfiles(allBps)
+          const defaultBp = allBps.find(b => b.is_default) || allBps[0]
+          setBrandProfileId(defaultBp.id)
+        }
+        // Load default brand profile data
         const { data: bp } = await supabase
           .from('brand_profiles')
-          .select('logo_url, colors, fonts, tagline, visual_style')
+          .select('logo_url, colors, fonts, tagline, visual_style, name')
           .eq('org_id', profile.org_id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
+          .eq('is_default', true)
+          .maybeSingle()
         if (bp) setBrand(bp)
 
         // Load digital twins
@@ -333,6 +346,7 @@ export default function GeneratePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               org_id: orgId,
+              brand_profile_id: brandProfileId,
               platform,
               format,
               topic: topic || undefined,
@@ -372,6 +386,7 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           org_id: orgId,
+          brand_profile_id: brandProfileId,
           platform,
           format,
           topic: topic || undefined,
@@ -531,6 +546,7 @@ export default function GeneratePage() {
     try {
       const postData: Record<string, unknown> = {
         org_id: orgId,
+        brand_profile_id: brandProfileId,
         platform,
         format,
         content_text: manualCaption || '',
@@ -652,6 +668,33 @@ export default function GeneratePage() {
             </div>
 
             <h2 className="font-semibold text-slate-900 mb-5">Innstillinger</h2>
+
+            {/* Brand Profile selector */}
+            {brandProfiles.length > 1 && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Brand-profil</label>
+                <select
+                  value={brandProfileId || ''}
+                  onChange={async (e) => {
+                    const newId = e.target.value
+                    setBrandProfileId(newId)
+                    const { data: bp } = await supabase
+                      .from('brand_profiles')
+                      .select('logo_url, colors, fonts, tagline, visual_style, name')
+                      .eq('id', newId)
+                      .single()
+                    if (bp) setBrand(bp)
+                  }}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                >
+                  {brandProfiles.map((bp) => (
+                    <option key={bp.id} value={bp.id}>
+                      {bp.name}{bp.is_default ? ' (standard)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Platform */}
             <div className="mb-5">

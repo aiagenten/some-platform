@@ -217,19 +217,6 @@ export default function BrandProfilesSettingsPage() {
     await load()
   }
 
-  function connectAccount(profileId: string) {
-    if (!orgId) return
-    // Store brand_profile_id so OAuth callback can link the new account
-    const state = Buffer.from(JSON.stringify({
-      org_id: orgId,
-      redirect_to: 'settings',
-      brand_profile_id: profileId,
-    })).toString('base64')
-    // Show a picker — for now use LinkedIn (most common)
-    // User can use the main accounts page for Facebook
-    window.location.href = `/api/auth/linkedin?org_id=${orgId}&brand_profile_id=${profileId}&redirect_to=settings`
-  }
-
   if (loading) return <div className="p-8 text-center text-slate-400">Laster brand-profiler...</div>
 
   return (

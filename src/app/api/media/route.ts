@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireOrgAccess } from '@/lib/auth'
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100 MB
 
 // GET /api/media — list media assets + AI-generated images from storage
 export async function GET(request: NextRequest) {
@@ -10,9 +13,8 @@ export async function GET(request: NextRequest) {
   const styleGuideOnly = searchParams.get('style_guide') === 'true'
   const tag = searchParams.get('tag')
 
-  if (!orgId) {
-    return NextResponse.json({ error: 'org_id required' }, { status: 400 })
-  }
+  const auth = await requireOrgAccess(orgId)
+  if (auth instanceof NextResponse) return auth
 
   const supabase = createAdminClient()
 
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('media_assets')
       .select('*')
-      .eq('org_id', orgId)
+      .eq('org_id', auth.orgId)
       .order('created_at', { ascending: false })
 
     if (source && source !== 'all') {
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
     if (!source || source === 'all' || source === 'ai_generated') {
       const { data: files } = await supabase.storage
         .from('post-images')
-        .list(`generated/${orgId}`, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
+        .list(`generated/${auth.orgId}`, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
 
       if (files?.length) {
         const existingUrls = new Set(assets?.map(a => a.url) || [])
@@ -57,7 +59,7 @@ export async function GET(request: NextRequest) {
           .map(f => {
             const { data: urlData } = supabase.storage
               .from('post-images')
-              .getPublicUrl(`generated/${orgId}/${f.name}`)
+              .getPublicUrl(`generated/${auth.orgId}/${f.name}`)
             return {
               url: urlData.publicUrl,
               name: f.name,
@@ -79,8 +81,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get('content-type') || ''
 
-  const supabase = createAdminClient()
-
   if (contentType.includes('multipart/form-data')) {
     // File upload
     const formData = await request.formData()
@@ -92,9 +92,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'file and org_id required' }, { status: 400 })
     }
 
+    const auth = await requireOrgAccess(orgId)
+    if (auth instanceof NextResponse) return auth
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File too large (max 100MB)' }, { status: 400 })
+    }
+
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      return NextResponse.json({ error: 'Only image and video files are supported' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
     const buffer = Buffer.from(await file.arrayBuffer())
     const ext = file.name.split('.').pop() || 'jpg'
-    const fileName = `uploads/${orgId}/${Date.now()}.${ext}`
+    const fileName = `uploads/${auth.orgId}/${Date.now()}.${ext}`
 
     const { error: uploadError } = await supabase.storage
       .from('post-images')
@@ -110,7 +123,7 @@ export async function POST(request: NextRequest) {
     const { data: asset, error: insertError } = await supabase
       .from('media_assets')
       .insert({
-        org_id: orgId,
+        org_id: auth.orgId,
         source: 'upload',
         url: urlData.publicUrl,
         filename: file.name,
@@ -136,10 +149,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'org_id and url required' }, { status: 400 })
     }
 
+    const auth = await requireOrgAccess(org_id)
+    if (auth instanceof NextResponse) return auth
+
+    const supabase = createAdminClient()
+
     const { data: asset, error } = await supabase
       .from('media_assets')
       .insert({
-        org_id,
+        org_id: auth.orgId,
         source: source || 'upload',
         url,
         thumbnail_url,
@@ -169,6 +187,20 @@ export async function PATCH(request: NextRequest) {
 
   const supabase = createAdminClient()
 
+  // Load asset to verify org ownership
+  const { data: existing } = await supabase
+    .from('media_assets')
+    .select('org_id')
+    .eq('id', id)
+    .single()
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const auth = await requireOrgAccess(existing.org_id)
+  if (auth instanceof NextResponse) return auth
+
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (tags !== undefined) updates.tags = tags
   if (is_favorite !== undefined) updates.is_favorite = is_favorite
@@ -178,6 +210,7 @@ export async function PATCH(request: NextRequest) {
     .from('media_assets')
     .update(updates)
     .eq('id', id)
+    .eq('org_id', auth.orgId)
     .select()
     .single()
 
@@ -200,10 +233,25 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = createAdminClient()
 
+  // Load asset to verify org ownership
+  const { data: existing } = await supabase
+    .from('media_assets')
+    .select('org_id')
+    .eq('id', id)
+    .single()
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const auth = await requireOrgAccess(existing.org_id)
+  if (auth instanceof NextResponse) return auth
+
   const { error } = await supabase
     .from('media_assets')
     .delete()
     .eq('id', id)
+    .eq('org_id', auth.orgId)
 
   if (error) {
     console.error('Delete error:', error)
