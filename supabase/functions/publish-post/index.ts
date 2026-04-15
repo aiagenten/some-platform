@@ -70,12 +70,19 @@ Deno.serve(async (req) => {
     let result: any
 
     try {
-      switch (post.platform) {
+      // Resolve the final image URL: prefer overlay_image_url (user-composed with overlay)
+    // over content_image_url (raw base image)
+    const resolvedPost = {
+      ...post,
+      content_image_url: post.overlay_image_url || post.content_image_url,
+    }
+
+    switch (post.platform) {
         case 'facebook':
-          result = await publishToFacebook(post, publishAccount, accessToken)
+          result = await publishToFacebook(resolvedPost, publishAccount, accessToken)
           break
         case 'instagram':
-          result = await publishToInstagram(post, publishAccount, accessToken)
+          result = await publishToInstagram(resolvedPost, publishAccount, accessToken)
           break
         case 'linkedin':
           // TODO: Implement LinkedIn publishing
