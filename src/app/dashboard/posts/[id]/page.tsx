@@ -216,6 +216,8 @@ export default function PostDetailPage() {
       if (postData) {
         setPost(postData)
 
+        // Sync brand profile selector to the post's saved brand_profile_id
+        if (postData.brand_profile_id) setSelectedBrandProfileId(postData.brand_profile_id)
         // Load available accounts via shared helper (uses brand_profile_id if set, else org fallback)
         await loadAccountsForBrandProfile(postData.brand_profile_id || null, postData.platform, postData.org_id)
 
@@ -968,7 +970,24 @@ export default function PostDetailPage() {
                   </select>
                 </div>
               )}
-              {/* Account status — shows which account will be used (set at brand profile level) */}
+              {/* Brand profile selector — only when org has multiple profiles */}
+              {brandProfiles.length > 1 && (
+                <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-2">Merkevare</label>
+                  <select
+                    value={selectedBrandProfileId || ''}
+                    onChange={(e) => handleBrandProfileChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    {brandProfiles.map((bp) => (
+                      <option key={bp.id} value={bp.id}>
+                        {bp.name} {bp.is_default ? '(Standard)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Account status — shows which account will be used */}
               {availableAccounts.length > 0 && (() => {
                 const defaultAcc = availableAccounts.find(a => a.is_default) || availableAccounts[0]
                 return (
