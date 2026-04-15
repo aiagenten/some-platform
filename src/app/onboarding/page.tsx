@@ -617,12 +617,16 @@ function OnboardingPage() {
 
   const startFacebookOAuth = () => {
     if (!orgId) return
-    window.location.href = `/api/auth/facebook?org_id=${orgId}&redirect_to=onboarding`
+    const params = new URLSearchParams({ org_id: orgId, redirect_to: 'onboarding' })
+    if (brandProfileId) params.append('brand_profile_id', brandProfileId)
+    window.location.href = `/api/auth/facebook?${params.toString()}`
   }
 
   const startLinkedInOAuth = () => {
     if (!orgId) return
-    window.location.href = `/api/auth/linkedin?org_id=${orgId}&redirect_to=onboarding`
+    const params = new URLSearchParams({ org_id: orgId, redirect_to: 'onboarding' })
+    if (brandProfileId) params.append('brand_profile_id', brandProfileId)
+    window.location.href = `/api/auth/linkedin?${params.toString()}`
   }
 
   const togglePlatform = (id: string) => {

@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
       console.warn('Failed to fetch LinkedIn organizations:', orgErr)
     }
 
-    // Link accounts to brand profile if provided
+    // Link accounts to brand profile if provided, set as default during onboarding
     if (brandProfileId) {
       for (const acc of connectedAccounts) {
         const { data: saRow } = await supabase
@@ -263,10 +263,21 @@ export async function GET(request: NextRequest) {
           .eq('account_id', acc.account_id)
           .single()
         if (saRow) {
+          // During onboarding, set first account per platform as default
+          const { data: existing } = await supabase
+            .from('brand_profile_social_accounts')
+            .select('id, is_default')
+            .eq('brand_profile_id', brandProfileId)
+            .eq('platform', acc.platform)
+            .limit(1)
+            .single()
+
+          const isDefault = !existing // First account for this platform becomes default
           await supabase.from('brand_profile_social_accounts').upsert({
             brand_profile_id: brandProfileId,
             social_account_id: saRow.id,
-            is_default: false,
+            platform: acc.platform,
+            is_default: isDefault,
           }, { onConflict: 'brand_profile_id,social_account_id' })
         }
       }
