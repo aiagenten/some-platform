@@ -185,7 +185,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/onboarding?fb_connected=true&accounts=${accountsParam}&pages=${pages.length}`)
     }
 
-    return NextResponse.redirect(`${APP_URL}/dashboard/settings?success=connected&pages=${pages.length}`)
+    // Handle various redirect paths
+    let finalRedirect = '/dashboard/settings'
+    if (redirectTo === 'dashboard/brand') {
+      finalRedirect = '/dashboard/brand'
+    } else if (redirectTo && redirectTo.startsWith('/')) {
+      finalRedirect = redirectTo
+    } else if (redirectTo && !redirectTo.startsWith('/')) {
+      finalRedirect = `/${redirectTo}`
+    }
+
+    return NextResponse.redirect(`${APP_URL}${finalRedirect}?success=connected&pages=${pages.length}`)
   } catch (err) {
     console.error('Facebook OAuth error:', err)
     const errRedirect = redirectTo === 'onboarding' ? '/onboarding' : '/dashboard/settings'

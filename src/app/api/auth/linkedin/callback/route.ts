@@ -291,8 +291,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Handle various redirect paths
+    let finalRedirect = '/dashboard/settings'
+    if (redirectTo === 'dashboard/brand') {
+      finalRedirect = '/dashboard/brand'
+    } else if (redirectTo && redirectTo.startsWith('/')) {
+      finalRedirect = redirectTo
+    } else if (redirectTo && !redirectTo.startsWith('/')) {
+      finalRedirect = `/${redirectTo}`
+    }
+
     return NextResponse.redirect(
-      `${APP_URL}/dashboard/settings?success=linkedin_connected&accounts=${connectedAccounts.length}`
+      `${APP_URL}${finalRedirect}?success=linkedin_connected&accounts=${connectedAccounts.length}`
     )
   } catch (err) {
     console.error('LinkedIn OAuth error:', err)

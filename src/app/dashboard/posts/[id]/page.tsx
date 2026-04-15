@@ -1002,7 +1002,7 @@ export default function PostDetailPage() {
                   <label className="block text-xs font-medium text-amber-700 mb-1">Ingen konto koblet</label>
                   <p className="text-xs text-amber-600">
                     Koble en {post.platform}-konto til merkevaren i{' '}
-                    <a href="/dashboard/settings/brand-profiles" className="underline font-medium">Innstillinger &rarr; Merkevarer</a>.
+                    <a href="/dashboard/brand" className="underline font-medium">Merkevare</a>.
                   </p>
                 </div>
               )}

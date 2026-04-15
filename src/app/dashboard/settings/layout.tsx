@@ -2,11 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, Image, HardDrive, Bell, Brain, Globe, Palette } from 'lucide-react'
+import { Users, Image, HardDrive, Bell, Brain, Globe } from 'lucide-react'
 
 const SETTINGS_TABS = [
   { href: '/dashboard/settings', label: 'Kontoer', icon: Users },
-  { href: '/dashboard/settings/brand-profiles', label: 'Brand-profiler', icon: Palette },
   { href: '/dashboard/settings/image-generation', label: 'Bildegenerering', icon: Image },
   { href: '/dashboard/settings/storage', label: 'Lagring', icon: HardDrive },
   { href: '/dashboard/settings/notifications', label: 'Varslinger', icon: Bell },

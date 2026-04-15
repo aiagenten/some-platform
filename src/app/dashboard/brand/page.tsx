@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle } from 'lucide-react'
+import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle, Plus, Linkedin, Facebook, Instagram, Link2, Link2Off, Star, StarOff, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 type BrandColor = {
@@ -38,6 +38,9 @@ type BrandVisualStyle = {
 type BrandProfile = {
   id: string
   org_id: string
+  name?: string
+  is_default?: boolean
+  created_at?: string
   colors: BrandColor[]
   fonts: BrandFont[]
   tone: string | null
@@ -77,8 +80,39 @@ type Learning = {
   source_post_id: string | null
 }
 
+type SocialAccount = {
+  id: string
+  platform: string
+  account_name: string
+  account_id: string
+  token_expires_at: string | null
+  metadata: Record<string, unknown>
+}
+
+type BrandProfileAccount = {
+  id: string
+  social_account_id: string
+  platform: string
+  is_default: boolean
+  account: SocialAccount
+}
+
+const PLATFORM_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
+  linkedin: Linkedin,
+  facebook: Facebook,
+  instagram: Instagram,
+}
+
+const PLATFORM_COLOR: Record<string, string> = {
+  linkedin: 'bg-sky-50 text-sky-700 border-sky-200',
+  facebook: 'bg-blue-50 text-blue-700 border-blue-200',
+  instagram: 'bg-pink-50 text-pink-700 border-pink-200',
+}
+
 export default function BrandPage() {
   const [orgId, setOrgId] = useState<string | null>(null)
+  const [allBrands, setAllBrands] = useState<BrandProfile[]>([])
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
   const [brand, setBrand] = useState<BrandProfile | null>(null)
   const [assets, setAssets] = useState<BrandAsset[]>([])
   const [loading, setLoading] = useState(true)
@@ -94,6 +128,11 @@ export default function BrandPage() {
   const [toneSamples, setToneSamples] = useState<{ id: string; source_url: string | null; content_preview: string; source_type: string; created_at: string }[]>([])
   const [editingBorderRadius, setEditingBorderRadius] = useState(false)
   const [borderRadiusValue, setBorderRadiusValue] = useState('')
+  const [linkedAccounts, setLinkedAccounts] = useState<BrandProfileAccount[]>([])
+  const [allAccounts, setAllAccounts] = useState<SocialAccount[]>([])
+  const [creatingProfile, setCreatingProfile] = useState(false)
+  const [newProfileName, setNewProfileName] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -112,15 +151,32 @@ export default function BrandPage() {
       if (!profile) return
       setOrgId(profile.org_id)
 
-      const { data: brandData } = await supabase
+      // Load all brand profiles
+      const { data: allBrandsData } = await supabase
         .from('brand_profiles')
         .select('*')
         .eq('org_id', profile.org_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false })
 
-      if (brandData) setBrand(brandData)
+      setAllBrands(allBrandsData || [])
+
+      // Select first profile or first default
+      const initial = allBrandsData?.[0]
+      if (initial) {
+        setSelectedBrandId(initial.id)
+        setBrand(initial)
+      }
+
+      // Load social accounts
+      const { data: accountsData } = await supabase
+        .from('social_accounts')
+        .select('id, platform, account_name, account_id, token_expires_at, metadata')
+        .eq('org_id', profile.org_id)
+        .order('platform')
+
+      const visible = (accountsData || []).filter(a => !(a.metadata as Record<string, unknown>)?.for_refresh)
+      setAllAccounts(visible)
 
       // Load brand assets
       const { data: files } = await supabase.storage
@@ -171,6 +227,47 @@ export default function BrandPage() {
     }
     load()
   }, [])
+
+  // Load linked accounts when selected brand changes
+  useEffect(() => {
+    async function loadLinkedAccounts() {
+      if (!selectedBrandId) return
+
+      const { data: junctionRows } = await supabase
+        .from('brand_profile_social_accounts')
+        .select('id, social_account_id, platform, is_default')
+        .eq('brand_profile_id', selectedBrandId)
+
+      if (!junctionRows) return
+
+      const accountIds = Array.from(new Set(junctionRows.map(j => j.social_account_id)))
+      if (accountIds.length === 0) {
+        setLinkedAccounts([])
+        return
+      }
+
+      const { data: accountRows } = await supabase
+        .from('social_accounts')
+        .select('id, platform, account_name, account_id, token_expires_at, metadata')
+        .in('id', accountIds)
+
+      const accountMap = Object.fromEntries((accountRows || []).map(a => [a.id, a]))
+
+      const enriched = (junctionRows || [])
+        .map(j => ({
+          id: j.id,
+          social_account_id: j.social_account_id,
+          platform: j.platform,
+          is_default: j.is_default,
+          account: accountMap[j.social_account_id],
+        }))
+        .filter(j => j.account)
+
+      setLinkedAccounts(enriched)
+    }
+
+    loadLinkedAccounts()
+  }, [selectedBrandId])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -271,6 +368,104 @@ export default function BrandPage() {
     ))
   }
 
+  const handleCreateProfile = async () => {
+    if (!orgId || !newProfileName.trim()) return
+    setSavingProfile(true)
+    const { data, error } = await supabase
+      .from('brand_profiles')
+      .insert({ org_id: orgId, name: newProfileName.trim(), is_default: allBrands.length === 0 })
+      .select('*')
+      .single()
+
+    if (!error && data) {
+      setCreatingProfile(false)
+      setNewProfileName('')
+      setMessage({ type: 'success', text: 'Ny merkevare opprettet!' })
+      setAllBrands(prev => [data, ...prev])
+      setSelectedBrandId(data.id)
+      setBrand(data)
+    } else {
+      setMessage({ type: 'error', text: 'Kunne ikke opprett merkevare' })
+    }
+    setSavingProfile(false)
+  }
+
+  const handleLinkAccount = async (accountId: string, platform: string) => {
+    if (!selectedBrandId) return
+    const platformAccounts = linkedAccounts.filter(a => a.platform === platform)
+    const isFirst = platformAccounts.length === 0
+
+    await supabase.from('brand_profile_social_accounts').upsert({
+      brand_profile_id: selectedBrandId,
+      social_account_id: accountId,
+      platform,
+      is_default: isFirst,
+    }, { onConflict: 'brand_profile_id,social_account_id' })
+
+    setMessage({ type: 'success', text: 'Konto koblet!' })
+
+    // Reload linked accounts
+    const { data: junctionRows } = await supabase
+      .from('brand_profile_social_accounts')
+      .select('id, social_account_id, platform, is_default')
+      .eq('brand_profile_id', selectedBrandId)
+
+    if (junctionRows) {
+      const accountIds = Array.from(new Set(junctionRows.map(j => j.social_account_id)))
+      const { data: accountRows } = await supabase
+        .from('social_accounts')
+        .select('id, platform, account_name, account_id, token_expires_at, metadata')
+        .in('id', accountIds)
+
+      const accountMap = Object.fromEntries((accountRows || []).map(a => [a.id, a]))
+      const enriched = (junctionRows || [])
+        .map(j => ({
+          id: j.id,
+          social_account_id: j.social_account_id,
+          platform: j.platform,
+          is_default: j.is_default,
+          account: accountMap[j.social_account_id],
+        }))
+        .filter(j => j.account)
+
+      setLinkedAccounts(enriched)
+    }
+  }
+
+  const handleUnlinkAccount = async (junctionId: string) => {
+    await supabase.from('brand_profile_social_accounts').delete().eq('id', junctionId)
+    setMessage({ type: 'success', text: 'Konto fjernet' })
+    setLinkedAccounts(prev => prev.filter(a => a.id !== junctionId))
+  }
+
+  const handleSetDefaultAccount = async (platform: string, socialAccountId: string) => {
+    if (!selectedBrandId) return
+
+    // Clear current default for this profile+platform
+    await supabase
+      .from('brand_profile_social_accounts')
+      .update({ is_default: false })
+      .eq('brand_profile_id', selectedBrandId)
+      .eq('platform', platform)
+      .eq('is_default', true)
+
+    // Set new default
+    await supabase
+      .from('brand_profile_social_accounts')
+      .update({ is_default: true })
+      .eq('brand_profile_id', selectedBrandId)
+      .eq('social_account_id', socialAccountId)
+
+    setMessage({ type: 'success', text: 'Standardkonto endret' })
+
+    // Update local state
+    setLinkedAccounts(prev => prev.map(a =>
+      a.platform === platform
+        ? { ...a, is_default: a.social_account_id === socialAccountId }
+        : a
+    ))
+  }
+
   if (loading) {
     return (
       <div className="animate-fade-in-up flex items-center justify-center py-20">
@@ -284,19 +479,72 @@ export default function BrandPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Merkevare</h1>
-          <p className="text-slate-500 text-sm mt-1">Din merkevare-profil og visuell identitet</p>
+          <p className="text-slate-500 text-sm mt-1">Administrer merkevare-profiler og sosiale kontoer</p>
         </div>
-        {brand?.source_url && (
-          <button
-            onClick={handleRescrape}
-            disabled={scraping}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-all duration-200 disabled:opacity-50 border border-indigo-100"
-          >
-            {scraping ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {scraping ? 'Analyserer...' : 'Re-analyser nettside'}
-          </button>
-        )}
+        <button
+          onClick={() => setCreatingProfile(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-all duration-200 shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          Opprett ny merkevare
+        </button>
       </div>
+
+      {/* Create profile form */}
+      {creatingProfile && (
+        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="text-xs font-medium text-indigo-700 mb-1 block">Profilnavn</label>
+            <input
+              autoFocus
+              value={newProfileName}
+              onChange={e => setNewProfileName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateProfile()}
+              placeholder="f.eks. «Personlig» eller «AI Agenten AS»"
+              className="w-full px-3 py-2 rounded-xl border border-indigo-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+          <button
+            onClick={handleCreateProfile}
+            disabled={savingProfile || !newProfileName.trim()}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Opprett'}
+          </button>
+          <button
+            onClick={() => { setCreatingProfile(false); setNewProfileName('') }}
+            className="px-4 py-2 text-slate-500 hover:text-slate-700 text-sm"
+          >
+            Avbryt
+          </button>
+        </div>
+      )}
+
+      {/* Brand profile selector */}
+      {allBrands.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs font-medium text-slate-500 mb-2">Velg merkevare:</p>
+          <div className="flex flex-wrap gap-2">
+            {allBrands.map(bp => (
+              <button
+                key={bp.id}
+                onClick={() => {
+                  setSelectedBrandId(bp.id)
+                  setBrand(bp)
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  selectedBrandId === bp.id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {bp.name || `Merkevare ${new Date(bp.created_at || '').toLocaleDateString('no-NO')}`}
+                {bp.is_default && <span className="ml-1 text-xs opacity-75">(standard)</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {message && (
         <div className={`mb-6 p-4 rounded-2xl text-sm flex items-center gap-2 ${
@@ -327,13 +575,126 @@ export default function BrandPage() {
         <div className="bg-white rounded-2xl border border-slate-200/60 p-12 text-center shadow-sm">
           <Palette className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">Ingen merkevare-profil funnet.</p>
-          <p className="text-sm text-slate-400 mt-1">Gå til innstillinger for å sette opp din merkevare.</p>
+          <p className="text-sm text-slate-400 mt-1">Opprett en ny merkevare for å komme i gang.</p>
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Social Account Linking */}
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-900 mb-4">Sosiale kontoer</h2>
+
+            {linkedAccounts.length === 0 ? (
+              <p className="text-slate-400 text-sm mb-4">Ingen kontoer koblet til denne merkevaren ennå.</p>
+            ) : (
+              <div className="space-y-4 mb-6">
+                {['linkedin', 'facebook', 'instagram'].map(platform => {
+                  const platformAccounts = linkedAccounts.filter(a => a.platform === platform)
+                  if (platformAccounts.length === 0) return null
+
+                  const Icon = PLATFORM_ICON[platform] || Facebook
+                  const color = PLATFORM_COLOR[platform] || PLATFORM_COLOR.facebook
+
+                  return (
+                    <div key={platform}>
+                      <p className="text-xs font-medium text-slate-600 mb-2 capitalize">{platform}</p>
+                      <div className="space-y-2">
+                        {platformAccounts.map(acc => (
+                          <div key={acc.id} className={`flex items-center gap-3 p-3 rounded-xl border ${color}`}>
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/60">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-900 text-sm truncate">
+                                {acc.account.account_name}
+                                {(acc.account.metadata as Record<string, string>)?.ig_username &&
+                                  <span className="text-slate-500 font-normal ml-1">@{(acc.account.metadata as Record<string, string>).ig_username}</span>
+                                }
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {acc.is_default ? (
+                                <span className="text-xs bg-white/80 border border-current px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                                  <Star className="w-3 h-3" /> Standard
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleSetDefaultAccount(platform, acc.social_account_id)}
+                                  className="text-xs opacity-60 hover:opacity-100 px-2 py-0.5 rounded-full border border-current hover:bg-white/40 transition-all flex items-center gap-1"
+                                >
+                                  <StarOff className="w-3 h-3" /> Sett standard
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleUnlinkAccount(acc.id)}
+                                className="text-xs text-red-500 hover:text-red-700 p-1 rounded-lg hover:bg-red-50 transition-colors"
+                              >
+                                <Link2Off className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Link account buttons */}
+            <div className="border-t border-slate-200 pt-4">
+              <p className="text-xs font-medium text-slate-600 mb-3">Koble til kontoer:</p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {allAccounts.filter(acc => !linkedAccounts.some(la => la.social_account_id === acc.id)).map(acc => {
+                  const Icon = PLATFORM_ICON[acc.platform] || Facebook
+                  return (
+                    <button
+                      key={acc.id}
+                      onClick={() => handleLinkAccount(acc.id, acc.platform)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 transition-all"
+                    >
+                      <Link2 className="w-3 h-3" />
+                      <Icon className="w-3 h-3" />
+                      {acc.account_name}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* OAuth buttons */}
+              <p className="text-xs font-medium text-slate-600 mb-2">Eller koble til ny konto:</p>
+              <div className="flex gap-2">
+                <a
+                  href={`/api/auth/linkedin?org_id=${orgId}&brand_profile_id=${selectedBrandId}&redirect_to=dashboard/brand`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-medium transition-all"
+                >
+                  <Linkedin className="w-3.5 h-3.5" />
+                  LinkedIn
+                </a>
+                <a
+                  href={`/api/auth/facebook?org_id=${orgId}&brand_profile_id=${selectedBrandId}&redirect_to=dashboard/brand`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium transition-all"
+                >
+                  <Facebook className="w-3.5 h-3.5" />
+                  Facebook & Instagram
+                </a>
+              </div>
+            </div>
+          </div>
           {/* Brand Profile */}
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-900 mb-4">Merkevareprofil</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-900">Merkevareprofil</h2>
+              {brand?.source_url && (
+                <button
+                  onClick={handleRescrape}
+                  disabled={scraping}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 transition-all duration-200 disabled:opacity-50 border border-indigo-100"
+                >
+                  {scraping ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {scraping ? 'Analyserer...' : 'Re-analyser'}
+                </button>
+              )}
+            </div>
             {(brand.tagline || brand.description) && (
               <div className="mb-4">
                 <p className="text-xs font-medium text-slate-500 mb-1">Merkenavn</p>
