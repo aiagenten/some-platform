@@ -248,8 +248,9 @@ export default function PostDetailPage() {
             .eq('platform', postData.platform)
 
           if (accounts) {
-            const filtered = accounts.filter((a: any) => !(a.metadata as any)?.for_refresh)
-            const enriched = filtered.map((a: any) => ({
+            type AccountRow = { id: string; account_id: string; is_default: boolean | null; metadata: Record<string, unknown> | null }
+            const filtered = (accounts as AccountRow[]).filter(a => !a.metadata?.for_refresh)
+            const enriched = filtered.map(a => ({
               id: a.id,
               account_id: a.account_id,
               account_name: a.account_id.split(':')[1] || a.account_id,
