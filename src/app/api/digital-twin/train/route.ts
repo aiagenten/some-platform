@@ -47,24 +47,22 @@ export async function POST(request: NextRequest) {
     // Step 1: Download all images, zip them, upload zip to Supabase Storage
     const startTime = Date.now()
 
-    // Fetch all images upfront. Fail fast if any image is missing —
-    // a partial zip would produce a corrupted LoRA training run.
-    const downloaded: ArrayBuffer[] = []
-    for (let i = 0; i < trainingImages.length; i++) {
-      try {
-        const imgResp = await fetch(trainingImages[i], {
-          signal: AbortSignal.timeout(30_000),
+    // Fetch all images in parallel with 30s timeout each. Fail fast if any
+    // image is missing — a partial zip would produce a corrupted LoRA run.
+    let downloaded: ArrayBuffer[]
+    try {
+      downloaded = await Promise.all(
+        trainingImages.map(async (url, i) => {
+          const imgResp = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+          if (!imgResp.ok) throw new Error(`Failed to download image ${i + 1}`)
+          return imgResp.arrayBuffer()
         })
-        if (!imgResp.ok) {
-          await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
-          return NextResponse.json({ error: `Failed to download training image ${i + 1}` }, { status: 400 })
-        }
-        downloaded.push(await imgResp.arrayBuffer())
-      } catch (e) {
-        console.error(`Training image ${i + 1} fetch error:`, e)
-        await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
-        return NextResponse.json({ error: `Could not download training image ${i + 1}` }, { status: 400 })
-      }
+      )
+    } catch (e) {
+      console.error('Training image fetch error:', e)
+      await admin.from('digital_twins').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', twin_id)
+      const msg = e instanceof Error ? e.message : 'Could not download training images'
+      return NextResponse.json({ error: msg }, { status: 400 })
     }
 
     // All images downloaded — build zip
