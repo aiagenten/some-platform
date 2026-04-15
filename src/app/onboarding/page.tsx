@@ -753,8 +753,9 @@ function OnboardingPage() {
   }
 
   // Save brand profile data to DB (used after step 3→4 scrape and step 4→5 edit)
-  const saveBrandProfile = useCallback(async () => {
-    if (!orgId || !brandProfile) return
+  // Returns the brand profile id (existing or newly created)
+  const saveBrandProfile = useCallback(async (): Promise<string | null> => {
+    if (!orgId || !brandProfile) return brandProfileId
     const brandData: Record<string, unknown> = {
       org_id: orgId,
       name: brandProfileName || 'Standard',
@@ -782,14 +783,20 @@ function OnboardingPage() {
     }
     if (brandProfileId) {
       await supabase.from('brand_profiles').update(brandData).eq('id', brandProfileId)
+      return brandProfileId
     } else {
       const { data: inserted } = await supabase.from('brand_profiles').insert(brandData).select('id').single()
-      if (inserted) setBrandProfileId(inserted.id)
+      if (inserted) {
+        setBrandProfileId(inserted.id)
+        return inserted.id
+      }
+      return null
     }
   }, [orgId, brandProfile, brandProfileName, brandProfileId, websiteUrl, supabase])
 
   // Save social accounts to DB (used after step 2→3)
-  const saveSocialAccounts = useCallback(async () => {
+  // Pass resolvedBrandProfileId explicitly to avoid stale closure issues
+  const saveSocialAccounts = useCallback(async (resolvedBrandProfileId?: string | null) => {
     if (!orgId) return
     for (const platform of selectedPlatforms) {
       const connected = connectedAccounts.find(a => a.platform === platform)
@@ -802,7 +809,8 @@ function OnboardingPage() {
     }
 
     // Link connected accounts to the brand profile
-    if (brandProfileId) {
+    const effectiveBrandProfileId = resolvedBrandProfileId ?? brandProfileId
+    if (effectiveBrandProfileId) {
       const { data: orgAccounts } = await supabase
         .from('social_accounts')
         .select('id, platform')
@@ -813,8 +821,9 @@ function OnboardingPage() {
           const isDefault = !defaultPlatforms.has(acc.platform)
           if (isDefault) defaultPlatforms.add(acc.platform)
           await supabase.from('brand_profile_social_accounts').upsert({
-            brand_profile_id: brandProfileId,
+            brand_profile_id: effectiveBrandProfileId,
             social_account_id: acc.id,
+            platform: acc.platform,
             is_default: isDefault,
           }, { onConflict: 'brand_profile_id,social_account_id' })
         }
@@ -873,8 +882,8 @@ function OnboardingPage() {
     if (!orgId || !brandProfile) return
     setSaving(true)
 
-    await saveBrandProfile()
-    await saveSocialAccounts()
+    const resolvedBrandProfileId = await saveBrandProfile()
+    await saveSocialAccounts(resolvedBrandProfileId)
     await saveContentGoals()
 
     // Mark onboarding as completed

@@ -263,12 +263,6 @@ export default function PostDetailPage() {
           }
         }
 
-        // Auto-select: use post's saved account, or default, or first available
-        const autoId = postData.social_account_id
-          || loadedAccounts.find(a => a.is_default)?.id
-          || loadedAccounts[0]?.id
-          || null
-        setSelectedAccountId(autoId)
         setLoadingAccounts(false)
 
         // Pre-select overlay from DB
@@ -940,31 +934,16 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 mb-4">Handlinger</h3>
             <div className="space-y-2">
-              {/* Account status — shows linked account or selector */}
-              {availableAccounts.length > 0 && (
-                <div className="mb-4 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                  <label className="block text-xs font-medium text-emerald-700 mb-2">Publiseringskonto</label>
-                  {availableAccounts.length === 1 ? (
-                    <p className="text-xs text-emerald-600">
-                      {availableAccounts[0].account_name}
-                      {availableAccounts[0].is_default && <span className="text-emerald-500 ml-1">(Standard)</span>}
-                    </p>
-                  ) : (
-                    <select
-                      value={selectedAccountId || ''}
-                      onChange={(e) => handleAccountChange(e.target.value || null)}
-                      className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
-                    >
-                      <option value="">-- Velg konto --</option>
-                      {availableAccounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.account_name} {account.is_default ? '(Standard)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
+              {/* Account status — shows which account will be used (set at brand profile level) */}
+              {availableAccounts.length > 0 && (() => {
+                const defaultAcc = availableAccounts.find(a => a.is_default) || availableAccounts[0]
+                return (
+                  <div className="mb-4 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                    <p className="text-xs font-medium text-emerald-700 mb-0.5">Publiseringskonto</p>
+                    <p className="text-xs text-emerald-600">{defaultAcc.account_name}</p>
+                  </div>
+                )
+              })()}
               {availableAccounts.length === 0 && !loadingAccounts && (
                 <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
                   <label className="block text-xs font-medium text-amber-700 mb-1">Ingen konto koblet</label>
