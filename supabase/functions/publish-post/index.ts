@@ -38,17 +38,31 @@ Deno.serve(async (req) => {
       return errorResponse('Post not found', 404)
     }
 
-    // Find social account for this platform + org
-    const { data: accounts } = await supabase
-      .from('social_accounts')
-      .select('id, platform, account_id, metadata')
-      .eq('org_id', post.org_id)
-      .eq('platform', post.platform)
+    // Find social account: prefer explicit social_account_id on post, then is_default, then first match
+    let publishAccount: any = null
 
-    // Filter out user tokens (for_refresh)
-    const publishAccount = accounts?.find(
-      (a: any) => !(a.metadata as any)?.for_refresh
-    )
+    if (post.social_account_id) {
+      const { data: explicit } = await supabase
+        .from('social_accounts')
+        .select('id, platform, account_id, metadata')
+        .eq('id', post.social_account_id)
+        .single()
+      publishAccount = explicit
+    }
+
+    if (!publishAccount) {
+      const { data: accounts } = await supabase
+        .from('social_accounts')
+        .select('id, platform, account_id, metadata, is_default')
+        .eq('org_id', post.org_id)
+        .eq('platform', post.platform)
+
+      const eligible = accounts?.filter(
+        (a: any) => !(a.metadata as any)?.for_refresh
+      ) || []
+
+      publishAccount = eligible.find((a: any) => a.is_default) || eligible[0]
+    }
 
     if (!publishAccount) {
       await failPost(post_id, post.org_id, 'No connected account found for ' + post.platform)
@@ -410,18 +424,16 @@ async function publishToLinkedIn(
   account: any,
   accessToken: string
 ): Promise<any> {
-  const meta = account.metadata as any
-  const accountType = meta?.account_type || 'organization'
-
+  // account_id is stored as "person:SUB" or "organization:ID"
+  // Convert to full URN: urn:li:person:SUB or urn:li:organization:ID
+  const accountId = account.account_id as string
   let authorUrn: string
-  if (accountType === 'personal') {
-    authorUrn = `urn:li:person:${meta?.user_id}`
+  if (accountId.startsWith('person:')) {
+    authorUrn = `urn:li:${accountId}`
+  } else if (accountId.startsWith('organization:')) {
+    authorUrn = `urn:li:${accountId}`
   } else {
-    const organizationUrn = meta?.organization_urn
-    if (!organizationUrn) {
-      throw new Error('Organization URN not found in account metadata')
-    }
-    authorUrn = organizationUrn
+    throw new Error(`Unexpected LinkedIn account_id format: ${accountId}`)
   }
 
   const text = post.caption || post.content_text || ''
