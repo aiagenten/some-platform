@@ -46,6 +46,9 @@ type Post = {
   suggested_time: string | null
   carousel_slides: CarouselSlide[] | null
   slide_count: number | null
+  social_account_id: string | null
+  brand_profile_id: string | null
+  org_id: string
 }
 
 type Feedback = {
@@ -159,6 +162,10 @@ export default function PostDetailPage() {
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
   const [activeCarouselSlide, setActiveCarouselSlide] = useState(0)
   const [regeneratingSlide, setRegeneratingSlide] = useState<number | null>(null)
+  // Social account selection
+  const [availableAccounts, setAvailableAccounts] = useState<Array<{id: string; account_id: string; account_name?: string; is_default: boolean}>>([])
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -203,6 +210,56 @@ export default function PostDetailPage() {
       const { data: postData } = await supabase.from('social_posts').select('*').eq('id', postId).single()
       if (postData) {
         setPost(postData)
+        setSelectedAccountId(postData.social_account_id)
+
+        // Load available accounts for this platform
+        setLoadingAccounts(true)
+        if (postData.brand_profile_id) {
+          // Fetch accounts linked to this brand profile
+          const { data: junctionData } = await supabase
+            .from('brand_profile_social_accounts')
+            .select('social_account_id, is_default')
+            .eq('brand_profile_id', postData.brand_profile_id)
+            .eq('platform', postData.platform)
+
+          if (junctionData && junctionData.length > 0) {
+            const accountIds = junctionData.map(j => j.social_account_id)
+            const { data: accounts } = await supabase
+              .from('social_accounts')
+              .select('id, account_id, is_default')
+              .in('id', accountIds)
+
+            if (accounts) {
+              const enriched = accounts.map(a => ({
+                id: a.id,
+                account_id: a.account_id,
+                account_name: a.account_id.split(':')[1] || a.account_id,
+                is_default: junctionData.find(j => j.social_account_id === a.id)?.is_default || false
+              }))
+              setAvailableAccounts(enriched)
+            }
+          }
+        } else if (postData.org_id) {
+          // Fallback to org-level accounts
+          const { data: accounts } = await supabase
+            .from('social_accounts')
+            .select('id, account_id, is_default')
+            .eq('org_id', postData.org_id)
+            .eq('platform', postData.platform)
+
+          if (accounts) {
+            const filtered = accounts.filter((a: any) => !(a.metadata as any)?.for_refresh)
+            const enriched = filtered.map((a: any) => ({
+              id: a.id,
+              account_id: a.account_id,
+              account_name: a.account_id.split(':')[1] || a.account_id,
+              is_default: a.is_default || false
+            }))
+            setAvailableAccounts(enriched)
+          }
+        }
+        setLoadingAccounts(false)
+
         // Pre-select overlay from DB
         if (postData.selected_overlay) setSelectedOverlay(postData.selected_overlay)
         // Pre-fill headline/subtitle for inline editing
@@ -409,6 +466,13 @@ export default function PostDetailPage() {
     if (!post) return
     await supabase.from('social_posts').update({ aspect_ratio: ratio }).eq('id', post.id)
     setPost({ ...post, aspect_ratio: ratio })
+  }
+
+  const handleAccountChange = async (accountId: string | null) => {
+    setSelectedAccountId(accountId)
+    if (!post) return
+    await supabase.from('social_posts').update({ social_account_id: accountId }).eq('id', post.id)
+    setPost({ ...post, social_account_id: accountId })
   }
 
   const [overlaySaved, setOverlaySaved] = useState(false)
@@ -872,6 +936,26 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 mb-4">Handlinger</h3>
             <div className="space-y-2">
+              {/* Social Account Selector */}
+              {availableAccounts.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <label className="block text-xs font-medium text-slate-600 mb-2">Velg konto for publisering</label>
+                  <select
+                    value={selectedAccountId || ''}
+                    onChange={(e) => handleAccountChange(e.target.value || null)}
+                    disabled={loadingAccounts}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                  >
+                    <option value="">-- Velg konto --</option>
+                    {availableAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.account_name} {account.is_default ? '(Standard)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {(post.status === 'pending_approval' || post.status === 'draft') && (
                 <>
                   <button onClick={() => handleApprove(false)} disabled={actionLoading}
