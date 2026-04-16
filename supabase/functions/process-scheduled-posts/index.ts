@@ -15,6 +15,19 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+// Exponential backoff in minutes: 5min → 15min → 1h → 4h → 12h
+// After MAX_RETRIES, the post stays 'failed' until manually retried.
+const MAX_RETRIES = 5
+const RETRY_DELAYS_MIN = [5, 15, 60, 240, 720]
+
+function nextRetryDue(lastRetryAt: string | null, retryCount: number): boolean {
+  if (retryCount >= MAX_RETRIES) return false
+  if (!lastRetryAt) return true
+  const delayMin = RETRY_DELAYS_MIN[Math.min(retryCount - 1, RETRY_DELAYS_MIN.length - 1)] ?? 720
+  const dueAt = new Date(lastRetryAt).getTime() + delayMin * 60 * 1000
+  return Date.now() >= dueAt
+}
+
 Deno.serve(async (req) => {
   try {
     const now = new Date().toISOString()
@@ -31,11 +44,11 @@ Deno.serve(async (req) => {
       console.log(`[process-scheduled-posts] Reset ${stuckPosts.length} stuck post(s)`)
     }
 
-    // Fetch due posts — include both 'approved' and 'scheduled' (UI sets 'scheduled' directly)
+    // Fetch due posts — 'approved'/'scheduled' (regular flow) and 'failed' (retry flow)
     const { data: posts, error: fetchError } = await supabase
       .from('social_posts')
-      .select('id, org_id, platform, caption, content_text, scheduled_for')
-      .in('status', ['approved', 'scheduled'])
+      .select('id, org_id, platform, caption, content_text, scheduled_for, status, retry_count, last_retry_at')
+      .in('status', ['approved', 'scheduled', 'failed'])
       .not('scheduled_for', 'is', null)
       .lte('scheduled_for', now)
       .order('scheduled_for', { ascending: true })
@@ -50,19 +63,33 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Filter out failed posts that aren't due for retry yet (or have exceeded max retries)
+    const eligiblePosts = posts.filter((p) => {
+      if (p.status === 'failed') {
+        return nextRetryDue(p.last_retry_at, p.retry_count ?? 0)
+      }
+      return true
+    })
+
+    if (eligiblePosts.length === 0) {
+      return new Response(JSON.stringify({ success: true, processed: 0, skipped: posts.length }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const results: Array<{
       postId: string
       success: boolean
       error?: string
     }> = []
 
-    for (const post of posts) {
-      // Atomically claim the post (approved|scheduled → publishing)
+    for (const post of eligiblePosts) {
+      // Atomically claim the post (approved|scheduled|failed → publishing)
       const { data: claimed } = await supabase
         .from('social_posts')
         .update({ status: 'publishing' })
         .eq('id', post.id)
-        .in('status', ['approved', 'scheduled'])
+        .in('status', ['approved', 'scheduled', 'failed'])
         .select('id')
         .maybeSingle()
 
@@ -71,8 +98,34 @@ Deno.serve(async (req) => {
         continue
       }
 
+      if (post.status === 'failed') {
+        console.log(`[process-scheduled-posts] Retrying failed post ${post.id} (attempt ${(post.retry_count ?? 0) + 1}/${MAX_RETRIES})`)
+      }
+
       const minutesOverdue =
         (Date.now() - new Date(post.scheduled_for).getTime()) / 60000
+      const wasRetry = post.status === 'failed'
+      const previousRetryCount = post.retry_count ?? 0
+
+      // Helper: record a failure with retry tracking.
+      // - If this was already a retry attempt: stay 'failed', bump retry_count
+      // - If first-time failure but well past schedule (>15 min): mark 'failed'
+      // - If first-time failure but recent: revert to 'approved' for fast retry
+      const recordFailure = async (errMsg: string) => {
+        const becomeFailed = wasRetry || minutesOverdue >= 15
+        const updates: Record<string, unknown> = {
+          status: becomeFailed ? 'failed' : 'approved',
+          last_publish_error: errMsg.slice(0, 1000),
+          last_retry_at: new Date().toISOString(),
+        }
+        if (becomeFailed) {
+          updates.retry_count = previousRetryCount + 1
+        }
+        await supabase.from('social_posts').update(updates).eq('id', post.id)
+        if (becomeFailed) {
+          results.push({ postId: post.id, success: false, error: errMsg })
+        }
+      }
 
       try {
         const controller = new AbortController()
@@ -91,55 +144,18 @@ Deno.serve(async (req) => {
 
         if (!res.ok) {
           const errText = await res.text()
-          const errMsg = `HTTP ${res.status}: ${errText}`
-
-          if (minutesOverdue >= 15) {
-            await supabase
-              .from('social_posts')
-              .update({ status: 'failed' })
-              .eq('id', post.id)
-            results.push({ postId: post.id, success: false, error: errMsg })
-          } else {
-            // Transient — revert so next cron run retries
-            await supabase
-              .from('social_posts')
-              .update({ status: 'approved' })
-              .eq('id', post.id)
-          }
+          await recordFailure(`HTTP ${res.status}: ${errText}`)
         } else {
           const body = await res.json()
           if (body.success === false) {
-            const errMsg = body.error || 'publish-post returned success:false'
-            if (minutesOverdue >= 15) {
-              await supabase
-                .from('social_posts')
-                .update({ status: 'failed' })
-                .eq('id', post.id)
-              results.push({ postId: post.id, success: false, error: errMsg })
-            } else {
-              await supabase
-                .from('social_posts')
-                .update({ status: 'approved' })
-                .eq('id', post.id)
-            }
+            await recordFailure(body.error || 'publish-post returned success:false')
           } else {
+            // publish-post sets status='published' itself on success
             results.push({ postId: post.id, success: true })
           }
         }
       } catch (err: any) {
-        const errMsg = err.message || 'Unknown error'
-        if (minutesOverdue >= 15) {
-          await supabase
-            .from('social_posts')
-            .update({ status: 'failed' })
-            .eq('id', post.id)
-          results.push({ postId: post.id, success: false, error: errMsg })
-        } else {
-          await supabase
-            .from('social_posts')
-            .update({ status: 'approved' })
-            .eq('id', post.id)
-        }
+        await recordFailure(err.message || 'Unknown error')
       }
     }
 

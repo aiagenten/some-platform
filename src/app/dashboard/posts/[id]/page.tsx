@@ -49,6 +49,9 @@ type Post = {
   social_account_id: string | null
   brand_profile_id: string | null
   org_id: string
+  retry_count: number | null
+  last_publish_error: string | null
+  last_retry_at: string | null
 }
 
 type Feedback = {
@@ -67,6 +70,8 @@ const STATUS_COLORS: Record<string, string> = {
   scheduled: 'bg-emerald-50 text-emerald-700',
   published: 'bg-indigo-50 text-indigo-700',
   rejected: 'bg-red-50 text-red-700',
+  failed: 'bg-red-50 text-red-700',
+  publishing: 'bg-indigo-50 text-indigo-700',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -76,6 +81,8 @@ const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Planlagt',
   published: 'Publisert',
   rejected: 'Avvist',
+  failed: 'Feilet',
+  publishing: 'Publiserer',
 }
 
 const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -168,6 +175,7 @@ export default function PostDetailPage() {
   // Social account status (display only — accounts linked at brand profile level)
   const [availableAccounts, setAvailableAccounts] = useState<Array<{id: string; account_id: string; account_name?: string; is_default: boolean}>>([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -1198,8 +1206,44 @@ export default function PostDetailPage() {
               )}
 
               {post.status === 'failed' && (
-                <div className="w-full bg-red-50 text-red-600 py-2.5 rounded-xl text-center text-sm font-medium mt-2 flex items-center justify-center gap-2 border border-red-100">
-                  <AlertCircle className="w-4 h-4" /> Publisering feilet
+                <div className="w-full bg-red-50 mt-2 rounded-xl border border-red-100 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-red-700 text-sm font-medium">
+                    <AlertCircle className="w-4 h-4" /> Publisering feilet
+                    {(post.retry_count ?? 0) > 0 && (
+                      <span className="text-xs text-red-500 font-normal">
+                        (forsøk {post.retry_count} av 5)
+                      </span>
+                    )}
+                  </div>
+                  {post.last_publish_error && (
+                    <p className="text-xs text-red-600 font-mono break-all bg-white/60 rounded p-2">
+                      {post.last_publish_error}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-red-500">
+                    Systemet prøver automatisk på nytt — eller trykk under for å prøve nå.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      setRetrying(true)
+                      try {
+                        const res = await fetch(`/api/posts/${post.id}/retry`, { method: 'POST' })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) throw new Error(data.error || 'Retry feilet')
+                        // Reload to show updated status
+                        router.refresh()
+                        setTimeout(() => window.location.reload(), 800)
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Noe gikk galt')
+                        setRetrying(false)
+                      }
+                    }}
+                    disabled={retrying}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {retrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    {retrying ? 'Prøver...' : 'Prøv igjen nå'}
+                  </button>
                 </div>
               )}
             </div>

@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       return errorResponse(publishError.message || 'Publishing failed', 500)
     }
 
-    // Success — update post
+    // Success — update post (clear retry tracking)
     const platformPostId = result.id || result.post_id || null
     await supabase
       .from('social_posts')
@@ -146,6 +146,7 @@ Deno.serve(async (req) => {
         published_at: new Date().toISOString(),
         published_id: platformPostId,
         platform_post_id: platformPostId,
+        last_publish_error: null,
       })
       .eq('id', post_id)
 
@@ -667,17 +668,30 @@ async function publishToLinkedIn(
 // ============================================================
 
 async function failPost(postId: string, orgId: string, reason: string) {
-  // Revert post status to approved + log error
+  // Read current retry_count to increment it
+  const { data: current } = await supabase
+    .from('social_posts')
+    .select('retry_count')
+    .eq('id', postId)
+    .single()
+
+  const nextRetryCount = (current?.retry_count ?? 0) + 1
+
   await supabase
     .from('social_posts')
-    .update({ status: 'failed' })
+    .update({
+      status: 'failed',
+      retry_count: nextRetryCount,
+      last_retry_at: new Date().toISOString(),
+      last_publish_error: reason.slice(0, 1000), // cap error length
+    })
     .eq('id', postId)
 
   await supabase.rpc('log_publish_event', {
     p_org_id: orgId,
     p_post_id: postId,
     p_action: 'publish_failed',
-    p_details: JSON.stringify({ error: reason }),
+    p_details: JSON.stringify({ error: reason, retry_count: nextRetryCount }),
   })
 }
 
