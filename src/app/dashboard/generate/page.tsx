@@ -165,6 +165,11 @@ export default function GeneratePage() {
           setBrandProfiles(allBps)
           const defaultBp = allBps.find(b => b.is_default) || allBps[0]
           setBrandProfileId(defaultBp.id)
+        } else {
+          // No brand profile configured — the publish account selection depends
+          // on this, so send the user to set one up before generating.
+          router.replace('/dashboard/brand?missing=1')
+          return
         }
         // Load default brand profile data
         const { data: bp } = await supabase

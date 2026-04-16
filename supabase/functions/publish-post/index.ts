@@ -51,6 +51,19 @@ Deno.serve(async (req) => {
     }
 
     if (!publishAccount) {
+      // Resolve which brand_profile to use for account selection.
+      // Order: post.brand_profile_id → org's default brand_profile → none.
+      let resolvedBrandProfileId: string | null = post.brand_profile_id || null
+      if (!resolvedBrandProfileId) {
+        const { data: defaultBp } = await supabase
+          .from('brand_profiles')
+          .select('id')
+          .eq('org_id', post.org_id)
+          .eq('is_default', true)
+          .maybeSingle()
+        if (defaultBp?.id) resolvedBrandProfileId = defaultBp.id
+      }
+
       let query = supabase
         .from('social_accounts')
         .select('id, platform, account_id, metadata, is_default')
@@ -58,12 +71,11 @@ Deno.serve(async (req) => {
 
       let junctionRows: any[] | null = null
 
-      // If post has a brand_profile, try junction table first
-      if (post.brand_profile_id) {
+      if (resolvedBrandProfileId) {
         const { data: junction } = await supabase
           .from('brand_profile_social_accounts')
           .select('social_account_id, is_default')
-          .eq('brand_profile_id', post.brand_profile_id)
+          .eq('brand_profile_id', resolvedBrandProfileId)
 
         if (junction && junction.length > 0) {
           const accountIds = junction.map(j => j.social_account_id)
@@ -111,12 +123,17 @@ Deno.serve(async (req) => {
     let result: any
 
     try {
-      // Resolve the final image URL: prefer overlay_image_url (user-composed with overlay)
-    // over content_image_url (raw base image)
-    const resolvedPost = {
-      ...post,
-      content_image_url: post.overlay_image_url || post.content_image_url,
-    }
+      // Resolve the final image URL: use overlay_image_url only when user
+      // actually picked an overlay (selected_overlay set and not 'none').
+      // Otherwise the raw content_image_url ships, even if an overlay was
+      // composed earlier and never explicitly cleared.
+      const useOverlay =
+        post.selected_overlay && post.selected_overlay !== 'none'
+      const resolvedPost = {
+        ...post,
+        content_image_url:
+          (useOverlay && post.overlay_image_url) || post.content_image_url,
+      }
 
     switch (post.platform) {
         case 'facebook':

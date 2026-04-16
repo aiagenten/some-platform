@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle, Plus, Linkedin, Facebook, Instagram, Link2, Link2Off, Star, StarOff } from 'lucide-react'
 import Link from 'next/link'
 
@@ -110,6 +110,8 @@ const PLATFORM_COLOR: Record<string, string> = {
 }
 
 export default function BrandPage() {
+  const searchParams = useSearchParams()
+  const showMissingBanner = searchParams?.get('missing') === '1'
   const [orgId, setOrgId] = useState<string | null>(null)
   const [allBrands, setAllBrands] = useState<BrandProfile[]>([])
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
@@ -489,6 +491,19 @@ export default function BrandPage() {
           Opprett ny merkevare
         </button>
       </div>
+
+      {showMissingBanner && allBrands.length === 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-900">Merkevare må settes opp først</p>
+            <p className="text-xs text-amber-700 mt-1">
+              For å publisere innlegg må vi vite hvilke sosiale kontoer som hører til merkevaren din.
+              Opprett en merkevare og koble til ønskede LinkedIn/Facebook-kontoer.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Create profile form */}
       {creatingProfile && (
