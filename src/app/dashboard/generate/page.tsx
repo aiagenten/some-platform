@@ -94,6 +94,11 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false)
   const [loadingText, setLoadingText] = useState(false)
   const [loadingImage, setLoadingImage] = useState(false)
+  // When generation request times out (Netlify ~26s) the post may still
+  // have been saved server-side. We track the start time so a "Sjekk om
+  // ferdig"-button can find any draft created after we started.
+  const [pendingSince, setPendingSince] = useState<number | null>(null)
+  const [checkingPending, setCheckingPending] = useState(false)
   const [generated, setGenerated] = useState<GeneratedContent | null>(null)
   const [postId, setPostId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -385,6 +390,8 @@ export default function GeneratePage() {
     else if (regenerateImage) setLoadingImage(true)
     else setLoading(true)
 
+    const requestStart = Date.now()
+    setPendingSince(requestStart)
     try {
       const res = await fetch('/api/posts/generate', {
         method: 'POST',
@@ -406,9 +413,11 @@ export default function GeneratePage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || 'Noe gikk galt')
+        const detail = data.detail ? ` (${data.detail})` : ''
+        setError((data.error || 'Noe gikk galt') + detail)
         return
       }
+      setPendingSince(null)
       setPostId(data.post.id)
       if (isRegenerate) {
         setGenerated(prev => ({
@@ -436,11 +445,67 @@ export default function GeneratePage() {
         }
       }
     } catch {
-      setError('Nettverksfeil. Prøv igjen.')
+      const elapsed = (Date.now() - requestStart) / 1000
+      if (elapsed >= 20) {
+        // Treat as a likely Netlify function timeout — the post may still
+        // have saved server-side. Leave pendingSince set so the UI shows
+        // the "Sjekk om ferdig"-button.
+        setError(null)
+      } else {
+        setPendingSince(null)
+        setError('Nettverksfeil. Prøv igjen.')
+      }
     } finally {
       setLoading(false)
       setLoadingText(false)
       setLoadingImage(false)
+    }
+  }
+
+  // Look up the latest draft post created after we started — used by the
+  // "Sjekk om ferdig"-button when the request timed out client-side but the
+  // server may have finished saving in the background.
+  const handleCheckPending = async () => {
+    if (!orgId || !pendingSince) return
+    setCheckingPending(true)
+    try {
+      const isoSince = new Date(pendingSince - 5_000).toISOString() // 5s grace
+      const { data: posts } = await supabase
+        .from('social_posts')
+        .select('id, content_text, caption, content_image_url, headline, subtitle, cta_text, hashtags, carousel_slides, image_suggestion, status')
+        .eq('org_id', orgId)
+        .gte('created_at', isoSince)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const found = posts?.[0]
+      if (found && (found.content_text || found.content_image_url)) {
+        setPostId(found.id)
+        setPendingSince(null)
+        setGenerated({
+          text: found.content_text,
+          caption: found.caption,
+          headline: found.headline,
+          subtitle: found.subtitle,
+          cta_text: found.cta_text,
+          hashtags: found.hashtags || [],
+          image_url: found.content_image_url,
+          image_error: null,
+          best_time: null,
+          image_suggestion: found.image_suggestion,
+          carousel_slides: found.carousel_slides,
+        })
+        if (found.carousel_slides?.length) {
+          setCarouselSlides(found.carousel_slides)
+          setActiveCarouselSlide(0)
+        }
+      } else {
+        setError('Posten er ikke ferdig ennå — vent 10-20 sekunder til og prøv igjen.')
+      }
+    } catch {
+      setError('Kunne ikke hente status. Sjekk innleggslisten manuelt.')
+    } finally {
+      setCheckingPending(false)
     }
   }
 
@@ -1139,6 +1204,23 @@ export default function GeneratePage() {
             {error && (
               <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100">
                 {error}
+              </div>
+            )}
+
+            {pendingSince && !loading && (
+              <div className="mt-3 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl border border-amber-100 space-y-2">
+                <p>
+                  Genereringen tar litt lenger tid enn vanlig. Innlegget kan
+                  fortsatt lagres i bakgrunnen.
+                </p>
+                <button
+                  onClick={handleCheckPending}
+                  disabled={checkingPending}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {checkingPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {checkingPending ? 'Sjekker...' : 'Sjekk om innlegget er ferdig'}
+                </button>
               </div>
             )}
           </div>
