@@ -123,16 +123,23 @@ Deno.serve(async (req) => {
     let result: any
 
     try {
-      // Resolve the final image URL: use overlay_image_url only when user
-      // actually picked an overlay (selected_overlay set and not 'none').
-      // Otherwise the raw content_image_url ships, even if an overlay was
-      // composed earlier and never explicitly cleared.
+      // Use the rendered overlay image only when:
+      //   1. User actually picked an overlay (not 'none')
+      //   2. The latest render corresponds to that exact pick
+      //      (overlay_rendered_id === selected_overlay). If the user
+      //      switched overlays faster than the canvas re-render finished,
+      //      these will differ — fall back to the raw image rather than
+      //      publishing a stale overlay.
       const useOverlay =
-        post.selected_overlay && post.selected_overlay !== 'none'
+        post.selected_overlay &&
+        post.selected_overlay !== 'none' &&
+        post.overlay_image_url &&
+        post.overlay_rendered_id === post.selected_overlay
       const resolvedPost = {
         ...post,
-        content_image_url:
-          (useOverlay && post.overlay_image_url) || post.content_image_url,
+        content_image_url: useOverlay
+          ? post.overlay_image_url
+          : post.content_image_url,
       }
 
     switch (post.platform) {

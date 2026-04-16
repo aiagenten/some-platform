@@ -319,7 +319,11 @@ export default function PostDetailPage() {
       }
       setOverlayRendered(true)
 
-      // Auto-save overlay image for thumbnail use in post list
+      // Capture which overlay was rendered into THIS canvas pass — the
+      // selectedOverlay state may change again before the async upload
+      // completes. We persist this alongside the URL so publish-post can
+      // detect a stale render and fall back to the raw image.
+      const renderedForOverlay = selectedOverlay
       try {
         canvas.toBlob(async (blob) => {
           if (!blob || !post?.id || !orgId) return
@@ -330,9 +334,14 @@ export default function PostDetailPage() {
           if (uploadData?.path) {
             const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(uploadData.path)
             if (urlData?.publicUrl) {
-              // Add cache buster to avoid stale thumbnails
               const overlayUrl = `${urlData.publicUrl}?t=${Date.now()}`
-              await supabase.from('social_posts').update({ overlay_image_url: overlayUrl }).eq('id', post.id)
+              await supabase
+                .from('social_posts')
+                .update({
+                  overlay_image_url: overlayUrl,
+                  overlay_rendered_id: renderedForOverlay,
+                })
+                .eq('id', post.id)
             }
           }
         }, 'image/png')
