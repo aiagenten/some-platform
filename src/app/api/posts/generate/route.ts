@@ -748,8 +748,13 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         .single()
 
       if (error) {
-        console.error('Insert error:', error)
-        return NextResponse.json({ error: 'Failed to save post' }, { status: 500 })
+        console.error('[/api/posts/generate] Insert error:', error)
+        return NextResponse.json({
+          error: 'Failed to save post',
+          detail: error.message,
+          code: error.code,
+          hint: error.hint,
+        }, { status: 500 })
       }
       postData = data
 
