@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle, Plus, Linkedin, Facebook, Instagram, Link2, Link2Off, Star, StarOff } from 'lucide-react'
 import Link from 'next/link'
 
@@ -110,8 +110,7 @@ const PLATFORM_COLOR: Record<string, string> = {
 }
 
 export default function BrandPage() {
-  const searchParams = useSearchParams()
-  const showMissingBanner = searchParams?.get('missing') === '1'
+  const [showMissingBanner, setShowMissingBanner] = useState(false)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [allBrands, setAllBrands] = useState<BrandProfile[]>([])
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
@@ -138,6 +137,13 @@ export default function BrandPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('missing') === '1') setShowMissingBanner(true)
+    }
+  }, [])
 
   useEffect(() => {
     async function load() {
