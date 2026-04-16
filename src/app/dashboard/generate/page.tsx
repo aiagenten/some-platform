@@ -97,7 +97,8 @@ export default function GeneratePage() {
   // When generation request times out (Netlify ~26s) the post may still
   // have been saved server-side. We track the start time so a "Sjekk om
   // ferdig"-button can find any draft created after we started.
-  const [pendingSince, setPendingSince] = useState<number | null>(null)
+  // Persisted in localStorage so the button survives navigation/refresh.
+  const [pendingSince, setPendingSinceState] = useState<number | null>(null)
   const [checkingPending, setCheckingPending] = useState(false)
   const [generated, setGenerated] = useState<GeneratedContent | null>(null)
   const [postId, setPostId] = useState<string | null>(null)
@@ -461,6 +462,37 @@ export default function GeneratePage() {
       setLoadingImage(false)
     }
   }
+
+  // Persist pending-generation marker so the "Sjekk om ferdig"-button
+  // survives a page refresh or navigation away from /generate.
+  const PENDING_KEY_PREFIX = 'some-platform:pending-generation:'
+  const PENDING_MAX_AGE_MS = 5 * 60 * 1000 // 5 minutes
+
+  const setPendingSince = useCallback((ts: number | null) => {
+    setPendingSinceState(ts)
+    if (typeof window === 'undefined' || !orgId) return
+    const key = `${PENDING_KEY_PREFIX}${orgId}`
+    if (ts === null) {
+      localStorage.removeItem(key)
+    } else {
+      localStorage.setItem(key, String(ts))
+    }
+  }, [orgId])
+
+  // Restore pendingSince on mount (after orgId is loaded) — only if it's
+  // recent enough to still be relevant.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !orgId) return
+    const stored = localStorage.getItem(`${PENDING_KEY_PREFIX}${orgId}`)
+    if (!stored) return
+    const ts = parseInt(stored, 10)
+    if (!Number.isFinite(ts)) return
+    if (Date.now() - ts > PENDING_MAX_AGE_MS) {
+      localStorage.removeItem(`${PENDING_KEY_PREFIX}${orgId}`)
+      return
+    }
+    setPendingSinceState(ts)
+  }, [orgId])
 
   // Look up the latest draft post created after we started — used by the
   // "Sjekk om ferdig"-button when the request timed out client-side but the
