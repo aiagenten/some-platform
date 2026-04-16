@@ -31,11 +31,11 @@ Deno.serve(async (req) => {
       console.log(`[process-scheduled-posts] Reset ${stuckPosts.length} stuck post(s)`)
     }
 
-    // Fetch due posts
+    // Fetch due posts — include both 'approved' and 'scheduled' (UI sets 'scheduled' directly)
     const { data: posts, error: fetchError } = await supabase
       .from('social_posts')
       .select('id, org_id, platform, caption, content_text, scheduled_for')
-      .eq('status', 'approved')
+      .in('status', ['approved', 'scheduled'])
       .not('scheduled_for', 'is', null)
       .lte('scheduled_for', now)
       .order('scheduled_for', { ascending: true })
@@ -57,12 +57,12 @@ Deno.serve(async (req) => {
     }> = []
 
     for (const post of posts) {
-      // Atomically claim the post (approved → publishing)
+      // Atomically claim the post (approved|scheduled → publishing)
       const { data: claimed } = await supabase
         .from('social_posts')
         .update({ status: 'publishing' })
         .eq('id', post.id)
-        .eq('status', 'approved')
+        .in('status', ['approved', 'scheduled'])
         .select('id')
         .maybeSingle()
 
