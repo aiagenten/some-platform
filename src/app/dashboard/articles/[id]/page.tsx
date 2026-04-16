@@ -32,6 +32,7 @@ type Article = {
   seo_score: number | null
   seo_data: Record<string, unknown>
   aeo_schema: Record<string, unknown> | null
+  generation_error: string | null
   created_at: string
   updated_at: string
 }
@@ -82,6 +83,25 @@ export default function ArticleEditorPage() {
     }
     load()
   }, [id])
+
+  // Poll while AI is generating the article in the background.
+  useEffect(() => {
+    if (article?.status !== 'generating') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/articles/${id}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.id && data.status !== 'generating') {
+          setArticle(data)
+          setTargetKeyword(data.target_keyword || '')
+          setMetaTitle(data.meta_title || '')
+          setMetaDescription(data.meta_description || '')
+        }
+      } catch { /* ignore — try again next tick */ }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [article?.status, id])
 
   const save = useCallback(async (updates: Partial<Article>) => {
     if (!article) return
@@ -262,6 +282,42 @@ ${html}
     return (
       <div className="text-center py-20">
         <p className="text-slate-500">Artikkel ikke funnet</p>
+      </div>
+    )
+  }
+
+  if (article.status === 'generating') {
+    return (
+      <div className="max-w-2xl mx-auto py-20">
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200/60 rounded-2xl p-8 text-center">
+          <div className="w-14 h-14 bg-white/80 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-indigo-900 mb-2">AI skriver artikkelen din...</h2>
+          <p className="text-sm text-indigo-600 mb-1">Dette tar typisk 30-60 sekunder.</p>
+          <p className="text-xs text-indigo-400">Du kan trygt vente — siden oppdateres automatisk.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (article.status === 'failed') {
+    return (
+      <div className="max-w-2xl mx-auto py-20">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center space-y-4">
+          <h2 className="text-lg font-semibold text-red-900">Generering feilet</h2>
+          {article.generation_error && (
+            <p className="text-sm text-red-600 font-mono bg-white/60 rounded p-3 break-all">
+              {article.generation_error}
+            </p>
+          )}
+          <button
+            onClick={() => router.push('/dashboard/articles')}
+            className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors"
+          >
+            Tilbake til artikler
+          </button>
+        </div>
       </div>
     )
   }
