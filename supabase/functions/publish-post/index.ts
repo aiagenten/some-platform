@@ -470,9 +470,14 @@ async function publishToLinkedIn(
   let mediaCategory: 'NONE' | 'IMAGE' | 'VIDEO' = 'NONE'
   let thumbnailAsset: string | null = null
 
-  // Upload image using LinkedIn's current Images API (v2/images?action=initializeUpload)
-  async function uploadLinkedInImage(
+  // Upload media to LinkedIn via the legacy /v2/assets?action=registerUpload
+  // endpoint. The newer /v2/images?action=initializeUpload path returns
+  // UNAUTHORIZED_INVALID_JWT_FORMAT for OAuth2 access tokens, while the
+  // assets endpoint accepts them. Verified against the working
+  // aiagenten-portal implementation.
+  async function registerAndUpload(
     mediaUrl: string,
+    recipe: string,
     mediaType: string
   ): Promise<string> {
     const mediaResponse = await fetch(mediaUrl)
@@ -481,35 +486,50 @@ async function publishToLinkedIn(
     }
     const mediaBuffer = await mediaResponse.arrayBuffer()
 
-    const initResponse = await fetch(
-      'https://api.linkedin.com/v2/images?action=initializeUpload',
+    const registerResponse = await fetch(
+      'https://api.linkedin.com/v2/assets?action=registerUpload',
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202405',
           'X-Restli-Protocol-Version': '2.0.0',
+          'LinkedIn-Version': '202405',
         },
         body: JSON.stringify({
-          initializeUploadRequest: { owner: authorUrn },
+          registerUploadRequest: {
+            recipes: [recipe],
+            owner: authorUrn,
+            serviceRelationships: [
+              {
+                relationshipType: 'OWNER',
+                identifier: 'urn:li:userGeneratedContent',
+              },
+            ],
+          },
         }),
       }
     )
 
-    if (!initResponse.ok) {
-      const errorText = await initResponse.text()
-      console.error(`LinkedIn init image upload failed:`, errorText)
+    if (!registerResponse.ok) {
+      const errorText = await registerResponse.text()
+      console.error(`LinkedIn register ${mediaType} upload failed:`, errorText)
       throw new Error(`Failed to register ${mediaType} upload: ${errorText}`)
     }
 
-    const initData = await initResponse.json()
-    const uploadUrl = initData.value.uploadUrl
-    const imageUrn = initData.value.image
+    const registerData = await registerResponse.json()
+    const uploadUrl =
+      registerData.value.uploadMechanism[
+        'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+      ].uploadUrl
+    const asset = registerData.value.asset
 
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/octet-stream',
+      },
       body: mediaBuffer,
     })
 
@@ -517,103 +537,34 @@ async function publishToLinkedIn(
       throw new Error(`Failed to upload ${mediaType} to LinkedIn`)
     }
 
-    return imageUrn
-  }
-
-  // Upload video using LinkedIn's current Videos API (v2/videos?action=initializeUpload)
-  async function uploadLinkedInVideo(mediaUrl: string): Promise<string> {
-    const mediaResponse = await fetch(mediaUrl)
-    if (!mediaResponse.ok) {
-      throw new Error(`Failed to fetch video: ${mediaResponse.status}`)
-    }
-    const mediaBuffer = await mediaResponse.arrayBuffer()
-    const fileSize = mediaBuffer.byteLength
-
-    const initResponse = await fetch(
-      'https://api.linkedin.com/v2/videos?action=initializeUpload',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'LinkedIn-Version': '202405',
-          'X-Restli-Protocol-Version': '2.0.0',
-        },
-        body: JSON.stringify({
-          initializeUploadRequest: {
-            owner: authorUrn,
-            fileSizeBytes: fileSize,
-            uploadCaptions: false,
-            uploadThumbnail: false,
-          },
-        }),
-      }
-    )
-
-    if (!initResponse.ok) {
-      const errorText = await initResponse.text()
-      console.error('LinkedIn init video upload failed:', errorText)
-      throw new Error('Failed to register video upload')
-    }
-
-    const initData = await initResponse.json()
-    const uploadInstructions = initData.value.uploadInstructions
-    const videoUrn = initData.value.video
-
-    // Upload each chunk (usually one for small videos)
-    for (const instruction of uploadInstructions) {
-      const chunk = mediaBuffer.slice(instruction.firstByte, instruction.lastByte + 1)
-      const chunkRes = await fetch(instruction.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: chunk,
-      })
-      if (!chunkRes.ok) {
-        throw new Error(`Failed to upload video chunk`)
-      }
-    }
-
-    // Finalize upload
-    const finalizeRes = await fetch(
-      'https://api.linkedin.com/v2/videos?action=finalizeUpload',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'LinkedIn-Version': '202405',
-          'X-Restli-Protocol-Version': '2.0.0',
-        },
-        body: JSON.stringify({
-          finalizeUploadRequest: {
-            video: videoUrn,
-            uploadToken: initData.value.uploadToken,
-            uploadedPartIds: uploadInstructions.map((i: any) => i.eTag).filter(Boolean),
-          },
-        }),
-      }
-    )
-    if (!finalizeRes.ok) {
-      console.error('LinkedIn finalize video upload failed:', await finalizeRes.text())
-      // Non-fatal — proceed with the video URN anyway
-    }
-
-    return videoUrn
+    return asset
   }
 
   if (post.content_video_url) {
-    mediaAsset = await uploadLinkedInVideo(post.content_video_url)
+    mediaAsset = await registerAndUpload(
+      post.content_video_url,
+      'urn:li:digitalmediaRecipe:feedshare-video',
+      'video'
+    )
     mediaCategory = 'VIDEO'
 
     if (post.content_image_url) {
       try {
-        thumbnailAsset = await uploadLinkedInImage(post.content_image_url, 'thumbnail')
+        thumbnailAsset = await registerAndUpload(
+          post.content_image_url,
+          'urn:li:digitalmediaRecipe:feedshare-image',
+          'thumbnail'
+        )
       } catch (thumbError) {
         console.error('LinkedIn thumbnail upload failed, continuing without:', thumbError)
       }
     }
   } else if (post.content_image_url) {
-    mediaAsset = await uploadLinkedInImage(post.content_image_url, 'image')
+    mediaAsset = await registerAndUpload(
+      post.content_image_url,
+      'urn:li:digitalmediaRecipe:feedshare-image',
+      'image'
+    )
     mediaCategory = 'IMAGE'
   }
 
