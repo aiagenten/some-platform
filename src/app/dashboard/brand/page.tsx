@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle, Plus, Linkedin, Facebook, Instagram, Link2, Link2Off, Star, StarOff, Trash2 } from 'lucide-react'
+import { Palette, Upload, RefreshCw, Loader2, CheckCircle2, XCircle, Image as ImageIcon, Sparkles, AlertTriangle, Plus, Linkedin, Facebook, Instagram, Link2, Link2Off, Star, StarOff } from 'lucide-react'
 import Link from 'next/link'
 
 type BrandColor = {
