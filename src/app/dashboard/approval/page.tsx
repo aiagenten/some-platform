@@ -134,11 +134,15 @@ function FullOverlayPreview({ post, brandColors, brandFonts, brandLogoUrl, brand
       }
 
       const overlayId = post.selected_overlay || 'modern-dark'
-      const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
-      if (customTmpl) {
-        await renderCustomOverlay(ctx, customTmpl, options)
+      if (overlayId === 'none') {
+        ctx.drawImage(baseImage, 0, 0, dims.width, dims.height)
       } else {
-        await getOverlayTemplate(overlayId).render(ctx, options)
+        const customTmpl = customTemplates.find(t => `custom-${t.id}` === overlayId)
+        if (customTmpl) {
+          await renderCustomOverlay(ctx, customTmpl, options)
+        } else {
+          await getOverlayTemplate(overlayId).render(ctx, options)
+        }
       }
 
       if (renderIdRef.current !== thisRenderId) return

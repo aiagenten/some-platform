@@ -41,7 +41,7 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
 
   // Render overlay for preview
   const renderPreviewOverlay = useCallback(async () => {
-    if (!imageUrl || !overlayId || !brandColors?.length) return
+    if (!imageUrl || !overlayId || overlayId === 'none' || !brandColors?.length) return
     const canvas = overlayCanvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -86,7 +86,7 @@ export default function PlatformPreview({ caption, imageUrl, platform, brandName
   }, [imageUrl, overlayId, brandColors, brandFonts, brandLogoUrl, headline, subtitle, displayName, previewWidth, previewHeight, customTemplates])
 
   useEffect(() => {
-    if (overlayId && imageUrl && brandColors?.length) {
+    if (overlayId && overlayId !== 'none' && imageUrl && brandColors?.length) {
       renderPreviewOverlay()
     } else {
       setOverlayDataUrl(null)
