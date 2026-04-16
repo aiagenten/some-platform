@@ -201,10 +201,36 @@ async function publishToFacebook(
   const pageId = account.account_id
   const text = post.caption || post.content_text || ''
 
-  // If post has an image, publish as photo
+  // Video > photo > text. Mirrors the working aiagenten-portal flow.
+  if (post.content_video_url) {
+    // Video upload via /videos endpoint with file_url. Use form-urlencoded —
+    // works better in Deno Edge Runtime than JSON for this endpoint.
+    // NOTE: do NOT pass `thumb` as a URL — Facebook expects multipart file
+    // data and rejects URLs with error #100. Let it auto-generate.
+    const params = new URLSearchParams({
+      access_token: accessToken,
+      file_url: post.content_video_url,
+      description: text,
+    })
+
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${pageId}/videos`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      }
+    )
+    const data = await res.json()
+    if (!res.ok || data.error) {
+      throw new Error(`Facebook video: ${data.error?.message || JSON.stringify(data)}`)
+    }
+    return data
+  }
+
   if (post.content_image_url) {
     const res = await fetch(
-      `https://graph.facebook.com/v19.0/${pageId}/photos`,
+      `https://graph.facebook.com/v21.0/${pageId}/photos`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -215,17 +241,17 @@ async function publishToFacebook(
         }),
       }
     )
-
     const data = await res.json()
-    if (data.error) {
-      throw new Error(`Facebook API: ${data.error.message}`)
+    if (!res.ok || data.error) {
+      throw new Error(`Facebook photo: ${data.error?.message || JSON.stringify(data)}`)
     }
-    return data
+    // Photos return { id, post_id } — prefer post_id for the page post
+    return { id: data.post_id || data.id }
   }
 
-  // Text-only post
+  // Text-only
   const res = await fetch(
-    `https://graph.facebook.com/v19.0/${pageId}/feed`,
+    `https://graph.facebook.com/v21.0/${pageId}/feed`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -235,10 +261,9 @@ async function publishToFacebook(
       }),
     }
   )
-
   const data = await res.json()
-  if (data.error) {
-    throw new Error(`Facebook API: ${data.error.message}`)
+  if (!res.ok || data.error) {
+    throw new Error(`Facebook feed: ${data.error?.message || JSON.stringify(data)}`)
   }
   return data
 }
@@ -259,24 +284,55 @@ async function publishToInstagram(
   const igUserId = meta?.ig_user_id || account.account_id
   const caption = post.caption || post.content_text || ''
 
-  // Determine if carousel
+  // Carousel first (multiple media)
   const isCarousel = post.format === 'carousel' && post.media_urls?.length > 1
-
   if (isCarousel) {
     return await publishIGCarousel(igUserId, accessToken, caption, post.media_urls)
   }
 
-  // Single image/video post
+  // Video / Reels — check BEFORE image so a reel with a cover image
+  // doesn't get published as a still photo (matches portal flow)
+  if (post.content_video_url) {
+    return await publishIGReel(
+      igUserId,
+      accessToken,
+      caption,
+      post.content_video_url,
+      post.content_image_url || undefined,
+    )
+  }
+
   if (post.content_image_url) {
     return await publishIGSingleImage(igUserId, accessToken, caption, post.content_image_url)
   }
 
-  // Reels have different endpoint
-  if (post.format === 'reel' && post.content_video_url) {
-    return await publishIGReel(igUserId, accessToken, caption, post.content_video_url)
-  }
-
   throw new Error('Instagram requires at least an image or video')
+}
+
+// Poll a container until it reaches FINISHED or ERROR. Throws on error/timeout.
+async function waitForIGContainer(
+  containerId: string,
+  accessToken: string,
+  isVideo: boolean,
+): Promise<void> {
+  const maxAttempts = isVideo ? 25 : 12     // 25×4s=100s for video, 12×3s=36s for image
+  const pollInterval = isVideo ? 4000 : 3000
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, pollInterval))
+    const statusRes = await fetch(
+      `https://graph.facebook.com/v21.0/${containerId}?fields=status_code,status&access_token=${accessToken}`
+    )
+    const statusData = await statusRes.json()
+    if (statusData.status_code === 'FINISHED') {
+      // Grace delay — IG sometimes returns FINISHED but media_publish still races
+      await new Promise((r) => setTimeout(r, 3000))
+      return
+    }
+    if (statusData.status_code === 'ERROR') {
+      throw new Error(`IG container processing failed: ${statusData.status || 'unknown'}`)
+    }
+  }
+  throw new Error('IG container processing timed out')
 }
 
 async function publishIGSingleImage(
@@ -285,9 +341,8 @@ async function publishIGSingleImage(
   caption: string,
   imageUrl: string
 ): Promise<any> {
-  // Step 1: Create media container
   const containerRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -303,15 +358,15 @@ async function publishIGSingleImage(
     throw new Error(`IG Container: ${container.error.message}`)
   }
 
-  // Step 2: Publish
+  await waitForIGContainer(container.id, accessToken, false)
+
   const publishRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media_publish`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media_publish`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id: container.id,
-        share_to_feed: true,
         access_token: accessToken,
       }),
     }
@@ -330,11 +385,10 @@ async function publishIGCarousel(
   caption: string,
   mediaUrls: string[]
 ): Promise<any> {
-  // Step 1: Create child containers (no caption on children)
   const childIds: string[] = []
   for (const url of mediaUrls) {
     const childRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igUserId}/media`,
+      `https://graph.facebook.com/v21.0/${igUserId}/media`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -352,9 +406,8 @@ async function publishIGCarousel(
     childIds.push(child.id)
   }
 
-  // Step 2: Create carousel container
   const carouselRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -371,15 +424,15 @@ async function publishIGCarousel(
     throw new Error(`IG Carousel Container: ${carousel.error.message}`)
   }
 
-  // Step 3: Publish
+  await waitForIGContainer(carousel.id, accessToken, false)
+
   const publishRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media_publish`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media_publish`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id: carousel.id,
-        share_to_feed: true,
         access_token: accessToken,
       }),
     }
@@ -396,20 +449,23 @@ async function publishIGReel(
   igUserId: string,
   accessToken: string,
   caption: string,
-  videoUrl: string
+  videoUrl: string,
+  coverUrl?: string,
 ): Promise<any> {
-  // Reels use media_type: REELS
+  const containerBody: Record<string, unknown> = {
+    media_type: 'REELS',
+    video_url: videoUrl,
+    caption,
+    access_token: accessToken,
+  }
+  if (coverUrl) containerBody.cover_url = coverUrl
+
   const containerRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        media_type: 'REELS',
-        video_url: videoUrl,
-        caption,
-        access_token: accessToken,
-      }),
+      body: JSON.stringify(containerBody),
     }
   )
   const container = await containerRes.json()
@@ -417,29 +473,10 @@ async function publishIGReel(
     throw new Error(`IG Reel Container: ${container.error.message}`)
   }
 
-  // Wait for video processing (poll status)
-  let status = 'IN_PROGRESS'
-  let attempts = 0
-  while (status === 'IN_PROGRESS' && attempts < 30) {
-    await new Promise((r) => setTimeout(r, 2000))
-    const statusRes = await fetch(
-      `https://graph.facebook.com/v19.0/${container.id}?fields=status_code&access_token=${accessToken}`
-    )
-    const statusData = await statusRes.json()
-    status = statusData.status_code || 'FINISHED'
-    attempts++
-  }
+  await waitForIGContainer(container.id, accessToken, true)
 
-  if (status === 'ERROR') {
-    throw new Error('Reel processing failed')
-  }
-
-  // Grace delay after FINISHED — some Business accounts need a moment
-  await new Promise((r) => setTimeout(r, 3000))
-
-  // Publish
   const publishRes = await fetch(
-    `https://graph.facebook.com/v19.0/${igUserId}/media_publish`,
+    `https://graph.facebook.com/v21.0/${igUserId}/media_publish`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
