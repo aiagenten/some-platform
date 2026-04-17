@@ -1,5 +1,16 @@
 'use client'
 
+function extractTextFromContent(content: unknown): string {
+  if (!content) return ''
+  if (typeof content === 'string') return content
+  if (typeof content !== 'object') return ''
+  const doc = content as Record<string, unknown>
+  if (Array.isArray(doc)) return doc.map(extractTextFromContent).join(' ')
+  if (doc.type === 'text' && typeof doc.text === 'string') return doc.text
+  if (Array.isArray(doc.content)) return (doc.content as unknown[]).map(extractTextFromContent).join('')
+  return ''
+}
+
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
@@ -612,7 +623,7 @@ export default function ApprovalPage() {
                         {/* Content preview */}
                         {article.content && (
                           <p className="text-xs text-slate-500 leading-relaxed line-clamp-3 mb-4">
-                            {(article.content || '').replace(/<[^>]*>/g, '').substring(0, 200)}
+                            {extractTextFromContent(article.content).replace(/<[^>]*>/g, '').substring(0, 200)}
                           </p>
                         )}
 
