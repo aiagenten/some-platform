@@ -40,6 +40,7 @@ function AuthCallbackInner() {
 
         // Check for code (PKCE flow)
         const code = searchParams.get('code')
+        const type = searchParams.get('type') || hashParams.get('type')
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
           if (exchangeError) {
@@ -48,7 +49,12 @@ function AuthCallbackInner() {
             setStatus('error')
             return
           }
-          router.replace('/dashboard')
+          // Password recovery: redirect to profile so user can set new password
+          if (type === 'recovery') {
+            router.replace('/dashboard/settings/profile?reset=1')
+          } else {
+            router.replace('/dashboard')
+          }
           return
         }
 

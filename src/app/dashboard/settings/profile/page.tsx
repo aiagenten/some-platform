@@ -37,8 +37,17 @@ export default function ProfileSettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string; section: string } | null>(null)
 
+  const [showResetBanner, setShowResetBanner] = useState(false)
+
   const supabase = createClient()
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('reset') === '1') setShowResetBanner(true)
+    }
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -156,6 +165,18 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      {showResetBanner && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <Lock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-900">Sett nytt passord</p>
+            <p className="text-xs text-amber-700 mt-1">
+              Du er logget inn via tilbakestillingslenken. Sett et nytt passord nedenfor.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Profile info header */}
       <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
         <div className="flex items-center gap-4 mb-6">
