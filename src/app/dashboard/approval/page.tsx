@@ -612,7 +612,7 @@ export default function ApprovalPage() {
                         {/* Content preview */}
                         {article.content && (
                           <p className="text-xs text-slate-500 leading-relaxed line-clamp-3 mb-4">
-                            {article.content.replace(/<[^>]*>/g, '').substring(0, 200)}
+                            {(article.content || '').replace(/<[^>]*>/g, '').substring(0, 200)}
                           </p>
                         )}
 
