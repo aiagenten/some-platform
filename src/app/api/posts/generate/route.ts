@@ -748,7 +748,25 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         .single()
 
       if (error) {
-        console.error('[/api/posts/generate] Insert error:', error)
+        console.error('[/api/posts/generate] Insert error:', JSON.stringify(error))
+        console.error('[/api/posts/generate] Insert data keys:', Object.keys(insertData))
+        // Log to DB so we can debug remotely
+        try {
+          await supabase.rpc('log_publish_event', {
+            p_org_id: org_id,
+            p_post_id: '00000000-0000-0000-0000-000000000000',
+            p_action: 'generate_insert_failed',
+            p_details: JSON.stringify({
+              error_message: error.message,
+              error_code: error.code,
+              error_hint: error.hint,
+              insert_keys: Object.keys(insertData),
+              brand_profile_id: insertData.brand_profile_id,
+              platform: insertData.platform,
+              format: insertData.format,
+            }),
+          })
+        } catch { /* best effort */ }
         return NextResponse.json({
           error: 'Failed to save post',
           detail: error.message,
@@ -808,9 +826,10 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
       },
     })
   } catch (err) {
-    console.error('Generate error:', err)
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[/api/posts/generate] Unhandled error:', message, err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: `Generation failed: ${message}` },
       { status: 500 }
     )
   }
