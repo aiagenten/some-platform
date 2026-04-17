@@ -195,8 +195,8 @@ export default function PostsPage() {
                   {STATUS_LABELS[post.status] || post.status}
                 </span>
 
-                {/* Delete button for draft/rejected */}
-                {(post.status === 'draft' || post.status === 'rejected') && (
+                {/* Delete button for draft/rejected/failed */}
+                {(post.status === 'draft' || post.status === 'rejected' || post.status === 'failed') && (
                   <button
                     onClick={(e) => handleDelete(post.id, e)}
                     className={`flex-shrink-0 p-2 rounded-xl transition-all duration-200 ${
