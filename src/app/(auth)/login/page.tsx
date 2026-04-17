@@ -42,14 +42,20 @@ export default function LoginPage() {
     setResetLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
-    })
-
-    if (error) {
-      setError(error.message)
-    } else {
-      setResetSent(true)
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Noe gikk galt')
+      } else {
+        setResetSent(true)
+      }
+    } catch {
+      setError('Nettverksfeil — prøv igjen')
     }
     setResetLoading(false)
   }
