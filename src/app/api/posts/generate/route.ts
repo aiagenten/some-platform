@@ -747,34 +747,38 @@ IMPORTANT: No text overlays, no UI elements, no logos.`
         .select()
         .single()
 
-      if (error) {
+      // Unique constraint on (org_id, platform, format, scheduled_for) can
+      // fire when the auto-scheduler picks a time slot already occupied by
+      // another post. Retry without a scheduled time so the user can pick.
+      if (error?.code === '23505' && insertData.scheduled_for) {
+        console.warn('[/api/posts/generate] Time slot taken, retrying without scheduled_for')
+        insertData.scheduled_for = null
+        insertData.suggested_time = (insertData.suggested_time || '') + ' (tidsluke opptatt — velg manuelt)'
+        const { data: retryData, error: retryErr } = await supabase
+          .from('social_posts')
+          .insert(insertData)
+          .select()
+          .single()
+        if (retryErr) {
+          console.error('[/api/posts/generate] Retry insert error:', retryErr)
+          return NextResponse.json({
+            error: 'Failed to save post',
+            detail: retryErr.message,
+            code: retryErr.code,
+          }, { status: 500 })
+        }
+        postData = retryData
+      } else if (error) {
         console.error('[/api/posts/generate] Insert error:', JSON.stringify(error))
-        console.error('[/api/posts/generate] Insert data keys:', Object.keys(insertData))
-        // Log to DB so we can debug remotely
-        try {
-          await supabase.rpc('log_publish_event', {
-            p_org_id: org_id,
-            p_post_id: '00000000-0000-0000-0000-000000000000',
-            p_action: 'generate_insert_failed',
-            p_details: JSON.stringify({
-              error_message: error.message,
-              error_code: error.code,
-              error_hint: error.hint,
-              insert_keys: Object.keys(insertData),
-              brand_profile_id: insertData.brand_profile_id,
-              platform: insertData.platform,
-              format: insertData.format,
-            }),
-          })
-        } catch { /* best effort */ }
         return NextResponse.json({
           error: 'Failed to save post',
           detail: error.message,
           code: error.code,
           hint: error.hint,
         }, { status: 500 })
+      } else {
+        postData = data
       }
-      postData = data
 
       // Log AI generation to audit trail
       await logAudit({
